@@ -23,7 +23,8 @@
     };
     preservation.url = "github:nix-community/preservation";
     nix-libnet = {
-      url = "github:petohorvath/nix-libnet";
+      # A commit until nix-libnet tags a release past v0.1.0.
+      url = "github:petohorvath/nix-libnet/280a8c4fbff9d5d16c4a2e156f34d302f2c3f36b";
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-parts.follows = "flake-parts";
