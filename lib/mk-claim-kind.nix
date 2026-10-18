@@ -20,8 +20,9 @@
   `claim`
   : A function of `{ service, identity, config }` returning the submodule of
     one claim. `service` is the contract's name, `identity` the contract's
-    identity resolved to `{ user, group, unit }` (`user` and `unit` null as the
-    identity has no account or no unit) and `config` the configuration's
+    identity resolved to `{ user, group, unit }` (`user` null for a dynamic
+    identity, `group` null for a dynamic identity without a shared group,
+    `unit` null for a static identity) and `config` the configuration's
     top-level `config`. Inside the submodule, `name` is the claim's id and the
     module argument `claimName` its `<service>-<id>` claim name.
 
@@ -33,7 +34,7 @@
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
     returning null when they can coexist, or a string saying why they clash.
-    Two claims with the same `<service>-<id>` name always clash.
+    Two claims with the same claim name always clash.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -70,14 +71,16 @@ let
     "claimSets"
     "services"
   ];
-  # The name of a claim across the configuration, which keys its claim set.
-  claimName = service: id: "${service}-${id}";
+  # A claim's claim name, which keys its claim set.
+  toClaimName = service: id: "${service}-${id}";
 
-  # Resolve a contract's identity to the account its files are owned by and
-  # the unit it is allocated for. A static identity without a group takes its
-  # user's like-named primary group and has no unit. A dynamic identity has no
-  # account at activation time, so it yields no user, at most its shared
-  # group, and its unit.
+  /*
+    Resolve a contract's identity to the account its files are owned by and
+    the unit it is allocated for. A static identity without a group takes its
+    user's like-named primary group and has no unit. A dynamic identity has no
+    account at activation time, so it yields no user, at most its shared
+    group, and its unit.
+  */
   resolveIdentity =
     identity:
     if identity ? static then
@@ -101,21 +104,22 @@ else
     topConfig = config;
 
     mkEntry =
-      service: contract: id: value:
+      service: identity: id: value:
       value
       // {
         inherit service id;
-        name = claimName service id;
+        name = toClaimName service id;
       }
       // lib.optionalAttrs (ownership != null) (ownership {
-        identity = resolveIdentity contract.identity;
+        inherit identity;
         claim = value;
       });
 
     entries = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
       (lib.mapAttrsToList (
-        service: contract: lib.mapAttrsToList (mkEntry service contract) contract.${kindName}
+        service: contract:
+        lib.mapAttrsToList (mkEntry service (resolveIdentity contract.identity)) contract.${kindName}
       ))
       lib.concatLists
     ];
@@ -173,7 +177,7 @@ else
                     (
                       { name, ... }:
                       {
-                        _module.args.claimName = claimName service name;
+                        _module.args.claimName = toClaimName service name;
                       }
                     )
                   ]
@@ -192,9 +196,9 @@ else
         default = lib.listToAttrs (map (entry: lib.nameValuePair entry.name entry) entries);
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
-          The ${kindName} claims of every enabled contract, keyed by
-          `<service>-<id>`, each carrying its service, id and name and, for a
-          kind with files, its final owner and group.
+          The ${kindName} claims of every enabled contract, keyed by claim
+          name, each carrying its service, id and claim name and, for a kind
+          with files, its final owner and group.
         '';
       };
 
