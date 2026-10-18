@@ -14,7 +14,7 @@ A contract only knows its own configuration. It names no network, other host or 
 
 ## Status
 
-Pre-release. The core, the three shipped claim kinds and the three adapters exist with their tests; examples are next. Expect breaking changes before `v0.1.0`.
+Pre-release. The core, the three shipped claim kinds, the three adapters and the [examples](docs/examples.md) exist with their tests. Expect breaking changes before `v0.1.0`.
 
 ## Requirements
 
@@ -106,7 +106,7 @@ With the adapters imported, the same contract also persists `/var/lib/chrony` an
 }
 ```
 
-The [API reference](docs/api.md) describes every option, the ownership rules, the clash rules and how to define a claim kind.
+The [examples](docs/examples.md) show complete contracts for nixpkgs' influxdb2 and alloy and a claim kind of a project's own. The [API reference](docs/api.md) describes every option, the ownership rules, the clash rules and how to define a claim kind.
 
 ## Related projects
 

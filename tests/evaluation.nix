@@ -9,6 +9,12 @@ let
   };
   contractsLib = self.lib;
   nixos = import ./fixtures/nixos.nix { inherit nixpkgs system; };
+  exports = { inherit (self) lib modules nixosModules; };
+  backends = {
+    preservation = inputs.preservation.nixosModules.default;
+    agenix = inputs.agenix.nixosModules.default;
+    agenix-rekey = inputs.agenix-rekey.nixosModules.default;
+  };
   agenixRekey = [
     inputs.agenix.nixosModules.default
     inputs.agenix-rekey.nixosModules.default
@@ -29,6 +35,27 @@ in
       binds = import ./modules/kinds/binds.nix { inherit contracts; };
       mounts = import ./modules/kinds/mounts.nix { inherit contracts; };
       secrets = import ./modules/kinds/secrets.nix { inherit contracts; };
+    };
+  };
+  integration.examples = import ./integration/examples.nix {
+    examples = {
+      influxdb = import ../examples/influxdb {
+        inherit
+          backends
+          exports
+          nixpkgs
+          system
+          ;
+      };
+      alloy = import ../examples/alloy {
+        inherit
+          backends
+          exports
+          nixpkgs
+          system
+          ;
+      };
+      customKind = import ../examples/custom-kind { inherit exports lib; };
     };
   };
   nixos = {

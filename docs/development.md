@@ -30,7 +30,7 @@ nix run --inputs-from . nixpkgs#nix-unit -- --flake .#tests.x86_64-linux.modules
 
 ## Test layout
 
-Test files mirror source paths: `lib/mk-claim-kind.nix` maps to `tests/lib/mk-claim-kind.nix`, `modules/kinds/binds.nix` to `tests/modules/kinds/binds.nix`, and `nixos/module.nix` to `tests/nixos/module.nix`. `tests/flake.nix` covers the root output shapes. [tests/evaluation.nix](../tests/evaluation.nix) nests the suites into the `tests.<system>` output.
+Test files mirror source paths: `lib/mk-claim-kind.nix` maps to `tests/lib/mk-claim-kind.nix`, `modules/kinds/binds.nix` to `tests/modules/kinds/binds.nix`, and `nixos/module.nix` to `tests/nixos/module.nix`. `tests/flake.nix` covers the root output shapes, and `tests/integration/examples.nix` asserts the result of every [example](examples.md). [tests/evaluation.nix](../tests/evaluation.nix) nests the suites into the `tests.<system>` output.
 
 Tests come in two layers:
 
