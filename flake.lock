@@ -164,6 +164,7 @@
       "original": {
         "owner": "petohorvath",
         "repo": "nix-libnet",
+        "rev": "280a8c4fbff9d5d16c4a2e156f34d302f2c3f36b",
         "type": "github"
       }
     },
