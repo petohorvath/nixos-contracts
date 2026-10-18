@@ -18,16 +18,17 @@
   : Description of the contract field holding this kind's claims.
 
   `claim`
-  : A function of `{ service, contract, config }` returning the submodule of
-    one claim. `service` is the contract's name, `contract` its evaluated value
-    and `config` the configuration's top-level `config`. Inside the submodule,
-    `name` is the claim's id.
+  : A function of `{ service, identity, config }` returning the submodule of
+    one claim. `service` is the contract's name, `identity` the contract's
+    identity resolved to `{ user, group, unit }` (`user` and `unit` null as the
+    identity has no account or no unit) and `config` the configuration's
+    top-level `config`. Inside the submodule, `name` is the claim's id and the
+    module argument `claimName` its `<service>-<id>` claim name.
 
   `ownership`
   : Optional. A function of `{ identity, claim }` returning the claim's final
-    `{ owner, group }`, where `identity` is the contract's identity resolved to
-    `{ user, group, unit }` (`user` and `unit` null as the identity has no
-    account or no unit). Omit it for kinds without files, such as binds.
+    `{ owner, group }`, where `identity` is the same resolved identity. Omit it
+    for kinds without files, such as binds.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -69,8 +70,28 @@ let
     "claimSets"
     "services"
   ];
-  claimName = import ./claim-name.nix;
-  resolveIdentity = import ./resolve-identity.nix;
+  # The name of a claim across the configuration, which keys its claim set.
+  claimName = service: id: "${service}-${id}";
+
+  # Resolve a contract's identity to the account its files are owned by and
+  # the unit it is allocated for. A static identity without a group takes its
+  # user's like-named primary group and has no unit. A dynamic identity has no
+  # account at activation time, so it yields no user, at most its shared
+  # group, and its unit.
+  resolveIdentity =
+    identity:
+    if identity ? static then
+      {
+        inherit (identity.static) user;
+        group = if identity.static.group != null then identity.static.group else identity.static.user;
+        unit = null;
+      }
+    else
+      {
+        user = null;
+        group = identity.dynamic.sharedGroup;
+        inherit (identity.dynamic) unit;
+      };
 in
 if builtins.elem kindName reservedNames then
   throw "nixos-contracts: claim kind name `${kindName}` is reserved"
@@ -137,14 +158,25 @@ else
         type = lib.types.attrsOf (
           lib.types.submodule (
             { name, config, ... }:
+            let
+              service = name;
+            in
             {
               options.${kindName} = lib.mkOption {
                 type = lib.types.attrsOf (
-                  lib.types.submodule (claim {
-                    service = name;
-                    contract = config;
-                    config = topConfig;
-                  })
+                  lib.types.submodule [
+                    (claim {
+                      inherit service;
+                      identity = resolveIdentity config.identity;
+                      config = topConfig;
+                    })
+                    (
+                      { name, ... }:
+                      {
+                        _module.args.claimName = claimName service name;
+                      }
+                    )
+                  ]
                 );
                 default = { };
                 inherit description;

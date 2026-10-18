@@ -39,16 +39,11 @@
         };
 
       claim =
-        {
-          service,
-          contract,
-          config,
-        }:
-        { lib, name, ... }:
+        { identity, config, ... }:
+        { lib, claimName, ... }:
         let
           inherit (config.contracts.secrets) delivery location;
-          inherit (import ../../lib/resolve-identity.nix contract.identity) unit;
-          claimName = import ../../lib/claim-name.nix service name;
+          inherit (identity) unit;
         in
         {
           options = {
