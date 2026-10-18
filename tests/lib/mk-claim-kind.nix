@@ -21,7 +21,7 @@ let
         owner = if identity.user != null then identity.user else claim.engine;
         group = null;
       };
-    conflict =
+    clash =
       first: second: if first.database == second.database then "both own `${first.database}`" else null;
     claim =
       {

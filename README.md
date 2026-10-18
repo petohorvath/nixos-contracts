@@ -8,7 +8,7 @@ A **contract** describes one service through its **identity** and its **claims**
 
 The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 
-A contract only knows its own configuration. It names no network, other host or firewall policy; fleet-wide consumers can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
+A contract only knows its own configuration. It names no network, other host or firewall policy; fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
 
 **Adapters** are opt-in NixOS modules that map one claim set onto one backend: preservation for mounts, agenix-rekey for secrets, and systemd credentials for delivering the secrets of a dynamic identity into its unit.
 
@@ -83,7 +83,7 @@ The resolved claims are then readable in one place:
 ```nix
 config.contracts.claimSets.mounts.chrony-state
 # => { service = "chrony"; id = "state"; name = "chrony-state";
-#      path = "/var/lib/chrony"; class = "state"; kind = "directory";
+#      path = "/var/lib/chrony"; class = "state"; type = "directory";
 #      mode = "0700"; owner = "chrony"; group = "chrony"; }
 ```
 

@@ -8,7 +8,7 @@ The set of claim kinds is open. Binds, mounts and secrets are built with the sam
 
 ## Considered Options
 
-A closed set of kinds hardcoded in the core is simpler to write, but a kind like databases or TLS certificates would then mean changing the library. Letting each adapter resolve ownership from the service's identity is what the in-tree materialisers do today, and it restates the same rule in every adapter.
+A closed set of kinds hardcoded in the core is simpler to write, but a kind like databases or TLS certificates would then mean changing the library. Letting each adapter resolve ownership from the service's identity is what nixos-config's in-tree helpers (`mkAgeSecrets`, `mkPreserveAt`) do today, and it restates the same rule in every adapter.
 
 ## Consequences
 

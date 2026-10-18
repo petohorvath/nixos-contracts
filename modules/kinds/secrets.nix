@@ -1,11 +1,11 @@
-# Secrets: runtime credentials a service needs.
+# Secrets: what a service needs to read at runtime and must keep private.
 { lib, ... }:
 {
   imports = [
     (import ../../lib/mk-claim-kind.nix {
       name = "secrets";
       description = ''
-        Runtime credentials the service needs, by secret id. A secret says what
+        Runtime secrets the service needs, by secret id. A secret says what
         the service needs and where its value comes from, never how a backend
         stores or installs it.
       '';
@@ -15,7 +15,7 @@
           type = lib.types.nullOr (lib.types.functionTo lib.types.str);
           default = null;
           description = ''
-            Where the credentials backend installs a secret, as a function of
+            Where the secret backend installs a secret, as a function of
             its `<service>-<id>` name. Set by a backend adapter; null when
             none is imported.
           '';
@@ -34,11 +34,8 @@
       ownership =
         { identity, claim }:
         {
-          owner = if claim.owner != null then claim.owner else "root";
-          group = lib.findFirst (value: value != null) "root" [
-            claim.group
-            identity.group
-          ];
+          owner = lib.defaultTo "root" claim.owner;
+          group = lib.defaultTo (lib.defaultTo "root" identity.group) claim.group;
         };
 
       claim =
@@ -50,7 +47,8 @@
         { lib, name, ... }:
         let
           inherit (config.contracts.secrets) delivery location;
-          artifact = "${service}-${name}";
+          inherit (import ../../lib/resolve-identity.nix contract.identity) unit;
+          claimName = import ../../lib/claim-name.nix service name;
         in
         {
           options = {
@@ -95,17 +93,27 @@
                 none.
               '';
             };
+            unit = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              readOnly = true;
+              default = unit;
+              defaultText = lib.literalMD "the dynamic identity's unit, or null";
+              description = ''
+                The unit a dynamic identity's secret is delivered to, or null
+                for a static identity.
+              '';
+            };
             path = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
               readOnly = true;
               default =
-                if contract.identity ? dynamic && delivery != null then
+                if unit != null && delivery != null then
                   delivery {
-                    inherit (contract.identity.dynamic) unit;
-                    name = artifact;
+                    inherit unit;
+                    name = claimName;
                   }
                 else if location != null then
-                  location artifact
+                  location claimName
                 else
                   null;
               defaultText = lib.literalMD "the location set by the adapters";

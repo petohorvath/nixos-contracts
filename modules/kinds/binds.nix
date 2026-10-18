@@ -8,16 +8,22 @@ let
     value:
     if builtins.isInt value then portRange.fromPort (port.fromInt value) else portRange.parse value;
 
-  # The unspecified address of a family covers every address of that family.
+  # `0.0.0.0` covers every IPv4 address; `::` covers both families, since an
+  # IPv6 wildcard socket on Linux accepts IPv4 unless the daemon sets
+  # `IPV6_V6ONLY` (`net.ipv6.bindv6only` defaults to 0).
+  covers =
+    wildcard: address:
+    ip.isUnspecified wildcard && (ip.version wildcard == 6 || ip.version address == 4);
+
   addressesOverlap =
     first: second:
     let
       a = ip.parse first;
       b = ip.parse second;
     in
-    ip.version a == ip.version b && (ip.isUnspecified a || ip.isUnspecified b || ip.eq a b);
+    ip.eq a b || covers a b || covers b a;
 
-  conflict =
+  clash =
     first: second:
     let
       protocols = lib.intersectLists first.proto second.proto;
@@ -53,7 +59,7 @@ in
         Where the service accepts traffic, by bind id. A bind says where the
         service listens, never who may reach it.
       '';
-      inherit conflict;
+      inherit clash;
       claim =
         _:
         { config, lib, ... }:

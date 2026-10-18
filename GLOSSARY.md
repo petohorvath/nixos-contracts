@@ -34,7 +34,7 @@ A path whose contents must survive, under one class. It says what must survive, 
 _Avoid_: Persisted path, bind mount, share
 
 **Class**:
-The name of a kind of persistent storage a mount belongs to, such as state or cache. Where a class physically lives is up to an adapter.
+The name of a root of persistent storage a mount belongs to, such as state or cache. Where a class physically lives is up to an adapter.
 _Avoid_: Category, tier
 
 **Secret**:

@@ -13,7 +13,10 @@ let
       identity.dynamic.unit = "alloy.service";
       secrets.password.provenance.generated = "alnum";
     };
-    systemd.services.alloy.serviceConfig.DynamicUser = true;
+    systemd.services.alloy = {
+      script = "true";
+      serviceConfig.DynamicUser = true;
+    };
   };
   chrony = {
     contracts.services.chrony = {
@@ -71,7 +74,19 @@ in
       alloy
     ];
     expected = [
-      "nixos-contracts: delivering secrets needs a credentials backend adapter that sets `contracts.secrets.location`."
+      "nixos-contracts: delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`."
+    ];
+  };
+
+  testMistypedUnitIsRejected = {
+    expr = failures [
+      adapter
+      location
+      alloy
+      { contracts.services.alloy.identity.dynamic.unit = lib.mkForce "alloy-typo.service"; }
+    ];
+    expected = [
+      "nixos-contracts: dynamic identity unit `alloy-typo.service` is not a service defined in `systemd.services`."
     ];
   };
 
@@ -80,10 +95,10 @@ in
       adapter
       location
       alloy
-      { contracts.services.alloy.identity.dynamic.unit = lib.mkForce "alloy-typo.service"; }
+      { systemd.services.alloy.serviceConfig.DynamicUser = lib.mkForce false; }
     ];
     expected = [
-      "nixos-contracts: dynamic identity unit `alloy-typo.service` is not a service with `DynamicUser` in `systemd.services`."
+      "nixos-contracts: dynamic identity unit `alloy.service` does not set `DynamicUser`."
     ];
   };
 

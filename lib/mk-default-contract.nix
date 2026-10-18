@@ -1,11 +1,11 @@
 { lib }:
 let
-  wrap =
+  defaultLeaves =
     value:
     if value ? _type then
       value
     else if lib.isAttrs value && value != { } && !(lib.isDerivation value) then
-      lib.mapAttrs (_: wrap) value
+      lib.mapAttrs (_: defaultLeaves) value
     else
       lib.mkDefault value;
 in
@@ -37,4 +37,4 @@ in
   };
   ```
 */
-wrap
+defaultLeaves

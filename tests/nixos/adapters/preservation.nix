@@ -23,7 +23,7 @@ let
         token = {
           path = "/etc/influxdb/token";
           class = "state";
-          kind = "file";
+          type = "file";
           mode = "0600";
         };
         cache = {
@@ -99,7 +99,18 @@ in
     expected = { };
   };
 
-  testEveryClassNeedsARoot = {
+  testUnusedClassNeedsNoRoot = {
+    expr = failures [
+      backend
+      adapter
+      influxdb
+      roots
+      { contracts.mounts.classes = [ "archive" ]; }
+    ];
+    expected = [ ];
+  };
+
+  testEveryUsedClassNeedsARoot = {
     expr = failures [
       backend
       adapter

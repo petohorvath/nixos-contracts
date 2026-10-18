@@ -52,6 +52,7 @@ in
       mode = "0440";
       owner = "root";
       group = "chrony";
+      unit = null;
       path = null;
     };
   };
@@ -115,6 +116,11 @@ in
   testStaticIdentityReadsTheBackendLocation = {
     expr = (secretOf [ rules ] { static.user = "svc"; } { }).path;
     expected = "/run/agenix/svc-key";
+  };
+
+  testDynamicIdentitySecretNamesItsUnit = {
+    expr = (secretOf [ ] { dynamic.unit = "svc.service"; } { }).unit;
+    expected = "svc.service";
   };
 
   testDynamicIdentityReadsTheDeliveredCredential = {

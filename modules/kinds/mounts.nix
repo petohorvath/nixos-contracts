@@ -28,20 +28,14 @@ in
       ownership =
         { identity, claim }:
         let
-          owner = lib.findFirst (value: value != null) "root" [
-            claim.owner
-            identity.user
-          ];
+          owner = lib.defaultTo (lib.defaultTo "root" identity.user) claim.owner;
         in
         {
           inherit owner;
-          group = lib.findFirst (value: value != null) owner [
-            claim.group
-            identity.group
-          ];
+          group = lib.defaultTo (lib.defaultTo owner identity.group) claim.group;
         };
 
-      conflict =
+      clash =
         first: second:
         if normalize first.path == normalize second.path then "both persist `${first.path}`" else null;
 
@@ -66,7 +60,7 @@ in
               '';
               example = "state";
             };
-            kind = lib.mkOption {
+            type = lib.mkOption {
               type = lib.types.enum [
                 "directory"
                 "file"

@@ -85,11 +85,35 @@ in
     ];
   };
 
-  testFamiliesDoNotClash = {
+  testIpv6UnspecifiedAddressClashesWithIpv4 = {
     expr = clashes { port = 80; } {
       port = 80;
       addresses = "::";
     };
+    expected = [
+      "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on tcp port 80, at `0.0.0.0` and `::`."
+    ];
+  };
+
+  testIpv4UnspecifiedAddressDoesNotCoverIpv6 = {
+    expr = clashes { port = 80; } {
+      port = 80;
+      addresses = "fd00::1";
+    };
+    expected = [ ];
+  };
+
+  testSpecificAddressesOfTwoFamiliesDoNotClash = {
+    expr =
+      clashes
+        {
+          port = 80;
+          addresses = "10.0.0.1";
+        }
+        {
+          port = 80;
+          addresses = "fd00::1";
+        };
     expected = [ ];
   };
 

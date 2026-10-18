@@ -26,13 +26,13 @@
   `ownership`
   : Optional. A function of `{ identity, claim }` returning the claim's final
     `{ owner, group }`, where `identity` is the contract's identity resolved to
-    `{ user, group }` (both null when it has no account). Omit it for kinds
-    without files, such as binds.
+    `{ user, group, unit }` (`user` and `unit` null as the identity has no
+    account or no unit). Omit it for kinds without files, such as binds.
 
-  `conflict`
-  : Optional. A function of two claim-set entries returning null when they can
-    coexist, or a string saying why they clash. Two claims with the same
-    `<service>-<id>` name always clash.
+  `clash`
+  : Optional. The kind's clash rule: a function of two claim-set entries
+    returning null when they can coexist, or a string saying why they clash.
+    Two claims with the same `<service>-<id>` name always clash.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -58,7 +58,7 @@
   description,
   claim,
   ownership ? null,
-  conflict ? null,
+  clash ? null,
   settings ? { },
 }:
 let
@@ -69,6 +69,7 @@ let
     "claimSets"
     "services"
   ];
+  claimName = import ./claim-name.nix;
   resolveIdentity = import ./resolve-identity.nix;
 in
 if builtins.elem kindName reservedNames then
@@ -83,7 +84,7 @@ else
       value
       // {
         inherit service id;
-        name = "${service}-${id}";
+        name = claimName service id;
       }
       // lib.optionalAttrs (ownership != null) (ownership {
         identity = resolveIdentity contract.identity;
@@ -101,11 +102,11 @@ else
     nameAssertions = lib.pipe entries [
       (lib.groupBy (entry: entry.name))
       (lib.mapAttrsToList (
-        artifact: group: {
+        name: group: {
           assertion = builtins.length group == 1;
           message = "nixos-contracts: ${kindName} claims ${
             lib.concatMapStringsSep " and " (entry: "`${entry.id}` of `${entry.service}`") group
-          } share the name `${artifact}`.";
+          } share the name `${name}`.";
         }
       ))
     ];
@@ -117,11 +118,11 @@ else
       ) entries
     );
 
-    conflictAssertions = lib.optionals (conflict != null) (
+    clashAssertions = lib.optionals (clash != null) (
       map (
         pair:
         let
-          reason = conflict pair.first pair.second;
+          reason = clash pair.first pair.second;
         in
         {
           assertion = reason == null;
@@ -168,5 +169,5 @@ else
       ${kindName} = settings;
     };
 
-    config.contracts.assertions = nameAssertions ++ conflictAssertions;
+    config.contracts.assertions = nameAssertions ++ clashAssertions;
   }

@@ -4,15 +4,22 @@
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.preservation;
-  inherit (config.contracts) claimSets mounts;
+  mounts = lib.attrValues config.contracts.claimSets.mounts;
 
-  entryOf =
+  preserveEntry =
     mount:
+    let
+      isFile = mount.type == "file";
+    in
     {
-      inherit (mount) group mode;
-      user = mount.owner;
-    }
-    // (if mount.kind == "file" then { file = mount.path; } else { directory = mount.path; });
+      ${if isFile then "files" else "directories"} = [
+        {
+          ${if isFile then "file" else "directory"} = mount.path;
+          inherit (mount) group mode;
+          user = mount.owner;
+        }
+      ];
+    };
 in
 {
   options.contracts.adapters.preservation.roots = lib.mkOption {
@@ -20,8 +27,8 @@ in
     default = { };
     description = ''
       The preservation root of each mount class: a key of
-      `preservation.preserveAt`, such as `/persist/state`. Every class in
-      `contracts.mounts.classes` needs one.
+      `preservation.preserveAt`, such as `/persist/state`. Every class a
+      mount uses needs one.
     '';
     example = {
       state = "/persist/state";
@@ -31,21 +38,17 @@ in
 
   config = {
     preservation.preserveAt = lib.mkMerge (
-      lib.mapAttrsToList (
-        _: mount:
+      map (
+        mount:
         lib.mkIf (cfg.roots ? ${mount.class}) {
-          ${cfg.roots.${mount.class}} =
-            if mount.kind == "file" then
-              { files = [ (entryOf mount) ]; }
-            else
-              { directories = [ (entryOf mount) ]; };
+          ${cfg.roots.${mount.class}} = preserveEntry mount;
         }
-      ) claimSets.mounts
+      ) mounts
     );
 
     contracts.assertions = map (class: {
       assertion = cfg.roots ? ${class};
       message = "nixos-contracts: mount class `${class}` has no preservation root in `contracts.adapters.preservation.roots`.";
-    }) mounts.classes;
+    }) (lib.unique (map (mount: mount.class) mounts));
   };
 }

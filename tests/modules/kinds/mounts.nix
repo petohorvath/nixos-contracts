@@ -51,7 +51,7 @@ in
       name = "influxdb-data";
       path = "/var/lib/influxdb2";
       class = "state";
-      kind = "directory";
+      type = "directory";
       mode = "0700";
       owner = "influxdb";
       group = "influxdb";

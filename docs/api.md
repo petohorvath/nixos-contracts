@@ -55,11 +55,11 @@ A read-only attribute set of every enabled contract's claims of one kind, keyed 
 - `service`, `id` and `name` (`<service>-<id>`).
 - `owner` and `group`, for kinds with files: final values after the [ownership rules](#ownership), which the shipped kinds never leave null.
 
-Adapters and other consumers read claim sets rather than contracts, so they need no identity logic.
+Adapters and other modules read claim sets rather than contracts, so they need no identity logic.
 
 ### `contracts.assertions`
 
-A list of `{ assertion; message; }`. Each claim kind adds one check per pair of claims sharing a `<service>-<id>` name and one per pair of claims its clash rule rejects. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
+A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, and one per pair of claims, failing when its clash rule rejects them. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
 
 ## Claim kinds
 
@@ -76,7 +76,7 @@ A list of `{ assertion; message; }`. Each claim kind adds one check per pair of 
 
 IPv6 addresses appear in brackets in `bindpoints`. A bind says where the service listens, never who may reach it.
 
-Two binds clash when they share a protocol, their ports or ranges overlap, and some pair of their addresses overlaps: the addresses are equal, or one is the unspecified address (`0.0.0.0`, `::`) of the other's family. Families are compared separately, so `0.0.0.0:80` and `[::]:80` do not clash. Binds of one service clash with each other too.
+Two binds clash when they share a protocol, their ports or ranges overlap, and some pair of their addresses overlaps: the addresses are equal, one is `0.0.0.0` and the other an IPv4 address, or one is `::`, which covers addresses of both families. Linux lets an IPv6 wildcard socket accept IPv4 unless the daemon sets `IPV6_V6ONLY`, so `0.0.0.0:80` and `[::]:80` clash; a daemon that listens on both with `IPV6_V6ONLY` set declares one bind with both addresses, since claims of one bind are not compared with each other. Binds of one service clash with each other too.
 
 ### Mounts
 
@@ -86,7 +86,7 @@ Two binds clash when they share a protocol, their ports or ranges overlap, and s
 | ------- | ---------------------------------- | ----------- |
 | `path`  | an absolute path outside the store | required    |
 | `class` | one of `contracts.mounts.classes`  | required    |
-| `kind`  | `directory` or `file`              | `directory` |
+| `type`  | `directory` or `file`              | `directory` |
 | `mode`  | a mode string                      | `"0700"`    |
 | `owner` | an account name, or null           | `null`      |
 | `group` | a group name, or null              | `null`      |
@@ -105,13 +105,14 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `mode`       | a mode string                                           | `"0440"` |
 | `owner`      | an account name, or null                                | `null`   |
 | `group`      | a group name, or null                                   | `null`   |
+| `unit`       | read-only, the dynamic identity's unit, or null         | derived  |
 | `path`       | read-only, where the daemon reads the secret            | derived  |
 
-`provenance.generated` names a generator that the credentials backend resolves, such as `"alnum"`; the library attaches no meaning to the name.
+`provenance.generated` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name.
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
-- `location` (function of the `<service>-<id>` name, or null): where the credentials backend installs a secret.
+- `location` (function of the `<service>-<id>` name, or null): where the secret backend installs a secret.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
 
 For a dynamic identity with a delivery rule, `path` is the delivered location; otherwise it is the backend's location, or null when no adapter has set a rule.
@@ -140,7 +141,7 @@ An adapter maps one claim set onto one backend. Importing it turns it on, and it
 Adds every mount to `preservation.preserveAt` under the root mapped to its class, as a directory or a file entry with the mount's resolved `user`, `group` and `mode`. It requires the [preservation](https://github.com/nix-community/preservation) module.
 
 `contracts.adapters.preservation.roots` (attribute set of strings, default `{ }`)
-: The `preservation.preserveAt` key of each class, such as `{ state = "/persist/state"; }`. Every class in `contracts.mounts.classes` needs a root, or an assertion fails.
+: The `preservation.preserveAt` key of each class, such as `{ state = "/persist/state"; }`. Every class a mount uses needs a root, or an assertion fails; a declared class no mount uses needs none.
 
 ### `nixosModules.agenix-rekey`
 
@@ -156,7 +157,7 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 
 For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Its assertions fail when a dynamic-identity secret exists but no backend adapter has set a location, and when a dynamic identity's `unit` does not end in `.service` or its `systemd.services` entry does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the entry, so a mistyped unit name shows up as a missing `DynamicUser`.
+Its assertions fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 
@@ -186,10 +187,10 @@ To use it without the flake, import the library directory with a caller-owned li
 : A function of `{ service, contract, config }` returning the submodule of one claim, where `contract` is the evaluated contract and `config` the top-level configuration. Inside the submodule, `name` is the claim's id.
 
 `ownership`
-: A function of `{ identity, claim }` returning the final `{ owner, group }`, where `identity` is resolved to `{ user, group }` (`user` null for a dynamic identity, `group` null when it has none). Omit it for a kind without files.
+: A function of `{ identity, claim }` returning the final `{ owner, group }`, where `identity` is resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null when it has none, `unit` null for a static identity). Omit it for a kind without files.
 
-`conflict`
-: A function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
+`clash`
+: The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `settings`
 : Option declarations placed under `contracts.<name>`.
@@ -198,7 +199,7 @@ To use it without the flake, import the library directory with a caller-owned li
 mkClaimKind {
   name = "databases";
   description = "Databases the service owns.";
-  conflict = a: b: if a.database == b.database then "both own `${a.database}`" else null;
+  clash = a: b: if a.database == b.database then "both own `${a.database}`" else null;
   claim =
     { service, ... }:
     { lib, name, ... }:
