@@ -26,10 +26,15 @@ let
     claim =
       {
         service,
-        contract,
+        identity,
         config,
       }:
-      { lib, name, ... }:
+      {
+        lib,
+        name,
+        claimName,
+        ...
+      }:
       {
         options = {
           engine = lib.mkOption {
@@ -42,10 +47,17 @@ let
             default = "${service}_${name}";
             description = "The database name.";
           };
-          enabled = lib.mkOption {
-            type = lib.types.bool;
-            default = contract.enable;
-            description = "The owning contract's enable, read from the claim.";
+          unit = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            readOnly = true;
+            default = identity.unit;
+            description = "The unit of the owning service's identity.";
+          };
+          claimName = lib.mkOption {
+            type = lib.types.str;
+            readOnly = true;
+            default = claimName;
+            description = "The claim's name, read from the claim.";
           };
         };
       };
@@ -84,7 +96,8 @@ in
         name = "grafana-main";
         engine = "postgresql";
         database = "grafana_main";
-        enabled = true;
+        unit = null;
+        claimName = "grafana-main";
         owner = "grafana";
         group = null;
       };
@@ -94,7 +107,8 @@ in
         name = "vaultwarden-main";
         engine = "postgresql";
         database = "vault";
-        enabled = true;
+        unit = "vaultwarden.service";
+        claimName = "vaultwarden-main";
         owner = "postgresql";
         group = null;
       };
@@ -116,7 +130,33 @@ in
     expectedError.msg = "contracts\\.services\\.grafana\\.databases\\.main\\.engine' is not of type";
   };
 
-  testCustomKindReportsItsConflicts = {
+  testCustomKindClaimTypeReadsIdentityAndClaimName = {
+    expr =
+      lib.mapAttrs
+        (_: contract: {
+          inherit (contract.databases.main) unit claimName;
+        })
+        (evaluate [
+          databases
+          services
+        ]).contracts.services;
+    expected = {
+      grafana = {
+        unit = null;
+        claimName = "grafana-main";
+      };
+      vaultwarden = {
+        unit = "vaultwarden.service";
+        claimName = "vaultwarden-main";
+      };
+      unused = {
+        unit = null;
+        claimName = "unused-main";
+      };
+    };
+  };
+
+  testCustomKindReportsItsClashes = {
     expr = failures [
       databases
       services

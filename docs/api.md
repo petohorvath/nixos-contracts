@@ -52,7 +52,7 @@ A contract has no other fields. A service's own settings stay in the service mod
 
 A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim's value plus:
 
-- `service`, `id` and `name` (`<service>-<id>`).
+- `service`, `id` and `name`, its claim name (`<service>-<id>`).
 - `owner` and `group`, for kinds with files: final values after the [ownership rules](#ownership), which the shipped kinds never leave null.
 
 Adapters and other modules read claim sets rather than contracts, so they need no identity logic.
@@ -175,7 +175,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; ownership ? null; conflict ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside one of the contracts modules.
+`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside one of the contracts modules.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.
@@ -184,10 +184,10 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, contract, config }` returning the submodule of one claim, where `contract` is the evaluated contract and `config` the top-level configuration. Inside the submodule, `name` is the claim's id.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, `name` is the claim's id and the module argument `claimName` its claim name, `<service>-<id>`.
 
 `ownership`
-: A function of `{ identity, claim }` returning the final `{ owner, group }`, where `identity` is resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null when it has none, `unit` null for a static identity). Omit it for a kind without files.
+: A function of `{ identity, claim }` returning the final `{ owner, group }`, from the same resolved identity. Omit it for a kind without files.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.

@@ -18,21 +18,23 @@
   : Description of the contract field holding this kind's claims.
 
   `claim`
-  : A function of `{ service, contract, config }` returning the submodule of
-    one claim. `service` is the contract's name, `contract` its evaluated value
-    and `config` the configuration's top-level `config`. Inside the submodule,
-    `name` is the claim's id.
+  : A function of `{ service, identity, config }` returning the submodule of
+    one claim. `service` is the contract's name, `identity` the contract's
+    identity resolved to `{ user, group, unit }` (`user` null for a dynamic
+    identity, `group` null for a dynamic identity without a shared group,
+    `unit` null for a static identity) and `config` the configuration's
+    top-level `config`. Inside the submodule, `name` is the claim's id and the
+    module argument `claimName` its `<service>-<id>` claim name.
 
   `ownership`
   : Optional. A function of `{ identity, claim }` returning the claim's final
-    `{ owner, group }`, where `identity` is the contract's identity resolved to
-    `{ user, group, unit }` (`user` and `unit` null as the identity has no
-    account or no unit). Omit it for kinds without files, such as binds.
+    `{ owner, group }`, where `identity` is the same resolved identity. Omit it
+    for kinds without files, such as binds.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
     returning null when they can coexist, or a string saying why they clash.
-    Two claims with the same `<service>-<id>` name always clash.
+    Two claims with the same claim name always clash.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -69,8 +71,30 @@ let
     "claimSets"
     "services"
   ];
-  claimName = import ./claim-name.nix;
-  resolveIdentity = import ./resolve-identity.nix;
+  # A claim's claim name, which keys its claim set.
+  toClaimName = service: id: "${service}-${id}";
+
+  /*
+    Resolve a contract's identity to the account its files are owned by and
+    the unit it is allocated for. A static identity without a group takes its
+    user's like-named primary group and has no unit. A dynamic identity has no
+    account at activation time, so it yields no user, at most its shared
+    group, and its unit.
+  */
+  resolveIdentity =
+    identity:
+    if identity ? static then
+      {
+        inherit (identity.static) user;
+        group = if identity.static.group != null then identity.static.group else identity.static.user;
+        unit = null;
+      }
+    else
+      {
+        user = null;
+        group = identity.dynamic.sharedGroup;
+        inherit (identity.dynamic) unit;
+      };
 in
 if builtins.elem kindName reservedNames then
   throw "nixos-contracts: claim kind name `${kindName}` is reserved"
@@ -80,21 +104,22 @@ else
     topConfig = config;
 
     mkEntry =
-      service: contract: id: value:
+      service: identity: id: value:
       value
       // {
         inherit service id;
-        name = claimName service id;
+        name = toClaimName service id;
       }
       // lib.optionalAttrs (ownership != null) (ownership {
-        identity = resolveIdentity contract.identity;
+        inherit identity;
         claim = value;
       });
 
     entries = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
       (lib.mapAttrsToList (
-        service: contract: lib.mapAttrsToList (mkEntry service contract) contract.${kindName}
+        service: contract:
+        lib.mapAttrsToList (mkEntry service (resolveIdentity contract.identity)) contract.${kindName}
       ))
       lib.concatLists
     ];
@@ -137,14 +162,25 @@ else
         type = lib.types.attrsOf (
           lib.types.submodule (
             { name, config, ... }:
+            let
+              service = name;
+            in
             {
               options.${kindName} = lib.mkOption {
                 type = lib.types.attrsOf (
-                  lib.types.submodule (claim {
-                    service = name;
-                    contract = config;
-                    config = topConfig;
-                  })
+                  lib.types.submodule [
+                    (claim {
+                      inherit service;
+                      identity = resolveIdentity config.identity;
+                      config = topConfig;
+                    })
+                    (
+                      { name, ... }:
+                      {
+                        _module.args.claimName = toClaimName service name;
+                      }
+                    )
+                  ]
                 );
                 default = { };
                 inherit description;
@@ -160,9 +196,9 @@ else
         default = lib.listToAttrs (map (entry: lib.nameValuePair entry.name entry) entries);
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
-          The ${kindName} claims of every enabled contract, keyed by
-          `<service>-<id>`, each carrying its service, id and name and, for a
-          kind with files, its final owner and group.
+          The ${kindName} claims of every enabled contract, keyed by claim
+          name, each carrying its service, id and claim name and, for a kind
+          with files, its final owner and group.
         '';
       };
 

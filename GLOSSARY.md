@@ -22,6 +22,10 @@ _Avoid_: Resource, requirement, building block
 **Claim kind**:
 One kind of claim, such as binds, mounts or secrets. The set of kinds is open: a new kind is defined the same way as the shipped ones.
 
+**Claim name**:
+The name a claim goes by across the configuration, made of its service's name and the id the claim has within its contract, such as `influxdb-data`. Two claims of one kind with the same claim name clash.
+_Avoid_: Key, full name
+
 **Claim set**:
 The read-only, configuration-wide collection of one kind's claims from enabled contracts, each already carrying its final owner and group as resolved from its service's identity.
 
