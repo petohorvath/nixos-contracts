@@ -157,7 +157,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`. A generated secret sets `generator.script` to its generator's name. A provided secret sets `rekeyFile` to its `rekeyFiles` entry or else `<secretsDir>/<service>-<id>.age`, and a check fails when neither is available. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`. A generated secret sets `generator.script` to its generator's name. A provided secret sets `rekeyFile` to its `rekeyFiles` entry or else `<secretsDir>/<service>-<id>.age`. Without either, it keeps agenix-rekey's own default from `age.rekey.secretsDir`, and a check fails when that is unset too. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 `contracts.adapters.agenixRekey.secretsDir` (path or null, default `null`)
 : The directory holding provided secrets as `<service>-<id>.age`.

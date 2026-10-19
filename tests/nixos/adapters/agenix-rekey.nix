@@ -76,6 +76,30 @@ in
     };
   };
 
+  testProvidedSecretTakesAgenixRekeysOwnSecretsDir =
+    let
+      modules = [
+        { age.rekey.secretsDir = ./.; }
+        {
+          contracts.services.kea = {
+            enable = true;
+            identity.static.user = "kea";
+            secrets.token.provenance.provided = { };
+          };
+        }
+      ];
+    in
+    {
+      expr = {
+        failures = failures modules;
+        rekeyFile = (configuration modules).age.secrets.kea-token.rekeyFile;
+      };
+      expected = {
+        failures = [ ];
+        rekeyFile = ./kea-token.age;
+      };
+    };
+
   testProvidedSecretWithoutAFileFailsItsCheck =
     let
       kea.contracts.services.kea = {
@@ -91,7 +115,7 @@ in
       };
       expected = {
         failures = [
-          "nixos-contracts: provided secret `kea-token` needs `contracts.adapters.agenixRekey.secretsDir` or an entry in its `rekeyFiles`."
+          "nixos-contracts: provided secret `kea-token` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`."
         ];
         rekeyFile = null;
       };

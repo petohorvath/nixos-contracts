@@ -23,7 +23,8 @@ in
       default = null;
       description = ''
         The directory holding provided secrets as `<service>-<id>.age`.
-        A check fails when a provided secret needs it and it is null.
+        A check fails when a provided secret has no encrypted file from
+        it, from `rekeyFiles` or from agenix-rekey's `age.rekey.secretsDir`.
       '';
     };
     rekeyFiles = lib.mkOption {
@@ -53,9 +54,11 @@ in
       )
     ) secrets;
 
+    # Reads the final file, which agenix-rekey's own `age.rekey.secretsDir`
+    # provides when this adapter has none.
     contracts.assertions = lib.mapAttrsToList (name: _: {
-      assertion = rekeyFileOrNull name != null;
-      message = "provided secret `${name}` needs `contracts.adapters.agenixRekey.secretsDir` or an entry in its `rekeyFiles`.";
+      assertion = config.age.secrets.${name}.rekeyFile != null;
+      message = "provided secret `${name}` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`.";
     }) (lib.filterAttrs (_: secret: secret.provenance ? provided) secrets);
 
     # Claims of disabled contracts have no `age.secrets` entry, so they take
