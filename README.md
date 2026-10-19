@@ -57,7 +57,7 @@ in
     enable = config.services.chrony.enable;
     identity.static.user = "chrony";
     binds.ntp = {
-      proto = "udp";
+      protocols = "udp";
       port = 123;
     };
     mounts.state = {

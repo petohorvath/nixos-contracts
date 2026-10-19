@@ -32,7 +32,7 @@ let
   clash =
     first: second:
     let
-      protocols = lib.intersectLists first.proto second.proto;
+      sharedProtocols = lib.intersectLists first.protocols second.protocols;
       addressPairs = lib.filter (pair: addressesOverlap pair.first pair.second) (
         lib.cartesianProduct {
           first = first.addresses;
@@ -41,7 +41,7 @@ let
       );
     in
     if
-      protocols != [ ]
+      sharedProtocols != [ ]
       && portRange.overlaps (toPortRange first.port) (toPortRange second.port)
       && addressPairs != [ ]
     then
@@ -53,7 +53,7 @@ let
           else
             "ports ${toString first.port} and ${toString second.port}";
       in
-      "both listen on ${lib.concatStringsSep "/" protocols} ${ports}, at `${pair.first}` and `${pair.second}`"
+      "both listen on ${lib.concatStringsSep "/" sharedProtocols} ${ports}, at `${pair.first}` and `${pair.second}`"
     else
       null;
 in
@@ -69,7 +69,7 @@ in
     { config, ... }:
     {
       options = {
-        proto = lib.mkOption {
+        protocols = lib.mkOption {
           type = lib.types.coercedTo types.transport (protocol: [ protocol ]) (
             lib.types.listOf types.transport
           );

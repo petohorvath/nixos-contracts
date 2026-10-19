@@ -33,7 +33,7 @@ in
   ```nix
   contracts.services.chrony = contractsLib.mkDefaultContract {
     identity.static.user = "chrony";
-    binds.ntp = { proto = "udp"; port = 123; };
+    binds.ntp = { protocols = "udp"; port = 123; };
   };
   ```
 */
