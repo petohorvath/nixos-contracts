@@ -35,6 +35,12 @@
     returning null when they can coexist, or a string saying why they clash.
     Two claims with the same claim name always clash.
 
+  `check`
+  : Optional. The kind's check rule: a function of `{ identity, claim }`,
+    where `identity` is the same resolved identity and `claim` a claim-set
+    entry, returning null when the claim is valid, or a string saying why
+    it is not. Only claims of enabled contracts are checked.
+
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
 
@@ -59,6 +65,7 @@
   description,
   claim,
   clash ? null,
+  check ? null,
   settings ? { },
 }:
 let
@@ -101,11 +108,11 @@ else
   let
     topConfig = config;
 
-    entries = lib.pipe config.contracts.services [
-      (lib.filterAttrs (_: contract: contract.enable))
-      (lib.mapAttrsToList (_: contract: lib.attrValues contract.${kindName}))
-      lib.concatLists
-    ];
+    enabledContracts = lib.filterAttrs (_: contract: contract.enable) config.contracts.services;
+
+    entries = lib.concatMap (contract: lib.attrValues contract.${kindName}) (
+      lib.attrValues enabledContracts
+    );
 
     nameAssertions = lib.pipe entries [
       (lib.groupBy (entry: entry.name))
@@ -137,6 +144,25 @@ else
           message = "nixos-contracts: ${kindName} claims `${pair.first.name}` and `${pair.second.name}` clash: ${toString reason}.";
         }
       ) pairs
+    );
+
+    checkAssertions = lib.optionals (check != null) (
+      lib.concatMap (
+        contract:
+        let
+          identity = resolveIdentity contract.identity;
+        in
+        map (
+          claim:
+          let
+            reason = check { inherit identity claim; };
+          in
+          {
+            assertion = reason == null;
+            message = "nixos-contracts: ${kindName} claim `${claim.name}`: ${toString reason}.";
+          }
+        ) (lib.attrValues contract.${kindName})
+      ) (lib.attrValues enabledContracts)
     );
   in
   {
@@ -216,5 +242,5 @@ else
       ${kindName} = settings;
     };
 
-    config.contracts.assertions = nameAssertions ++ clashAssertions;
+    config.contracts.assertions = nameAssertions ++ clashAssertions ++ checkAssertions;
   }

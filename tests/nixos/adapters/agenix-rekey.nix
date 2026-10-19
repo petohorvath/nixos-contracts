@@ -80,6 +80,20 @@ in
     expectedError.msg = "provided secret `kea-token` needs `contracts\\.adapters\\.agenixRekey\\.secretsDir`";
   };
 
+  testDynamicIdentityWithoutDeliveryCannotReadItsSecret = {
+    expr = nixos.failures (
+      backends
+      ++ [
+        adapter
+        services
+        settings
+      ]
+    );
+    expected = [
+      "nixos-contracts: secrets claim `alloy-password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup`."
+    ];
+  };
+
   testClaimReadsTheInstalledPath = {
     expr =
       (configuration [

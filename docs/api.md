@@ -55,7 +55,7 @@ A read-only attribute set of every enabled contract's claims of one kind, keyed 
 
 ### `contracts.assertions`
 
-A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, and one per pair of claims, failing when its clash rule rejects them. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
+A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
 
 ## Claim kinds
 
@@ -110,16 +110,19 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `owner`      | an account name                                         | `"root"` |
 | `group`      | a group name                                            | derived  |
 | `unit`       | read-only, the dynamic identity's unit, or null         | derived  |
+| `delivered`  | read-only, whether the secret is delivered              | derived  |
 | `path`       | read-only, where the daemon reads the secret            | derived  |
 
 `provenance.generated` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name.
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
-- `location` (function of the `<service>-<id>` name, or null): where the secret backend installs a secret.
+- `location` (function of the `<service>-<id>` name, or null): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
 
-For a dynamic identity with a delivery rule, `path` is the delivered location; otherwise it is the backend's location, or null when no adapter has set a rule.
+A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location, or null when no adapter has set a rule.
+
+A dynamic user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that a backend installs but no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
 Secrets clash only by sharing a name.
 
@@ -179,7 +182,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
+`mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.
@@ -192,6 +195,9 @@ To use it without the flake, import the library directory with a caller-owned li
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
+
+`check`
+: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim fails as ``<kind> claim `<service>-<id>`: <reason>``.
 
 `settings`
 : Option declarations placed under `contracts.<name>`.
