@@ -122,7 +122,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location, or null when no adapter has set a rule.
 
-A dynamic user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that a backend installs but no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
+A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that a backend installs but no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
 Secrets clash only by sharing a name.
 
@@ -197,7 +197,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim fails as ``<kind> claim `<service>-<id>`: <reason>``.
+: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim fails as ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.``
 
 `settings`
 : Option declarations placed under `contracts.<name>`.

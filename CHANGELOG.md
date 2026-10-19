@@ -5,7 +5,7 @@
 ### Added
 
 - Contracts at `contracts.services.<service>`, each with an `enable` and a required static or dynamic `identity`.
-- Claim kinds `binds`, `mounts` and `secrets`, whose mount and secret owners and groups default from the service's identity, with read-only claim sets at `contracts.claimSets.<kind>`, and clash checks and a check that a dynamic identity can read its secrets in `contracts.assertions`.
+- Claim kinds `binds`, `mounts` and `secrets`, whose mount and secret owners and groups default from the service's identity, with read-only claim sets at `contracts.claimSets.<kind>` and clash checks in `contracts.assertions`. A further check fails when a dynamic identity cannot read its secrets.
 - `contracts.mounts.classes`, and the `contracts.secrets.location` and `contracts.secrets.delivery` rules for adapters.
 - `lib.mkClaimKind`, for defining further claim kinds with their own clash and check rules, and `lib.mkDefaultContract`, for contracts a host can override field by field.
 - `nixosModules.default`, which forwards the checks to NixOS `assertions`, and `modules.generic.default` for any module class.

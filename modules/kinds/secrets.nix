@@ -31,18 +31,15 @@
     };
   };
 
-  # A dynamic user exists only while its unit runs, so it reads a secret
-  # the backend installs only through its shared group. An undelivered
-  # claim has a path only when a backend installs it.
+  # A dynamic identity's user exists only while its unit runs, so it reads
+  # a secret the backend installs only through its shared group. An
+  # undelivered claim has a path only when a backend installs it.
   check =
     { identity, claim }:
     if
-      identity.unit != null
-      && !claim.delivered
-      && claim.path != null
-      && (identity.group == null || claim.group != identity.group)
+      identity.unit != null && !claim.delivered && claim.path != null && claim.group != identity.group
     then
-      "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup`"
+      "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
     else
       null;
 

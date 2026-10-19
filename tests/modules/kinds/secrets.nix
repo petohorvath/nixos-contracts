@@ -35,9 +35,9 @@ let
     {
       inherit (claim) owner group;
     };
-  location.contracts.secrets.location = name: "/run/agenix/${name}";
+  backendLocation.contracts.secrets.location = name: "/run/agenix/${name}";
   rules = {
-    imports = [ location ];
+    imports = [ backendLocation ];
     contracts.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
   };
 in
@@ -132,14 +132,15 @@ in
   };
 
   testDynamicIdentityWithoutDeliveryReadsTheBackendLocation = {
-    expr = (secretOf [ location ] { dynamic.unit = "svc.service"; } { }).path;
+    expr = (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).path;
     expected = "/run/agenix/svc-key";
   };
 
   testOnlyADynamicIdentityWithADeliveryAdapterIsDelivered = {
     expr = {
       dynamicWithDelivery = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
-      dynamicWithoutDelivery = (secretOf [ location ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamicWithoutDelivery =
+        (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).delivered;
       static = (secretOf [ rules ] { static.user = "svc"; } { }).delivered;
     };
     expected = {
@@ -151,18 +152,18 @@ in
 
   testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup = {
     expr = failures [
-      location
+      backendLocation
       (service "svc" { dynamic.unit = "svc.service"; } generated)
     ];
     expected = [
-      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup`."
+      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
     ];
   };
 
   testReadableSecretsPassTheCheck = {
     expr = {
       sharedGroup = failures [
-        location
+        backendLocation
         (service "svc" {
           dynamic = {
             unit = "svc.service";
@@ -175,7 +176,7 @@ in
         (service "svc" { dynamic.unit = "svc.service"; } generated)
       ];
       static = failures [
-        location
+        backendLocation
         (service "svc" { static.user = "svc"; } generated)
       ];
       notInstalled = failures [ (service "svc" { dynamic.unit = "svc.service"; } generated) ];
