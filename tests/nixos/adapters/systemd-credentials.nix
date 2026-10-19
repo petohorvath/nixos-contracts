@@ -2,7 +2,8 @@
   lib,
   nixos,
   adapter,
-  backend,
+  backends,
+  backendAdapter,
 }:
 let
   inherit (nixos) evaluate failures;
@@ -105,8 +106,9 @@ in
   testDeliveryWorksWithTheAgenixRekeyAdapter = {
     expr =
       (evaluate (
-        backend
+        backends
         ++ [
+          backendAdapter
           adapter
           alloy
           { contracts.adapters.agenixRekey.secretsDir = ./.; }

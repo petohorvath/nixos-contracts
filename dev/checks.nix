@@ -33,12 +33,17 @@ import ../tests {
 }
 // {
   # Run the nix-unit suite from the `tests` output with the selected inputs.
-  evaluation = pkgs.runCommand "contracts-evaluation" { nativeBuildInputs = [ pkgs.nix-unit ]; } ''
-    export HOME=$(realpath .)
-    # NixOS evaluation writes to the store, so use a writable chroot store.
-    export NIX_REMOTE=$HOME/storedata
-    nix-unit --extra-experimental-features flakes \
-      --flake ${inputs.self}#tests.${system} ${overrideFlags}
-    touch "$out"
-  '';
+  evaluation =
+    pkgs.runCommand "contracts-evaluation"
+      {
+        nativeBuildInputs = [ pkgs.nix-unit ];
+      }
+      ''
+        export HOME=$(realpath .)
+        # NixOS evaluation writes to the store, so use a writable chroot store.
+        export NIX_REMOTE=$HOME/storedata
+        nix-unit --extra-experimental-features flakes \
+          --flake ${inputs.self}#tests.${system} ${overrideFlags}
+        touch "$out"
+      '';
 }

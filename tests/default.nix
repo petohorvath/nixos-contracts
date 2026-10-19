@@ -2,7 +2,7 @@
 { formatter, pkgs }:
 let
   sourceDir = pkgs.lib.cleanSource ../.;
-  sourceCheck =
+  runSourceCheck =
     name: packages: script:
     pkgs.runCommand "contracts-${name}" { nativeBuildInputs = packages; } ''
       cp -R ${sourceDir} source
@@ -13,12 +13,12 @@ let
     '';
 in
 {
-  formatting = sourceCheck "formatting" [ formatter ] "contracts-fmt --ci";
-  lint = sourceCheck "lint" [ pkgs.statix pkgs.deadnix ] ''
+  formatting = runSourceCheck "formatting" [ formatter ] "contracts-fmt --ci";
+  lint = runSourceCheck "lint" [ pkgs.statix pkgs.deadnix ] ''
     statix check .
     deadnix --fail .
   '';
-  workflows = sourceCheck "workflows" [ pkgs.actionlint ] ''
+  workflows = runSourceCheck "workflows" [ pkgs.actionlint ] ''
     shopt -s nullglob
     workflows=(.github/workflows/*.yml .github/workflows/*.yaml)
     if (( ''${#workflows[@]} )); then

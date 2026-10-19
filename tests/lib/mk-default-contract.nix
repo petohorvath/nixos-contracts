@@ -11,7 +11,7 @@ let
     enable = true;
     identity.static.user = "chrony";
     binds.ntp = {
-      proto = "udp";
+      protocols = "udp";
       port = 123;
       addresses = [
         "0.0.0.0"
@@ -33,7 +33,7 @@ in
       service = "chrony";
       id = "ntp";
       name = "chrony-ntp";
-      proto = [ "udp" ];
+      protocols = [ "udp" ];
       port = 123;
       addresses = [
         "0.0.0.0"
@@ -52,11 +52,11 @@ in
         bind = (evaluateChrony { contracts.services.chrony.binds.ntp.port = 1123; }).binds.ntp;
       in
       {
-        inherit (bind) port proto;
+        inherit (bind) port protocols;
       };
     expected = {
       port = 1123;
-      proto = [ "udp" ];
+      protocols = [ "udp" ];
     };
   };
 

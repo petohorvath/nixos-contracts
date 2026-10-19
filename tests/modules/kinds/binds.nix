@@ -23,7 +23,7 @@ in
       service = "web";
       id = "http";
       name = "web-http";
-      proto = [ "tcp" ];
+      protocols = [ "tcp" ];
       port = 80;
       addresses = [ "0.0.0.0" ];
       bindpoints = [ "0.0.0.0:80" ];
@@ -55,11 +55,11 @@ in
         (service "web" {
           http = {
             port = 80;
-            proto = "quic";
+            protocols = "quic";
           };
         })
-      ]).contracts.services.web.binds.http.proto;
-    expectedError.msg = "contracts\\.services\\.web\\.binds\\.http\\.proto' is not of type";
+      ]).contracts.services.web.binds.http.protocols;
+    expectedError.msg = "contracts\\.services\\.web\\.binds\\.http\\.protocols' is not of type";
   };
 
   testBindRejectsAnInvalidAddress = {
@@ -149,7 +149,7 @@ in
   testProtocolsDoNotClash = {
     expr = clashes { port = 53; } {
       port = 53;
-      proto = "udp";
+      protocols = "udp";
     };
     expected = [ ];
   };
@@ -159,14 +159,14 @@ in
       clashes
         {
           port = 53;
-          proto = [
+          protocols = [
             "tcp"
             "udp"
           ];
         }
         {
           port = 53;
-          proto = "udp";
+          protocols = "udp";
         };
     expected = [
       "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on udp port 53, at `0.0.0.0` and `0.0.0.0`."

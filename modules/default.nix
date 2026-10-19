@@ -6,13 +6,13 @@ let
   mkClaimKind = import ./mk-claim-kind.nix;
 
   # Builds the kind a file defines, declaring its options at that file.
-  kindModule =
+  mkKindModule =
     path: arguments: lib.setDefaultModuleLocation path (mkClaimKind (import path arguments));
 
   kinds = [
-    (kindModule ./kinds/binds.nix { inherit lib libnet; })
-    (kindModule ./kinds/mounts.nix { inherit lib; })
-    (kindModule ./kinds/secrets.nix { inherit lib; })
+    (mkKindModule ./kinds/binds.nix { inherit lib libnet; })
+    (mkKindModule ./kinds/mounts.nix { inherit lib; })
+    (mkKindModule ./kinds/secrets.nix { inherit lib; })
   ];
 in
 {

@@ -78,7 +78,7 @@ A read-only field cannot be defined, so copying a whole claim into another contr
 
 | Field        | Type                                       | Default         |
 | ------------ | ------------------------------------------ | --------------- |
-| `proto`      | `tcp`, `udp` or `sctp`, or a list of them  | `[ "tcp" ]`     |
+| `protocols`  | `tcp`, `udp` or `sctp`, or a list of them  | `[ "tcp" ]`     |
 | `port`       | a port, or a range written `"<from>-<to>"` | required        |
 | `addresses`  | an IP address or a list of them            | `[ "0.0.0.0" ]` |
 | `bindpoints` | read-only `"<address>:<port>"` per address | derived         |

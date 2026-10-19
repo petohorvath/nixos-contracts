@@ -8,7 +8,7 @@
 let
   inherit (config.contracts.secrets) location;
 
-  serviceNameOf = unit: lib.removeSuffix ".service" unit;
+  toServiceName = unit: lib.removeSuffix ".service" unit;
 
   delivered = lib.filter (secret: secret.delivered) (
     lib.attrValues config.contracts.claimSets.secrets
@@ -19,10 +19,10 @@ let
   # The delivery itself defines the unit's `systemd.services` entry, so the
   # unit exists only if another module gave it a command, an `ExecStart` set
   # directly or through `script`.
-  unitAssertions =
+  mkUnitAssertions =
     unit:
     let
-      service = config.systemd.services.${serviceNameOf unit} or { serviceConfig = { }; };
+      service = config.systemd.services.${toServiceName unit} or { serviceConfig = { }; };
     in
     [
       {
@@ -42,7 +42,7 @@ in
     systemd.services = lib.mkIf (location != null) (
       lib.mkMerge (
         map (secret: {
-          ${serviceNameOf secret.unit}.serviceConfig.LoadCredential = [
+          ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
             "${secret.name}:${location secret.name}"
           ];
         }) delivered
@@ -55,6 +55,6 @@ in
         message = "delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`.";
       }
     ]
-    ++ lib.concatMap unitAssertions units;
+    ++ lib.concatMap mkUnitAssertions units;
   };
 }
