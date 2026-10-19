@@ -176,7 +176,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside one of the contracts modules.
+`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.
