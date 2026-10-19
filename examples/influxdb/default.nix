@@ -56,10 +56,6 @@ in
     secrets = lib.mapAttrs (_: secretOf) (
       lib.getAttrs [ "influxdb-admin-password" "influxdb-admin-token" ] config.age.secrets
     );
-    failures = lib.pipe config.assertions [
-      (lib.filter (check: !check.assertion))
-      (map (check: check.message))
-      (lib.filter (lib.hasPrefix "nixos-contracts: "))
-    ];
+    inherit (config.contracts) failures;
   };
 }

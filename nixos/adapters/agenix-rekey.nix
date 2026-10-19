@@ -8,6 +8,13 @@
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.agenixRekey;
+  secrets = config.contracts.claimSets.secrets;
+
+  # The encrypted file of a provided secret, or null when none is known.
+  rekeyFileOrNull =
+    name:
+    cfg.rekeyFiles.${name}
+      or (if cfg.secretsDir != null then cfg.secretsDir + "/${name}.age" else null);
 in
 {
   options.contracts.adapters.agenixRekey = {
@@ -16,7 +23,8 @@ in
       default = null;
       description = ''
         The directory holding provided secrets as `<service>-<id>.age`.
-        Evaluation fails when a provided secret needs it and it is null.
+        A check fails when a provided secret has no encrypted file from
+        it, from `rekeyFiles` or from agenix-rekey's `age.rekey.secretsDir`.
       '';
     };
     rekeyFiles = lib.mkOption {
@@ -32,6 +40,9 @@ in
   config = {
     age.secrets = lib.mapAttrs (
       name: secret:
+      let
+        rekeyFile = rekeyFileOrNull name;
+      in
       {
         inherit (secret) group mode owner;
       }
@@ -39,17 +50,16 @@ in
         if secret.provenance ? generated then
           { generator.script = secret.provenance.generated; }
         else
-          {
-            rekeyFile =
-              cfg.rekeyFiles.${name} or (
-                if cfg.secretsDir != null then
-                  cfg.secretsDir + "/${name}.age"
-                else
-                  throw "nixos-contracts: provided secret `${name}` needs `contracts.adapters.agenixRekey.secretsDir` or an entry in its `rekeyFiles`."
-              );
-          }
+          lib.optionalAttrs (rekeyFile != null) { inherit rekeyFile; }
       )
-    ) config.contracts.claimSets.secrets;
+    ) secrets;
+
+    # Reads the final file, which agenix-rekey's own `age.rekey.secretsDir`
+    # provides when this adapter has none.
+    contracts.assertions = lib.mapAttrsToList (name: _: {
+      assertion = config.age.secrets.${name}.rekeyFile != null;
+      message = "provided secret `${name}` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`.";
+    }) (lib.filterAttrs (_: secret: secret.provenance ? provided) secrets);
 
     # Claims of disabled contracts have no `age.secrets` entry, so they take
     # agenix's default path, which an entry keeps unless a host overrides it.

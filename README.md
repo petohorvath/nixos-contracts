@@ -4,7 +4,7 @@ nixos-contracts is a Nix library that gives the services of one NixOS configurat
 
 ## Overview
 
-A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) or a **secret** (a credential, provided by a person or generated). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, keyed by claim name, and reports clashes, such as two services listening on the same port, as assertions. [GLOSSARY.md](GLOSSARY.md) defines these terms.
+A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) or a **secret** (a credential, provided by a person or generated). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, keyed by claim name, and reports clashes, such as two services listening on the same port, as failed checks. [GLOSSARY.md](GLOSSARY.md) defines these terms.
 
 The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 
@@ -34,9 +34,9 @@ inputs.nixos-contracts = {
 
 The flake exports:
 
-- `nixosModules.default`: the contracts for a NixOS configuration, with their checks forwarded to `assertions`.
+- `nixosModules.default`: the contracts for a NixOS configuration, with their failed checks forwarded to `assertions`.
 - `nixosModules.preservation`, `nixosModules.agenix-rekey` and `nixosModules.systemd-credentials`: one adapter each, also importing `nixosModules.default`. Importing an adapter turns it on; its backend's own NixOS module must be imported too.
-- `modules.generic.default`: the same contracts for any module class, with checks left in `contracts.assertions`.
+- `modules.generic.default`: the same contracts for any module class, with failed checks left in `contracts.failures`.
 - `lib.mkDefaultContract` and `lib.mkClaimKind`.
 
 ## Usage

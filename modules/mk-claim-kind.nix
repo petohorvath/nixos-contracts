@@ -12,8 +12,8 @@
   `name`
   : The kind's name. It becomes the field `contracts.services.<service>.<name>`,
     the claim set `contracts.claimSets.<name>` and the settings root
-    `contracts.<name>`. `services`, `claimSets`, `assertions` and `adapters` are
-    reserved.
+    `contracts.<name>`. `services`, `claimSets`, `assertions`, `failures` and
+    `adapters` are reserved.
 
   `description`
   : Description of the contract field holding this kind's claims.
@@ -41,8 +41,8 @@
     where `identity` is the same resolved identity and `claim` a claim-set
     entry, returning null when the claim is valid, or a string saying why
     it is not. Only claims of enabled contracts are checked, and a rejected
-    claim fails as "nixos-contracts: <kind> claim `<service>-<id>`:
-    <reason>."
+    claim reads "nixos-contracts: <kind> claim `<service>-<id>`: <reason>."
+    in `contracts.failures`.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -77,6 +77,7 @@ let
     "adapters"
     "assertions"
     "claimSets"
+    "failures"
     "services"
   ];
   # A claim's claim name, which keys its claim set.
@@ -131,7 +132,7 @@ else
       (lib.mapAttrsToList (
         name: group: {
           assertion = builtins.length group == 1;
-          message = "nixos-contracts: ${kindName} claims ${
+          message = "${kindName} claims ${
             lib.concatMapStringsSep " and " (entry: "`${entry.id}` of `${entry.service}`") group
           } share the name `${name}`.";
         }
@@ -153,7 +154,7 @@ else
         in
         {
           assertion = reason == null;
-          message = "nixos-contracts: ${kindName} claims `${pair.first.name}` and `${pair.second.name}` clash: ${toString reason}.";
+          message = "${kindName} claims `${pair.first.name}` and `${pair.second.name}` clash: ${toString reason}.";
         }
       ) pairs
     );
@@ -166,7 +167,7 @@ else
         in
         {
           assertion = reason == null;
-          message = "nixos-contracts: ${kindName} claim `${arguments.claim.name}`: ${toString reason}.";
+          message = "${kindName} claim `${arguments.claim.name}`: ${toString reason}.";
         }
       ) claims
     );

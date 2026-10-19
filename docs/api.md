@@ -4,10 +4,10 @@ This reference describes the public interface of nixos-contracts: its modules, o
 
 ## Modules
 
-| Export                    | Module class | Checks                                                      |
-| ------------------------- | ------------ | ----------------------------------------------------------- |
-| `nixosModules.default`    | NixOS        | Forwarded from `contracts.assertions` to NixOS `assertions` |
-| `modules.generic.default` | any          | Left in `contracts.assertions` for the caller to read       |
+| Export                    | Module class | Checks                                                    |
+| ------------------------- | ------------ | --------------------------------------------------------- |
+| `nixosModules.default`    | NixOS        | Forwarded from `contracts.failures` to NixOS `assertions` |
+| `modules.generic.default` | any          | Left in `contracts.failures` for the caller to read       |
 
 Both import the core and the three shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
 
@@ -30,6 +30,7 @@ contracts.claimSets.<kind>.<service>-<id>    read-only
 contracts.<kind>.*                           kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
+contracts.failures                           read-only, messages of failed checks
 ```
 
 ### `contracts.services.<service>`
@@ -55,7 +56,11 @@ A read-only attribute set of every enabled contract's claims of one kind, keyed 
 
 ### `contracts.assertions`
 
-A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
+A list of checks, each `{ assertion; message; }`, with the message written without the library's prefix. The option follows the name and shape of NixOS `assertions`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. Adapters add their own.
+
+### `contracts.failures`
+
+A read-only list of the messages of the failed checks in `contracts.assertions`, each prefixed with `nixos-contracts: `, such as ``nixos-contracts: mount class `state` has no preservation root in `contracts.adapters.preservation.roots`.`` `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
 
 ## Claim kinds
 
@@ -141,7 +146,7 @@ An explicit `owner` or `group` on the claim wins. A mount's group otherwise fall
 
 ## Adapters
 
-An adapter maps one claim set onto one backend. Importing it turns it on, and it requires its backend's NixOS module, since it defines that backend's options. Adapter checks join `contracts.assertions`.
+An adapter maps one claim set onto one backend. Importing it turns it on, and it requires its backend's NixOS module, since it defines that backend's options. Adapter checks join `contracts.assertions`, and their failures `contracts.failures`.
 
 ### `nixosModules.preservation`
 
@@ -152,7 +157,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`. A generated secret sets `generator.script` to its generator's name. A provided secret sets `rekeyFile` to its `rekeyFiles` entry or else `<secretsDir>/<service>-<id>.age`, and evaluation fails when neither is available. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`. A generated secret sets `generator.script` to its generator's name. A provided secret sets `rekeyFile` to its `rekeyFiles` entry or else `<secretsDir>/<service>-<id>.age`. Without either, it keeps agenix-rekey's own default from `age.rekey.secretsDir`, and a check fails when that is unset too. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 `contracts.adapters.agenixRekey.secretsDir` (path or null, default `null`)
 : The directory holding provided secrets as `<service>-<id>.age`.
@@ -164,7 +169,7 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 
 For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Its assertions fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Its checks fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 
@@ -185,7 +190,7 @@ To use it without the flake, import the library directory with a caller-owned li
 `mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
-: The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.
+: The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions`, `failures` and `adapters` are reserved.
 
 `description`
 : The description of the contract field.
@@ -197,7 +202,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim fails as ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.``
+: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.<name>`.

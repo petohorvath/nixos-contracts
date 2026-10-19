@@ -39,7 +39,7 @@ Tests come in two layers:
 
 The `evaluation` check runs nix-unit in the build sandbox, which cannot fetch, so [dev/checks.nix](../dev/checks.nix) passes every locked input, including agenix-rekey's own inputs, with `--override-input`. A new input, or a new input of agenix-rekey, needs an entry there.
 
-Failure cases use nix-unit's `expectedError` and match the option path or library message, not a complete error snapshot. Clash and check cases read the failed messages of `contracts.assertions`.
+Failure cases use nix-unit's `expectedError` and match the option path or library message, not a complete error snapshot. Clash and check cases read `contracts.failures`.
 
 ## CI and policy
 

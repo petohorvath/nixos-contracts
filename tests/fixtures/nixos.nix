@@ -1,5 +1,6 @@
-# Evaluate NixOS configurations without building them. `failures` keeps only
-# this library's failed assertions, since NixOS's own fail without a bootloader.
+# Evaluate NixOS configurations without building them. `failures` reads this
+# library's failed checks, since NixOS's own assertions fail without a
+# bootloader.
 { nixpkgs, system }:
 let
   inherit (nixpkgs) lib;
@@ -16,11 +17,5 @@ rec {
       ]
       ++ modules;
     }).config;
-  failures =
-    modules:
-    lib.pipe (evaluate modules).assertions [
-      (lib.filter (check: !check.assertion))
-      (map (check: check.message))
-      (lib.filter (lib.hasPrefix "nixos-contracts: "))
-    ];
+  failures = modules: (evaluate modules).contracts.failures;
 }

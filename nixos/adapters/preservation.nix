@@ -48,7 +48,7 @@ in
 
     contracts.assertions = map (class: {
       assertion = cfg.roots ? ${class};
-      message = "nixos-contracts: mount class `${class}` has no preservation root in `contracts.adapters.preservation.roots`.";
+      message = "mount class `${class}` has no preservation root in `contracts.adapters.preservation.roots`.";
     }) (lib.unique (map (mount: mount.class) mounts));
   };
 }

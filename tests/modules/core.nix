@@ -53,4 +53,28 @@ in
     expr = (evaluate [ ]).contracts.assertions;
     expected = [ ];
   };
+
+  testFailuresArePrefixedMessagesOfFailedChecks = {
+    expr =
+      (evaluate [
+        {
+          contracts.assertions = [
+            {
+              assertion = false;
+              message = "the first check fails.";
+            }
+            {
+              assertion = true;
+              message = "the second check holds.";
+            }
+          ];
+        }
+      ]).contracts.failures;
+    expected = [ "nixos-contracts: the first check fails." ];
+  };
+
+  testFailuresAreReadOnly = {
+    expr = (evaluate [ { contracts.failures = [ "set by hand" ]; } ]).contracts.failures;
+    expectedError.msg = "contracts\\.failures' is read-only";
+  };
 }

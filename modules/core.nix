@@ -1,5 +1,6 @@
-# Declares contracts, their identities and the assertions claim kinds report.
-{ lib, ... }:
+# Declares contracts, their identities and the checks over them, and prefixes
+# the messages of the checks that fail.
+{ config, lib, ... }:
 let
   identityType = lib.types.attrTag {
     static = lib.mkOption {
@@ -80,15 +81,32 @@ in
             };
             message = lib.mkOption {
               type = lib.types.str;
-              description = "The error reported when the condition fails.";
+              description = ''
+                The error reported when the condition fails, without the
+                library's prefix, which `contracts.failures` adds.
+              '';
             };
           };
         }
       );
       default = [ ];
       description = ''
-        Checks over all contracts, such as claim clashes. The NixOS module
-        forwards them to `assertions`.
+        Checks over all contracts, such as claim clashes. Read the failed
+        ones from `contracts.failures`.
+      '';
+    };
+
+    failures = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      readOnly = true;
+      default = lib.pipe config.contracts.assertions [
+        (lib.filter (check: !check.assertion))
+        (map (check: "nixos-contracts: ${check.message}"))
+      ];
+      defaultText = lib.literalMD "the prefixed messages of the failed `contracts.assertions`";
+      description = ''
+        The messages of the failed checks, each prefixed with
+        `nixos-contracts: `. The NixOS module forwards them to `assertions`.
       '';
     };
   };

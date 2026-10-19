@@ -56,3 +56,7 @@ _Avoid_: Injection, mounting
 **Adapter**:
 An opt-in module that turns one claim kind's claim set into one backend's configuration, such as preservation or agenix-rekey.
 _Avoid_: Materialiser, consumer
+
+**Check**:
+A condition over the configuration's contracts that must hold, such as two claims not clashing. A failed check reports its message.
+_Avoid_: Assertion, validation

@@ -287,6 +287,15 @@ in
     expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
   };
 
+  testFailuresKindNameIsRejected = {
+    expr = mkClaimKind {
+      name = "failures";
+      description = "Clashes with the failed checks.";
+      claim = _: { };
+    };
+    expectedError.msg = "claim kind name `failures` is reserved";
+  };
+
   testReservedKindNamesAreRejected = {
     expr = mkClaimKind {
       name = "services";
