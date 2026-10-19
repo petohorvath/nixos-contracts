@@ -2,8 +2,8 @@
   Install every secret with agenix-rekey. A provided secret's encrypted file
   is `<secretsDir>/<service>-<id>.age` unless `rekeyFiles` names another; a
   generated one names its agenix-rekey generator. Requires the agenix and
-  agenix-rekey NixOS modules; the flake's `nixosModules.agenix-rekey` also
-  imports the contracts module.
+  agenix-rekey NixOS modules; `nixosModules.agenix-rekey` also imports
+  `nixosModules.default`.
 */
 { config, lib, ... }:
 let
@@ -53,6 +53,5 @@ in
 
     contracts.secrets.location =
       name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
-
   };
 }

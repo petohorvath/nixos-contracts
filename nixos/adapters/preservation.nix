@@ -1,6 +1,6 @@
 # Persist every mount with preservation, under the root mapped to its class.
-# Requires the preservation NixOS module; the flake's
-# `nixosModules.preservation` also imports the contracts module.
+# Requires the preservation NixOS module; `nixosModules.preservation` also
+# imports `nixosModules.default`.
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.preservation;

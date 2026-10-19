@@ -9,14 +9,15 @@ This reference describes the public interface of nixos-contracts: its modules, o
 | `nixosModules.default`    | NixOS        | Forwarded from `contracts.assertions` to NixOS `assertions` |
 | `modules.generic.default` | any          | Left in `contracts.assertions` for the caller to read       |
 
-The [adapters](#adapters) are further NixOS modules, each importing `nixosModules.default`, which carries a module key so importing several adapters declares its options once.
-
 Both import the core and the three shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
 
-To import a module by path without the flake, apply it to the `nix-libnet` library:
+The [adapters](#adapters) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several adapters declares its options once.
+
+To import the modules by path without the flake, apply their directory to the `nix-libnet` library. `nixos` returns the NixOS modules by export name, and `modules` the generic module:
 
 ```nix
-import "${nixos-contracts}/nixos/module.nix" { libnet = nix-libnet.lib; }
+(import "${nixos-contracts}/nixos" { libnet = nix-libnet.lib; }).default
+import "${nixos-contracts}/modules" { libnet = nix-libnet.lib; }
 ```
 
 ## Options
@@ -175,7 +176,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside one of the contracts modules.
+`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.

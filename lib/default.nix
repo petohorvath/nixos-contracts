@@ -6,6 +6,6 @@
 */
 { lib }:
 {
-  mkClaimKind = import ./mk-claim-kind.nix;
+  mkClaimKind = import ../modules/mk-claim-kind.nix;
   mkDefaultContract = import ./mk-default-contract.nix { inherit lib; };
 }
