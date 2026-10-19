@@ -44,10 +44,6 @@ in
         ;
       generator = secret.generator.script;
     };
-    failures = lib.pipe config.assertions [
-      (lib.filter (check: !check.assertion))
-      (map (check: check.message))
-      (lib.filter (lib.hasPrefix "nixos-contracts: "))
-    ];
+    inherit (config.contracts) failures;
   };
 }

@@ -27,11 +27,11 @@ let
     [
       {
         assertion = lib.hasSuffix ".service" unit && service.serviceConfig ? ExecStart;
-        message = "nixos-contracts: dynamic identity unit `${unit}` is not a service defined in `systemd.services`.";
+        message = "dynamic identity unit `${unit}` is not a service defined in `systemd.services`.";
       }
       {
         assertion = !(service.serviceConfig ? ExecStart) || (service.serviceConfig.DynamicUser or false);
-        message = "nixos-contracts: dynamic identity unit `${unit}` does not set `DynamicUser`.";
+        message = "dynamic identity unit `${unit}` does not set `DynamicUser`.";
       }
     ];
 in
@@ -52,7 +52,7 @@ in
     contracts.assertions = [
       {
         assertion = delivered == [ ] || location != null;
-        message = "nixos-contracts: delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`.";
+        message = "delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`.";
       }
     ]
     ++ lib.concatMap unitAssertions units;

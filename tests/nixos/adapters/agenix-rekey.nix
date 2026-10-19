@@ -75,10 +75,31 @@ in
     };
   };
 
-  testProvidedSecretWithoutAFileFails = {
-    expr = (configuration [ services ]).age.secrets.kea-token.rekeyFile;
-    expectedError.msg = "provided secret `kea-token` needs `contracts\\.adapters\\.agenixRekey\\.secretsDir`";
-  };
+  testProvidedSecretWithoutAFileFailsItsCheck =
+    let
+      modules = backends ++ [
+        adapter
+        {
+          contracts.services.kea = {
+            enable = true;
+            identity.static.user = "kea";
+            secrets.token.provenance.provided = { };
+          };
+        }
+      ];
+    in
+    {
+      expr = {
+        failures = nixos.failures modules;
+        rekeyFile = (evaluate modules).age.secrets.kea-token.rekeyFile;
+      };
+      expected = {
+        failures = [
+          "nixos-contracts: provided secret `kea-token` needs `contracts.adapters.agenixRekey.secretsDir` or an entry in its `rekeyFiles`."
+        ];
+        rekeyFile = null;
+      };
+    };
 
   testDynamicIdentityWithoutDeliveryCannotReadItsSecret = {
     expr = nixos.failures (

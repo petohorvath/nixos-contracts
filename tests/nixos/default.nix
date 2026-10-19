@@ -11,7 +11,7 @@ let
   };
 in
 {
-  testNixosModuleForwardsClashesToAssertions = {
+  testNixosModuleReportsClashes = {
     expr = failures [
       module
       (web "first")
@@ -20,6 +20,25 @@ in
     expected = [
       "nixos-contracts: binds claims `first-http` and `second-http` clash: both listen on tcp port 80, at `0.0.0.0` and `0.0.0.0`."
     ];
+  };
+
+  # NixOS's own assertions fail too without a bootloader, so look for the
+  # failure among them.
+  testNixosModuleForwardsFailuresToAssertions = {
+    expr =
+      let
+        failedAssertions =
+          builtins.filter (check: !check.assertion)
+            (evaluate [
+              module
+              (web "first")
+              (web "second")
+            ]).assertions;
+      in
+      builtins.elem
+        "nixos-contracts: binds claims `first-http` and `second-http` clash: both listen on tcp port 80, at `0.0.0.0` and `0.0.0.0`."
+        (map (check: check.message) failedAssertions);
+    expected = true;
   };
 
   testNixosModuleWiresADaemonFromItsContract = {

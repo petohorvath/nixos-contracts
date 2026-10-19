@@ -1,6 +1,6 @@
 # A project-defined claim kind evaluated without NixOS: its claims fold into
 # `contracts.claimSets.databases` with resolved owners, and a clash becomes a
-# failed assertion.
+# failed check.
 { lib, exports }:
 let
   databases = import ./databases.nix { inherit (exports.lib) mkClaimKind; };
@@ -14,9 +14,6 @@ let
       ]
       ++ modules;
     }).config;
-  failures =
-    config:
-    map (check: check.message) (lib.filter (check: !check.assertion) config.contracts.assertions);
 
   services = {
     contracts.services = {
@@ -47,7 +44,7 @@ in
     claimSet = lib.mapAttrs (_: entry: {
       inherit (entry) database owner;
     }) valid.contracts.claimSets.databases;
-    validFailures = failures valid;
-    clashingFailures = failures clashing;
+    validFailures = valid.contracts.failures;
+    clashingFailures = clashing.contracts.failures;
   };
 }
