@@ -1,8 +1,12 @@
-# Binds: where a service accepts traffic.
-{ libnet }:
-{ lib, ... }:
+# The arguments of `mkClaimKind` for binds: where a service accepts traffic.
+{ lib, libnet }:
 let
-  inherit (libnet) ip port portRange;
+  inherit (libnet.withLib lib)
+    ip
+    port
+    portRange
+    types
+    ;
 
   toPortRange =
     value:
@@ -52,63 +56,56 @@ let
       null;
 in
 {
-  imports = [
-    (import ../../lib/mk-claim-kind.nix {
-      name = "binds";
-      description = ''
-        Where the service accepts traffic, by bind id. A bind says where the
-        service listens, never who may reach it.
-      '';
-      inherit clash;
-      claim =
-        _:
-        { config, lib, ... }:
-        let
-          inherit (libnet.withLib lib) types;
-        in
-        {
-          options = {
-            proto = lib.mkOption {
-              type = lib.types.coercedTo types.transport (protocol: [ protocol ]) (
-                lib.types.listOf types.transport
-              );
-              default = [ "tcp" ];
-              description = ''
-                The transport protocols the service listens on: one of `tcp`,
-                `udp` and `sctp`, or a list of them.
-              '';
-            };
-            port = lib.mkOption {
-              type = lib.types.either types.port types.portRange;
-              description = ''
-                The port the service listens on, or a range written as
-                `"<from>-<to>"`.
-              '';
-              example = 8086;
-            };
-            addresses = lib.mkOption {
-              type = lib.types.coercedTo types.ip (address: [ address ]) (lib.types.listOf types.ip);
-              default = [ "0.0.0.0" ];
-              description = ''
-                The addresses the service listens on. `0.0.0.0` and `::` listen
-                on every address of their family.
-              '';
-              example = "127.0.0.1";
-            };
-            bindpoints = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              readOnly = true;
-              default = map (
-                address: "${if lib.hasInfix ":" address then "[${address}]" else address}:${toString config.port}"
-              ) config.addresses;
-              defaultText = lib.literalMD "`<address>:<port>` for each address";
-              description = ''
-                One `<address>:<port>` string per address, IPv6 addresses in
-                brackets, for configuring the daemon.
-              '';
-            };
-          };
+  name = "binds";
+  description = ''
+    Where the service accepts traffic, by bind id. A bind says where the
+    service listens, never who may reach it.
+  '';
+  inherit clash;
+  claim =
+    _:
+    { config, ... }:
+    {
+      options = {
+        proto = lib.mkOption {
+          type = lib.types.coercedTo types.transport (protocol: [ protocol ]) (
+            lib.types.listOf types.transport
+          );
+          default = [ "tcp" ];
+          description = ''
+            The transport protocols the service listens on: one of `tcp`,
+            `udp` and `sctp`, or a list of them.
+          '';
         };
-    })
-  ];
+        port = lib.mkOption {
+          type = lib.types.either types.port types.portRange;
+          description = ''
+            The port the service listens on, or a range written as
+            `"<from>-<to>"`.
+          '';
+          example = 8086;
+        };
+        addresses = lib.mkOption {
+          type = lib.types.coercedTo types.ip (address: [ address ]) (lib.types.listOf types.ip);
+          default = [ "0.0.0.0" ];
+          description = ''
+            The addresses the service listens on. `0.0.0.0` and `::` listen
+            on every address of their family.
+          '';
+          example = "127.0.0.1";
+        };
+        bindpoints = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          readOnly = true;
+          default = map (
+            address: "${if lib.hasInfix ":" address then "[${address}]" else address}:${toString config.port}"
+          ) config.addresses;
+          defaultText = lib.literalMD "`<address>:<port>` for each address";
+          description = ''
+            One `<address>:<port>` string per address, IPv6 addresses in
+            brackets, for configuring the daemon.
+          '';
+        };
+      };
+    };
 }

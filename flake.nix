@@ -60,28 +60,8 @@
         in
         {
           lib = import ./lib { inherit (inputs.nixpkgs) lib; };
-          modules.generic.default = import ./modules/contracts.nix { inherit libnet; };
-          nixosModules = rec {
-            default = import ./nixos/module.nix { inherit libnet; };
-            agenix-rekey = {
-              imports = [
-                default
-                ./nixos/adapters/agenix-rekey.nix
-              ];
-            };
-            preservation = {
-              imports = [
-                default
-                ./nixos/adapters/preservation.nix
-              ];
-            };
-            systemd-credentials = {
-              imports = [
-                default
-                ./nixos/adapters/systemd-credentials.nix
-              ];
-            };
-          };
+          modules.generic.default = import ./modules { inherit libnet; };
+          nixosModules = import ./nixos { inherit libnet; };
         };
     };
 }

@@ -53,6 +53,5 @@ in
 
     contracts.secrets.location =
       name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
-
   };
 }

@@ -25,12 +25,12 @@ in
     inherit lib;
     flake = self;
   };
-  lib = {
-    mkClaimKind = import ./lib/mk-claim-kind.nix { inherit contracts contractsLib lib; };
-    mkDefaultContract = import ./lib/mk-default-contract.nix { inherit contracts contractsLib lib; };
+  lib.mkDefaultContract = import ./lib/mk-default-contract.nix {
+    inherit contracts contractsLib lib;
   };
   modules = {
     core = import ./modules/core.nix { inherit contracts; };
+    mkClaimKind = import ./modules/mk-claim-kind.nix { inherit contracts contractsLib lib; };
     kinds = {
       binds = import ./modules/kinds/binds.nix { inherit contracts; };
       mounts = import ./modules/kinds/mounts.nix { inherit contracts; };
@@ -59,7 +59,7 @@ in
     };
   };
   nixos = {
-    module = import ./nixos/module.nix {
+    default = import ./nixos/default.nix {
       inherit nixos;
       module = self.nixosModules.default;
     };
