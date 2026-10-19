@@ -134,7 +134,7 @@ An adapter maps one claim set onto one backend. Importing it turns it on, and it
 
 ### `nixosModules.preservation`
 
-Adds every mount to `preservation.preserveAt` under the root mapped to its class, as a directory or a file entry with the mount's resolved `user`, `group` and `mode`. It requires the [preservation](https://github.com/nix-community/preservation) module.
+Adds every mount to `preservation.preserveAt` under the root mapped to its class, as a directory or a file entry with the mount's `owner` as its `user`, and its `group` and `mode`. It requires the [preservation](https://github.com/nix-community/preservation) module.
 
 `contracts.adapters.preservation.roots` (attribute set of strings, default `{ }`)
 : The `preservation.preserveAt` key of each class, such as `{ state = "/persist/state"; }`. Every class a mount uses needs a root, or an assertion fails; a declared class no mount uses needs none.

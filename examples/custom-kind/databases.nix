@@ -21,6 +21,7 @@ mkClaimKind {
         owner = lib.mkOption {
           type = lib.types.str;
           default = lib.defaultTo service identity.user;
+          defaultText = lib.literalMD "the service's user, or the service's name";
           description = ''
             The role owning the database: the service's user, or the
             service's name for a dynamic identity, which has no account.

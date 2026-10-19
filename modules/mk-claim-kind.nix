@@ -24,7 +24,9 @@
     identity, `group` null for a dynamic identity without a shared group,
     `unit` null for a static identity) and `config` the configuration's
     top-level `config`. Inside the submodule, `name` is the claim's id and the
-    module argument `claimName` its `<service>-<id>` claim name.
+    module argument `claimName` its `<service>-<id>` claim name. A value that
+    follows from the identity, such as a file owner, is an option defaulting
+    to it, so the claim and its claim-set entry hold the same final value.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries

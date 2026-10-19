@@ -11,7 +11,7 @@ let
   generated = {
     key.provenance.generated = "alnum";
   };
-  evaluateSecret =
+  configWithSecret =
     modules: identity: secret:
     evaluate (
       modules
@@ -26,11 +26,11 @@ let
     );
   secretOf =
     modules: identity: secret:
-    (evaluateSecret modules identity secret).contracts.claimSets.secrets.svc-key;
+    (configWithSecret modules identity secret).contracts.claimSets.secrets.svc-key;
   ownerOf =
     identity: secret:
     let
-      claim = (evaluateSecret [ ] identity secret).contracts.services.svc.secrets.key;
+      claim = (configWithSecret [ ] identity secret).contracts.services.svc.secrets.key;
     in
     {
       inherit (claim) owner group;

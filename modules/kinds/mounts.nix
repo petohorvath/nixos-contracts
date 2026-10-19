@@ -31,6 +31,7 @@ in
   claim =
     { identity, config, ... }:
     let
+      # Read before the claim's own `config` shadows the top-level one.
       inherit (config.contracts.mounts) classes;
     in
     { config, ... }:
