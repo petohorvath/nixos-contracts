@@ -31,6 +31,7 @@ let
     rekeyFiles.alloy-password = ./agenix-rekey.nix;
   };
   configuration = modules: evaluate (backends ++ [ adapter ] ++ modules);
+  failures = modules: nixos.failures (backends ++ [ adapter ] ++ modules);
   secretOf = name: config: {
     inherit (config.age.secrets.${name}) group mode owner;
     rekeyFile = config.age.secrets.${name}.rekeyFile or null;
@@ -77,21 +78,16 @@ in
 
   testProvidedSecretWithoutAFileFailsItsCheck =
     let
-      modules = backends ++ [
-        adapter
-        {
-          contracts.services.kea = {
-            enable = true;
-            identity.static.user = "kea";
-            secrets.token.provenance.provided = { };
-          };
-        }
-      ];
+      kea.contracts.services.kea = {
+        enable = true;
+        identity.static.user = "kea";
+        secrets.token.provenance.provided = { };
+      };
     in
     {
       expr = {
-        failures = nixos.failures modules;
-        rekeyFile = (evaluate modules).age.secrets.kea-token.rekeyFile;
+        failures = failures [ kea ];
+        rekeyFile = (configuration [ kea ]).age.secrets.kea-token.rekeyFile;
       };
       expected = {
         failures = [
@@ -102,14 +98,10 @@ in
     };
 
   testDynamicIdentityWithoutDeliveryCannotReadItsSecret = {
-    expr = nixos.failures (
-      backends
-      ++ [
-        adapter
-        services
-        settings
-      ]
-    );
+    expr = failures [
+      services
+      settings
+    ];
     expected = [
       "nixos-contracts: secrets claim `alloy-password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
     ];

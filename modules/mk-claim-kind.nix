@@ -41,8 +41,8 @@
     where `identity` is the same resolved identity and `claim` a claim-set
     entry, returning null when the claim is valid, or a string saying why
     it is not. Only claims of enabled contracts are checked, and a rejected
-    claim fails as "nixos-contracts: <kind> claim `<service>-<id>`:
-    <reason>."
+    claim reads "nixos-contracts: <kind> claim `<service>-<id>`: <reason>."
+    in `contracts.failures`.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.

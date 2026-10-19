@@ -11,7 +11,7 @@ let
   secrets = config.contracts.claimSets.secrets;
 
   # The encrypted file of a provided secret, or null when none is known.
-  rekeyFileOf =
+  rekeyFileOrNull =
     name:
     cfg.rekeyFiles.${name}
       or (if cfg.secretsDir != null then cfg.secretsDir + "/${name}.age" else null);
@@ -39,6 +39,9 @@ in
   config = {
     age.secrets = lib.mapAttrs (
       name: secret:
+      let
+        rekeyFile = rekeyFileOrNull name;
+      in
       {
         inherit (secret) group mode owner;
       }
@@ -46,12 +49,12 @@ in
         if secret.provenance ? generated then
           { generator.script = secret.provenance.generated; }
         else
-          lib.optionalAttrs (rekeyFileOf name != null) { rekeyFile = rekeyFileOf name; }
+          lib.optionalAttrs (rekeyFile != null) { inherit rekeyFile; }
       )
     ) secrets;
 
     contracts.assertions = lib.mapAttrsToList (name: _: {
-      assertion = rekeyFileOf name != null;
+      assertion = rekeyFileOrNull name != null;
       message = "provided secret `${name}` needs `contracts.adapters.agenixRekey.secretsDir` or an entry in its `rekeyFiles`.";
     }) (lib.filterAttrs (_: secret: secret.provenance ? provided) secrets);
 

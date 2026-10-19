@@ -11,4 +11,4 @@
 - Checks in `contracts.assertions`, written without the library's prefix, and the read-only `contracts.failures`, the prefixed messages of the failed ones.
 - `nixosModules.default`, which forwards the failed checks to NixOS `assertions`, and `modules.generic.default` for any module class.
 - Examples for a static-identity service (influxdb2), a dynamic-identity service (alloy) and a project-defined claim kind, evaluated by the checks.
-- Adapters `nixosModules.preservation` (mounts into `preservation.preserveAt` by class root), `nixosModules.agenix-rekey` (secrets into `age.secrets`, with a `secretsDir` convention and per-secret `rekeyFiles`), and `nixosModules.systemd-credentials` (a dynamic identity's secrets into its unit's `LoadCredential=`).
+- Adapters `nixosModules.preservation` (mounts into `preservation.preserveAt` by class root), `nixosModules.agenix-rekey` (secrets into `age.secrets`, with a `secretsDir` convention and per-secret `rekeyFiles`, and a check for a provided secret without either), and `nixosModules.systemd-credentials` (a dynamic identity's secrets into its unit's `LoadCredential=`).

@@ -56,7 +56,7 @@ A read-only attribute set of every enabled contract's claims of one kind, keyed 
 
 ### `contracts.assertions`
 
-A list of checks, each `{ assertion; message; }`, with the message written without the library's prefix. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. Adapters add their own.
+A list of checks, each `{ assertion; message; }`, with the message written without the library's prefix. The option follows the name and shape of NixOS `assertions`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. Adapters add their own.
 
 ### `contracts.failures`
 
@@ -169,7 +169,7 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 
 For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Its assertions fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Its checks fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 
@@ -202,7 +202,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim fails as ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.``
+: The kind's check rule: a function of `{ identity, claim }`, with the same resolved `identity` and a claim-set entry, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.<name>`.

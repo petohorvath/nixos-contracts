@@ -58,5 +58,5 @@ An opt-in module that turns one claim kind's claim set into one backend's config
 _Avoid_: Materialiser, consumer
 
 **Check**:
-A condition over the configuration's contracts that must hold, such as two claims not clashing; a failed check stops the configuration with its message.
+A condition over the configuration's contracts that must hold, such as two claims not clashing. A failed check reports its message.
 _Avoid_: Assertion, validation

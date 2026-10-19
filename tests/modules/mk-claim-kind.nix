@@ -287,7 +287,7 @@ in
     expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
   };
 
-  testFailuresIsAReservedKindName = {
+  testFailuresKindNameIsRejected = {
     expr = mkClaimKind {
       name = "failures";
       description = "Clashes with the failed checks.";
