@@ -4,16 +4,21 @@
 { lib, ... }:
 let
   mkClaimKind = import ./mk-claim-kind.nix;
+
+  # Builds the kind a file defines, declaring its options at that file.
+  kindModule =
+    path: arguments: lib.setDefaultModuleLocation path (mkClaimKind (import path arguments));
+
   kinds = [
-    (import ./kinds/binds.nix { inherit lib libnet; })
-    (import ./kinds/mounts.nix { inherit lib; })
-    (import ./kinds/secrets.nix { inherit lib; })
+    (kindModule ./kinds/binds.nix { inherit lib libnet; })
+    (kindModule ./kinds/mounts.nix { inherit lib; })
+    (kindModule ./kinds/secrets.nix { inherit lib; })
   ];
 in
 {
-  # Identifies the module by its file, so it declares its options once when
-  # several modules import it, as every NixOS adapter does.
+  # Identifies the module by its file, so it declares its options once
+  # however often it is imported.
   key = toString ./default.nix;
 
-  imports = [ ./core.nix ] ++ map mkClaimKind kinds;
+  imports = [ ./core.nix ] ++ kinds;
 }

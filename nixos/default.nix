@@ -1,8 +1,10 @@
-/*
+/**
   The NixOS modules by export name: `default` is the generic module with its
   checks as NixOS assertions, and each adapter imports `default` beside its
-  own file. Importing `default` several times is safe, since the module
-  system imports the generic module, by its key, and each file once.
+  own file. Import this directory by path with the nix-libnet library to use
+  them without evaluating the flake's inputs:
+
+    import "${nixos-contracts}/nixos" { libnet = nix-libnet.lib; }
 */
 { libnet }:
 let
@@ -11,7 +13,7 @@ let
     generic
     ./assertions.nix
   ];
-  withDefault = adapter: {
+  adapterModule = adapter: {
     imports = [
       default
       adapter
@@ -20,7 +22,7 @@ let
 in
 {
   inherit default;
-  agenix-rekey = withDefault ./adapters/agenix-rekey.nix;
-  preservation = withDefault ./adapters/preservation.nix;
-  systemd-credentials = withDefault ./adapters/systemd-credentials.nix;
+  agenix-rekey = adapterModule ./adapters/agenix-rekey.nix;
+  preservation = adapterModule ./adapters/preservation.nix;
+  systemd-credentials = adapterModule ./adapters/systemd-credentials.nix;
 }

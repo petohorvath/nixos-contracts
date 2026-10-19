@@ -29,6 +29,10 @@ in
     inherit contracts contractsLib lib;
   };
   modules = {
+    default = import ./modules/default.nix {
+      inherit lib;
+      module = self.modules.generic.default;
+    };
     core = import ./modules/core.nix { inherit contracts; };
     mkClaimKind = import ./modules/mk-claim-kind.nix { inherit contracts contractsLib lib; };
     kinds = {
