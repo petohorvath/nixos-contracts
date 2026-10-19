@@ -5,20 +5,11 @@ mkClaimKind {
   name = "databases";
   description = "Databases the service owns, by database id.";
 
-  # The owning role is the service's user, or the service's name for a
-  # dynamic identity, which has no account.
-  ownership =
-    { identity, claim }:
-    {
-      owner = if identity.user != null then identity.user else claim.role;
-      group = null;
-    };
-
   clash =
     first: second: if first.database == second.database then "both own `${first.database}`" else null;
 
   claim =
-    { service, ... }:
+    { service, identity, ... }:
     { lib, name, ... }:
     {
       options = {
@@ -27,10 +18,13 @@ mkClaimKind {
           default = if name == "main" then service else "${service}_${name}";
           description = "The database name.";
         };
-        role = lib.mkOption {
+        owner = lib.mkOption {
           type = lib.types.str;
-          default = service;
-          description = "The role owning the database for a dynamic identity.";
+          default = lib.defaultTo service identity.user;
+          description = ''
+            The role owning the database: the service's user, or the
+            service's name for a dynamic identity, which has no account.
+          '';
         };
       };
     };

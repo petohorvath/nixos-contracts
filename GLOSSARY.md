@@ -27,7 +27,7 @@ The name a claim goes by across the configuration, made of its service's name an
 _Avoid_: Key, full name
 
 **Claim set**:
-The read-only, configuration-wide collection of one kind's claims from enabled contracts, each already carrying its final owner and group as resolved from its service's identity.
+The read-only, configuration-wide collection of one kind's claims from enabled contracts, each as its contract holds it, keyed by claim name.
 
 **Bind**:
 Where a service accepts traffic: a protocol, a port and the addresses it listens on. It says where the service listens, never who may reach it.

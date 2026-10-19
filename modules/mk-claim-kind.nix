@@ -26,11 +26,6 @@
     top-level `config`. Inside the submodule, `name` is the claim's id and the
     module argument `claimName` its `<service>-<id>` claim name.
 
-  `ownership`
-  : Optional. A function of `{ identity, claim }` returning the claim's final
-    `{ owner, group }`, where `identity` is the same resolved identity. Omit it
-    for kinds without files, such as binds.
-
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
     returning null when they can coexist, or a string saying why they clash.
@@ -59,7 +54,6 @@
   name,
   description,
   claim,
-  ownership ? null,
   clash ? null,
   settings ? { },
 }:
@@ -104,23 +98,16 @@ else
     topConfig = config;
 
     mkEntry =
-      service: identity: id: value:
+      service: id: value:
       value
       // {
         inherit service id;
         name = toClaimName service id;
-      }
-      // lib.optionalAttrs (ownership != null) (ownership {
-        inherit identity;
-        claim = value;
-      });
+      };
 
     entries = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
-      (lib.mapAttrsToList (
-        service: contract:
-        lib.mapAttrsToList (mkEntry service (resolveIdentity contract.identity)) contract.${kindName}
-      ))
+      (lib.mapAttrsToList (service: contract: lib.mapAttrsToList (mkEntry service) contract.${kindName}))
       lib.concatLists
     ];
 
@@ -197,8 +184,8 @@ else
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
           The ${kindName} claims of every enabled contract, keyed by claim
-          name, each carrying its service, id and claim name and, for a kind
-          with files, its final owner and group.
+          name, each as its contract holds it plus its service, id and claim
+          name.
         '';
       };
 

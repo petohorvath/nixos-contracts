@@ -11,9 +11,9 @@ let
   generated = {
     key.provenance.generated = "alnum";
   };
-  secretOf =
+  evaluateSecret =
     modules: identity: secret:
-    (evaluate (
+    evaluate (
       modules
       ++ [
         (service "svc" identity {
@@ -23,14 +23,17 @@ let
           // secret;
         })
       ]
-    )).contracts.claimSets.secrets.svc-key;
+    );
+  secretOf =
+    modules: identity: secret:
+    (evaluateSecret modules identity secret).contracts.claimSets.secrets.svc-key;
   ownerOf =
     identity: secret:
     let
-      entry = secretOf [ ] identity secret;
+      claim = (evaluateSecret [ ] identity secret).contracts.services.svc.secrets.key;
     in
     {
-      inherit (entry) owner group;
+      inherit (claim) owner group;
     };
   rules = {
     contracts.secrets = {
@@ -134,18 +137,6 @@ in
         { contracts.secrets.location = name: "/run/agenix/${name}"; }
       ] { dynamic.unit = "svc.service"; } { }).path;
     expected = "/run/agenix/svc-key";
-  };
-
-  testClaimPathMatchesItsClaimSetEntry = {
-    expr =
-      let
-        config = evaluate [
-          rules
-          (service "svc" { static.user = "svc"; } generated)
-        ];
-      in
-      config.contracts.services.svc.secrets.key.path == config.contracts.claimSets.secrets.svc-key.path;
-    expected = true;
   };
 
   testSecretPathIsReadOnly = {

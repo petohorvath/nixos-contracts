@@ -51,12 +51,7 @@ A contract has no other fields. A service's own settings stay in the service mod
 
 ### `contracts.claimSets.<kind>`
 
-A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim's value plus:
-
-- `service`, `id` and `name`, its claim name (`<service>-<id>`).
-- `owner` and `group`, for kinds with files: final values after the [ownership rules](#ownership), which the shipped kinds never leave null.
-
-Adapters and other modules read claim sets rather than contracts, so they need no identity logic.
+A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim's value plus its `service`, its `id` and its claim name `name` (`<service>-<id>`). An entry holds the same final values as its claim in the contract, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
 
 ### `contracts.assertions`
 
@@ -89,8 +84,8 @@ Two binds clash when they share a protocol, their ports or ranges overlap, and s
 | `class` | one of `contracts.mounts.classes`  | required    |
 | `type`  | `directory` or `file`              | `directory` |
 | `mode`  | a mode string                      | `"0700"`    |
-| `owner` | an account name, or null           | `null`      |
-| `group` | a group name, or null              | `null`      |
+| `owner` | an account name                    | derived     |
+| `group` | a group name                       | derived     |
 
 `contracts.mounts.classes` (list of strings, default `[ ]`) declares the classes mounts may name, such as `state` or `cache`. A mount naming an undeclared class fails to evaluate. Where a class physically lives is up to an adapter.
 
@@ -104,8 +99,8 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | ------------ | ------------------------------------------------------- | -------- |
 | `provenance` | exactly one of `provided = { }` or `generated = <name>` | required |
 | `mode`       | a mode string                                           | `"0440"` |
-| `owner`      | an account name, or null                                | `null`   |
-| `group`      | a group name, or null                                   | `null`   |
+| `owner`      | an account name                                         | `"root"` |
+| `group`      | a group name                                            | derived  |
 | `unit`       | read-only, the dynamic identity's unit, or null         | derived  |
 | `path`       | read-only, where the daemon reads the secret            | derived  |
 
@@ -122,7 +117,7 @@ Secrets clash only by sharing a name.
 
 ## Ownership
 
-The claim set resolves owners and groups once, from the claim's own `owner` and `group` and the service's identity:
+A mount's or secret's `owner` and `group` default to values derived from the service's identity:
 
 | Identity                                     | Mount owner / group | Secret owner / group |
 | -------------------------------------------- | ------------------- | -------------------- |
@@ -176,7 +171,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; ownership ? null; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
+`mkClaimKind { name; description; claim; clash ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions` and `adapters` are reserved.
@@ -185,10 +180,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, `name` is the claim's id and the module argument `claimName` its claim name, `<service>-<id>`.
-
-`ownership`
-: A function of `{ identity, claim }` returning the final `{ owner, group }`, from the same resolved identity. Omit it for a kind without files.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, `name` is the claim's id and the module argument `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it, so the claim and its claim-set entry hold the same final value.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
