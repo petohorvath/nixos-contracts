@@ -71,7 +71,7 @@ in
       preservation = import ./nixos/adapters/preservation.nix {
         inherit lib nixos;
         adapter = self.nixosModules.preservation;
-        backend = inputs.preservation.nixosModules.default;
+        backend = backends.preservation;
       };
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
         inherit nixos;
@@ -81,7 +81,8 @@ in
       systemdCredentials = import ./nixos/adapters/systemd-credentials.nix {
         inherit lib nixos;
         adapter = self.nixosModules.systemd-credentials;
-        secretBackend = agenixRekeyBackends ++ [ self.nixosModules.agenix-rekey ];
+        backends = agenixRekeyBackends;
+        backendAdapter = self.nixosModules.agenix-rekey;
       };
     };
   };

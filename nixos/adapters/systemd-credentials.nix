@@ -8,7 +8,7 @@
 let
   inherit (config.contracts.secrets) location;
 
-  serviceNameOf = unit: lib.removeSuffix ".service" unit;
+  toServiceName = unit: lib.removeSuffix ".service" unit;
 
   delivered = lib.filter (secret: secret.delivered) (
     lib.attrValues config.contracts.claimSets.secrets
@@ -22,7 +22,7 @@ let
   mkUnitAssertions =
     unit:
     let
-      service = config.systemd.services.${serviceNameOf unit} or { serviceConfig = { }; };
+      service = config.systemd.services.${toServiceName unit} or { serviceConfig = { }; };
     in
     [
       {
@@ -42,7 +42,7 @@ in
     systemd.services = lib.mkIf (location != null) (
       lib.mkMerge (
         map (secret: {
-          ${serviceNameOf secret.unit}.serviceConfig.LoadCredential = [
+          ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
             "${secret.name}:${location secret.name}"
           ];
         }) delivered
