@@ -30,13 +30,6 @@
     };
   };
 
-  ownership =
-    { identity, claim }:
-    {
-      owner = lib.defaultTo "root" claim.owner;
-      group = lib.defaultTo (lib.defaultTo "root" identity.group) claim.group;
-    };
-
   claim =
     { identity, config, ... }:
     { claimName, ... }:
@@ -72,20 +65,18 @@
           description = "The mode of the installed secret.";
         };
         owner = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
+          type = lib.types.str;
+          default = "root";
           description = ''
-            The owner; null keeps root, so the service reads the secret
-            through its group but cannot change it.
+            The owner of the installed secret. The default `root` lets the
+            service read the secret through its group but not change it.
           '';
         };
         group = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          description = ''
-            The group; null takes the identity's group, or root when it has
-            none.
-          '';
+          type = lib.types.str;
+          default = lib.defaultTo "root" identity.group;
+          defaultText = lib.literalMD "the identity's group, or `root` when it has none";
+          description = "The group of the installed secret.";
         };
         unit = lib.mkOption {
           type = lib.types.nullOr lib.types.str;

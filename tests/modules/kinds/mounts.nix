@@ -17,7 +17,7 @@ let
   ownerOf =
     identity: mount:
     let
-      entry =
+      claim =
         (evaluate [
           classes
           (service "svc" identity {
@@ -27,10 +27,10 @@ let
             }
             // mount;
           })
-        ]).contracts.claimSets.mounts.svc-data;
+        ]).contracts.services.svc.mounts.data;
     in
     {
-      inherit (entry) owner group;
+      inherit (claim) owner group;
     };
 in
 {

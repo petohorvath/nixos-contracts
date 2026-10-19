@@ -15,12 +15,6 @@ let
       default = [ "postgresql" ];
       description = "Engines a database may use.";
     };
-    ownership =
-      { identity, claim }:
-      {
-        owner = if identity.user != null then identity.user else claim.engine;
-        group = null;
-      };
     clash =
       first: second: if first.database == second.database then "both own `${first.database}`" else null;
     claim =
@@ -83,7 +77,7 @@ let
   };
 in
 {
-  testCustomKindFoldsEnabledClaimsWithOwnership = {
+  testCustomKindFoldsEnabledClaims = {
     expr =
       (evaluate [
         databases
@@ -98,8 +92,6 @@ in
         database = "grafana_main";
         unit = null;
         claimName = "grafana-main";
-        owner = "grafana";
-        group = null;
       };
       vaultwarden-main = {
         service = "vaultwarden";
@@ -109,9 +101,29 @@ in
         database = "vault";
         unit = "vaultwarden.service";
         claimName = "vaultwarden-main";
-        owner = "postgresql";
-        group = null;
       };
+    };
+  };
+
+  testClaimSetEntryIsTheClaimWithItsNames = {
+    expr =
+      let
+        config = evaluate [
+          databases
+          services
+        ];
+      in
+      lib.mapAttrs (
+        _: entry:
+        removeAttrs entry [
+          "service"
+          "id"
+          "name"
+        ] == config.contracts.services.${entry.service}.databases.${entry.id}
+      ) config.contracts.claimSets.databases;
+    expected = {
+      grafana-main = true;
+      vaultwarden-main = true;
     };
   };
 
@@ -201,29 +213,6 @@ in
     expected = [
       "nixos-contracts: tokens claims `b-c` of `a` and `c` of `a-b` share the name `a-b-c`."
     ];
-  };
-
-  testKindWithoutOwnershipAddsNoOwner = {
-    expr =
-      (evaluate [
-        (mkClaimKind {
-          name = "tokens";
-          description = "Tokens.";
-          claim = _: { };
-        })
-        {
-          contracts.services.a = {
-            enable = true;
-            identity.static.user = "a";
-            tokens.t = { };
-          };
-        }
-      ]).contracts.claimSets.tokens;
-    expected.a-t = {
-      service = "a";
-      id = "t";
-      name = "a-t";
-    };
   };
 
   testReservedKindNamesAreRejected = {

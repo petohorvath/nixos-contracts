@@ -24,12 +24,9 @@
     identity, `group` null for a dynamic identity without a shared group,
     `unit` null for a static identity) and `config` the configuration's
     top-level `config`. Inside the submodule, `name` is the claim's id and the
-    module argument `claimName` its `<service>-<id>` claim name.
-
-  `ownership`
-  : Optional. A function of `{ identity, claim }` returning the claim's final
-    `{ owner, group }`, where `identity` is the same resolved identity. Omit it
-    for kinds without files, such as binds.
+    module argument `claimName` its `<service>-<id>` claim name. A value that
+    follows from the identity, such as a file owner, is an option defaulting
+    to it, so the claim and its claim-set entry hold the same final value.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -59,7 +56,6 @@
   name,
   description,
   claim,
-  ownership ? null,
   clash ? null,
   settings ? { },
 }:
@@ -104,23 +100,16 @@ else
     topConfig = config;
 
     mkEntry =
-      service: identity: id: value:
+      service: id: value:
       value
       // {
         inherit service id;
         name = toClaimName service id;
-      }
-      // lib.optionalAttrs (ownership != null) (ownership {
-        inherit identity;
-        claim = value;
-      });
+      };
 
     entries = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
-      (lib.mapAttrsToList (
-        service: contract:
-        lib.mapAttrsToList (mkEntry service (resolveIdentity contract.identity)) contract.${kindName}
-      ))
+      (lib.mapAttrsToList (service: contract: lib.mapAttrsToList (mkEntry service) contract.${kindName}))
       lib.concatLists
     ];
 
@@ -197,8 +186,8 @@ else
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
           The ${kindName} claims of every enabled contract, keyed by claim
-          name, each carrying its service, id and claim name and, for a kind
-          with files, its final owner and group.
+          name, each as its contract holds it plus its service, id and claim
+          name.
         '';
       };
 
