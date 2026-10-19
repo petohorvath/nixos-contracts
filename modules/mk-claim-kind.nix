@@ -26,9 +26,9 @@
     top-level `config`. Inside the submodule, the module argument `name` is
     the claim's id and `claimName` its `<service>-<id>` claim name. A value
     that follows from the identity, such as a file owner, is an option
-    defaulting to it. Every claim also carries the read-only options
-    `service`, `id` and `name`, its claim name, so a claim type cannot
-    declare options with these names.
+    defaulting to it. The constructor declares three read-only options on
+    every claim, `service`, `id` and the claim name `name`, so a claim type
+    cannot declare options with these names.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -157,6 +157,8 @@ else
                       identity = resolveIdentity config.identity;
                       config = topConfig;
                     })
+                    # Located here, so a claim type declaring one of these
+                    # options fails with an error naming this file.
                     (lib.setDefaultModuleLocation ./mk-claim-kind.nix (
                       { name, ... }:
                       let
@@ -170,7 +172,7 @@ else
                             type = lib.types.str;
                             readOnly = true;
                             default = service;
-                            defaultText = lib.literalMD "the contract's name";
+                            defaultText = lib.literalMD "the service's name";
                             description = "The name of the claim's service.";
                           };
                           id = lib.mkOption {

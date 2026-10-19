@@ -25,7 +25,7 @@ import "${nixos-contracts}/modules" { libnet = nix-libnet.lib; }
 ```text
 contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
-contracts.services.<service>.<kind>.<id>     writable, one claim
+contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name read-only
 contracts.claimSets.<kind>.<service>-<id>    read-only
 contracts.<kind>.*                           kind settings
 contracts.adapters.<adapter>.*               adapter settings
@@ -53,17 +53,19 @@ A contract has no other fields. A service's own settings stay in the service mod
 
 A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
 
-Every claim of every kind carries three read-only fields:
-
-- `service`: the name of its service.
-- `id`: its id within the contract.
-- `name`: its claim name, `<service>-<id>`.
-
 ### `contracts.assertions`
 
 A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, and one per pair of claims, failing when its clash rule rejects them. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
 
 ## Claim kinds
+
+Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries three read-only fields:
+
+- `service`: the name of its service.
+- `id`: its id within the contract.
+- `name`: its claim name, `<service>-<id>`.
+
+A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
 
 ### Binds
 
