@@ -105,7 +105,7 @@ in
     };
   };
 
-  testClaimSetEntryIsTheClaimWithItsNames = {
+  testClaimSetEntryIsTheClaim = {
     expr =
       let
         config = evaluate [
@@ -114,12 +114,7 @@ in
         ];
       in
       lib.mapAttrs (
-        _: entry:
-        removeAttrs entry [
-          "service"
-          "id"
-          "name"
-        ] == config.contracts.services.${entry.service}.databases.${entry.id}
+        _: entry: entry == config.contracts.services.${entry.service}.databases.${entry.id}
       ) config.contracts.claimSets.databases;
     expected = {
       grafana-main = true;
@@ -213,6 +208,34 @@ in
     expected = [
       "nixos-contracts: tokens claims `b-c` of `a` and `c` of `a-b` share the name `a-b-c`."
     ];
+  };
+
+  testClaimTypeCannotDeclareTheClaimName = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.name = lib.mkOption {
+                type = lib.types.str;
+                default = "mine";
+                description = "A name of the kind's own.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens.a-t.name;
+    expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
   };
 
   testReservedKindNamesAreRejected = {

@@ -23,10 +23,12 @@
     identity resolved to `{ user, group, unit }` (`user` null for a dynamic
     identity, `group` null for a dynamic identity without a shared group,
     `unit` null for a static identity) and `config` the configuration's
-    top-level `config`. Inside the submodule, `name` is the claim's id and the
-    module argument `claimName` its `<service>-<id>` claim name. A value that
-    follows from the identity, such as a file owner, is an option defaulting
-    to it, so the claim and its claim-set entry hold the same final value.
+    top-level `config`. Inside the submodule, the module argument `name` is
+    the claim's id and `claimName` its `<service>-<id>` claim name. A value
+    that follows from the identity, such as a file owner, is an option
+    defaulting to it. Every claim also carries the read-only options
+    `service`, `id` and `name`, its claim name, so a claim type cannot
+    declare options with these names.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -99,17 +101,9 @@ else
   let
     topConfig = config;
 
-    mkEntry =
-      service: id: value:
-      value
-      // {
-        inherit service id;
-        name = toClaimName service id;
-      };
-
     entries = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
-      (lib.mapAttrsToList (service: contract: lib.mapAttrsToList (mkEntry service) contract.${kindName}))
+      (lib.mapAttrsToList (_: contract: lib.attrValues contract.${kindName}))
       lib.concatLists
     ];
 
@@ -163,12 +157,39 @@ else
                       identity = resolveIdentity config.identity;
                       config = topConfig;
                     })
-                    (
+                    (lib.setDefaultModuleLocation ./mk-claim-kind.nix (
                       { name, ... }:
+                      let
+                        claimName = toClaimName service name;
+                      in
                       {
-                        _module.args.claimName = toClaimName service name;
+                        config._module.args = { inherit claimName; };
+
+                        options = {
+                          service = lib.mkOption {
+                            type = lib.types.str;
+                            readOnly = true;
+                            default = service;
+                            defaultText = lib.literalMD "the contract's name";
+                            description = "The name of the claim's service.";
+                          };
+                          id = lib.mkOption {
+                            type = lib.types.str;
+                            readOnly = true;
+                            default = name;
+                            defaultText = lib.literalMD "the claim's attribute name";
+                            description = "The claim's id within its contract.";
+                          };
+                          name = lib.mkOption {
+                            type = lib.types.str;
+                            readOnly = true;
+                            default = claimName;
+                            defaultText = lib.literalMD "`<service>-<id>`";
+                            description = "The claim name, `<service>-<id>`.";
+                          };
+                        };
                       }
-                    )
+                    ))
                   ]
                 );
                 default = { };
@@ -185,9 +206,8 @@ else
         default = lib.listToAttrs (map (entry: lib.nameValuePair entry.name entry) entries);
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
-          The ${kindName} claims of every enabled contract, keyed by claim
-          name, each as its contract holds it plus its service, id and claim
-          name.
+          The ${kindName} claims of every enabled contract, each as its
+          contract holds it, keyed by claim name.
         '';
       };
 
