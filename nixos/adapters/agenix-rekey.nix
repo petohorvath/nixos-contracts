@@ -51,6 +51,8 @@ in
       )
     ) config.contracts.claimSets.secrets;
 
+    # Claims of disabled contracts have no `age.secrets` entry, so they take
+    # agenix's default path, which an entry keeps unless a host overrides it.
     contracts.secrets.location =
       name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
   };

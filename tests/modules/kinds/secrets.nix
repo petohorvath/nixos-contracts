@@ -1,6 +1,6 @@
 { contracts }:
 let
-  inherit (contracts) evaluate;
+  inherit (contracts) evaluate failures;
 
   service = name: identity: secrets: {
     contracts.services.${name} = {
@@ -35,11 +35,10 @@ let
     {
       inherit (claim) owner group;
     };
+  backendLocation.contracts.secrets.location = name: "/run/agenix/${name}";
   rules = {
-    contracts.secrets = {
-      location = name: "/run/agenix/${name}";
-      delivery = { unit, name }: "/run/credentials/${unit}/${name}";
-    };
+    imports = [ backendLocation ];
+    contracts.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
   };
 in
 {
@@ -56,6 +55,7 @@ in
       owner = "root";
       group = "chrony";
       unit = null;
+      delivered = false;
       path = null;
     };
   };
@@ -132,11 +132,61 @@ in
   };
 
   testDynamicIdentityWithoutDeliveryReadsTheBackendLocation = {
-    expr =
-      (secretOf [
-        { contracts.secrets.location = name: "/run/agenix/${name}"; }
-      ] { dynamic.unit = "svc.service"; } { }).path;
+    expr = (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).path;
     expected = "/run/agenix/svc-key";
+  };
+
+  testOnlyADynamicIdentityWithADeliveryAdapterIsDelivered = {
+    expr = {
+      dynamicWithDelivery = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamicWithoutDelivery =
+        (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).delivered;
+      static = (secretOf [ rules ] { static.user = "svc"; } { }).delivered;
+    };
+    expected = {
+      dynamicWithDelivery = true;
+      dynamicWithoutDelivery = false;
+      static = false;
+    };
+  };
+
+  testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup = {
+    expr = failures [
+      backendLocation
+      (service "svc" { dynamic.unit = "svc.service"; } generated)
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
+    ];
+  };
+
+  testReadableSecretsPassTheCheck = {
+    expr = {
+      sharedGroup = failures [
+        backendLocation
+        (service "svc" {
+          dynamic = {
+            unit = "svc.service";
+            sharedGroup = "logs";
+          };
+        } generated)
+      ];
+      delivered = failures [
+        rules
+        (service "svc" { dynamic.unit = "svc.service"; } generated)
+      ];
+      static = failures [
+        backendLocation
+        (service "svc" { static.user = "svc"; } generated)
+      ];
+      notInstalled = failures [ (service "svc" { dynamic.unit = "svc.service"; } generated) ];
+    };
+    expected = {
+      sharedGroup = [ ];
+      delivered = [ ];
+      static = [ ];
+      notInstalled = [ ];
+    };
   };
 
   testSecretPathIsReadOnly = {

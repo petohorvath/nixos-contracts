@@ -1,8 +1,9 @@
 /**
   Build a claim kind: a module that adds one kind of claim to every contract,
   folds the claims of enabled contracts into a read-only claim set, and checks
-  that no two claims clash. The shipped binds, mounts and secrets are built
-  with this function, so a new kind gets the same treatment.
+  that no two claims clash and that each passes the kind's check rule. The
+  shipped binds, mounts and secrets are built with this function, so a new
+  kind gets the same treatment.
 
   # Inputs
 
@@ -35,6 +36,14 @@
     returning null when they can coexist, or a string saying why they clash.
     Two claims with the same claim name always clash.
 
+  `check`
+  : Optional. The kind's check rule: a function of `{ identity, claim }`,
+    where `identity` is the same resolved identity and `claim` a claim-set
+    entry, returning null when the claim is valid, or a string saying why
+    it is not. Only claims of enabled contracts are checked, and a rejected
+    claim fails as "nixos-contracts: <kind> claim `<service>-<id>`:
+    <reason>."
+
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
 
@@ -59,6 +68,7 @@
   description,
   claim,
   clash ? null,
+  check ? null,
   settings ? { },
 }:
 let
@@ -101,11 +111,20 @@ else
   let
     topConfig = config;
 
-    entries = lib.pipe config.contracts.services [
+    # Each claim of an enabled contract, with its service's resolved identity.
+    claims = lib.pipe config.contracts.services [
       (lib.filterAttrs (_: contract: contract.enable))
-      (lib.mapAttrsToList (_: contract: lib.attrValues contract.${kindName}))
+      (lib.mapAttrsToList (
+        _: contract:
+        let
+          identity = resolveIdentity contract.identity;
+        in
+        map (claim: { inherit identity claim; }) (lib.attrValues contract.${kindName})
+      ))
       lib.concatLists
     ];
+
+    entries = map (claimWithIdentity: claimWithIdentity.claim) claims;
 
     nameAssertions = lib.pipe entries [
       (lib.groupBy (entry: entry.name))
@@ -137,6 +156,19 @@ else
           message = "nixos-contracts: ${kindName} claims `${pair.first.name}` and `${pair.second.name}` clash: ${toString reason}.";
         }
       ) pairs
+    );
+
+    checkAssertions = lib.optionals (check != null) (
+      map (
+        arguments:
+        let
+          reason = check arguments;
+        in
+        {
+          assertion = reason == null;
+          message = "nixos-contracts: ${kindName} claim `${arguments.claim.name}`: ${toString reason}.";
+        }
+      ) claims
     );
   in
   {
@@ -216,5 +248,5 @@ else
       ${kindName} = settings;
     };
 
-    config.contracts.assertions = nameAssertions ++ clashAssertions;
+    config.contracts.assertions = nameAssertions ++ clashAssertions ++ checkAssertions;
   }

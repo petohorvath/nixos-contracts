@@ -15,8 +15,9 @@
       default = null;
       description = ''
         Where the secret backend installs a secret, as a function of
-        its `<service>-<id>` name. Set by a backend adapter; null when
-        none is imported.
+        its `<service>-<id>` name. It must answer for any claim name,
+        including claims of disabled contracts, which the backend does not
+        install. Set by a backend adapter; null when none is imported.
       '';
     };
     delivery = lib.mkOption {
@@ -30,12 +31,25 @@
     };
   };
 
+  # A dynamic identity's user exists only while its unit runs, so it reads
+  # a secret the backend installs only through its shared group. An
+  # undelivered claim has a path only when a backend installs it.
+  check =
+    { identity, claim }:
+    if
+      identity.unit != null && !claim.delivered && claim.path != null && claim.group != identity.group
+    then
+      "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
+    else
+      null;
+
   claim =
     { identity, config, ... }:
     { claimName, ... }:
     let
       inherit (config.contracts.secrets) delivery location;
       inherit (identity) unit;
+      delivered = unit != null && delivery != null;
     in
     {
       options = {
@@ -88,11 +102,21 @@
             for a static identity.
           '';
         };
+        delivered = lib.mkOption {
+          type = lib.types.bool;
+          readOnly = true;
+          default = delivered;
+          defaultText = lib.literalMD "whether the identity is dynamic and a delivery adapter is imported";
+          description = ''
+            Whether the secret is delivered into the dynamic identity's
+            unit, rather than read where the backend installs it.
+          '';
+        };
         path = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           readOnly = true;
           default =
-            if unit != null && delivery != null then
+            if delivered then
               delivery {
                 inherit unit;
                 name = claimName;

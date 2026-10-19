@@ -10,7 +10,7 @@ let
 
   serviceNameOf = unit: lib.removeSuffix ".service" unit;
 
-  delivered = lib.filter (secret: secret.unit != null) (
+  delivered = lib.filter (secret: secret.delivered) (
     lib.attrValues config.contracts.claimSets.secrets
   );
 
