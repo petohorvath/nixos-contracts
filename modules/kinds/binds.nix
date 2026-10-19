@@ -22,10 +22,12 @@ let
   addressesOverlap =
     first: second:
     let
-      a = ip.parse first;
-      b = ip.parse second;
+      firstAddress = ip.parse first;
+      secondAddress = ip.parse second;
     in
-    ip.eq a b || covers a b || covers b a;
+    ip.eq firstAddress secondAddress
+    || covers firstAddress secondAddress
+    || covers secondAddress firstAddress;
 
   clash =
     first: second:

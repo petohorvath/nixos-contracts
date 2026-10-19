@@ -2,7 +2,7 @@
   lib,
   nixos,
   adapter,
-  backend,
+  secretBackend,
 }:
 let
   inherit (nixos) evaluate failures;
@@ -105,7 +105,7 @@ in
   testDeliveryWorksWithTheAgenixRekeyAdapter = {
     expr =
       (evaluate (
-        backend
+        secretBackend
         ++ [
           adapter
           alloy

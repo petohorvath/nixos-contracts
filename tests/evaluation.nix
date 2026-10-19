@@ -15,9 +15,9 @@ let
     agenix = inputs.agenix.nixosModules.default;
     agenix-rekey = inputs.agenix-rekey.nixosModules.default;
   };
-  agenixRekey = [
-    inputs.agenix.nixosModules.default
-    inputs.agenix-rekey.nixosModules.default
+  agenixRekeyBackends = [
+    backends.agenix
+    backends.agenix-rekey
   ];
 in
 {
@@ -76,12 +76,12 @@ in
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
         inherit nixos;
         adapter = self.nixosModules.agenix-rekey;
-        backends = agenixRekey;
+        backends = agenixRekeyBackends;
       };
       systemdCredentials = import ./nixos/adapters/systemd-credentials.nix {
         inherit lib nixos;
         adapter = self.nixosModules.systemd-credentials;
-        backend = agenixRekey ++ [ self.nixosModules.agenix-rekey ];
+        secretBackend = agenixRekeyBackends ++ [ self.nixosModules.agenix-rekey ];
       };
     };
   };

@@ -2,7 +2,7 @@
 # survive, each under a declared class.
 { lib }:
 let
-  normalize = path: if path == "/" then path else lib.removeSuffix "/" path;
+  normalizePath = path: if path == "/" then path else lib.removeSuffix "/" path;
 in
 {
   name = "mounts";
@@ -26,7 +26,10 @@ in
 
   clash =
     first: second:
-    if normalize first.path == normalize second.path then "both persist `${first.path}`" else null;
+    if normalizePath first.path == normalizePath second.path then
+      "both persist `${first.path}`"
+    else
+      null;
 
   claim =
     { identity, config, ... }:

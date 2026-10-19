@@ -13,7 +13,7 @@ let
     generic
     ./assertions.nix
   ];
-  adapterModule = adapter: {
+  mkAdapterModule = adapter: {
     imports = [
       default
       adapter
@@ -22,7 +22,7 @@ let
 in
 {
   inherit default;
-  agenix-rekey = adapterModule ./adapters/agenix-rekey.nix;
-  preservation = adapterModule ./adapters/preservation.nix;
-  systemd-credentials = adapterModule ./adapters/systemd-credentials.nix;
+  agenix-rekey = mkAdapterModule ./adapters/agenix-rekey.nix;
+  preservation = mkAdapterModule ./adapters/preservation.nix;
+  systemd-credentials = mkAdapterModule ./adapters/systemd-credentials.nix;
 }

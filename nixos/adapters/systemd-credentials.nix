@@ -19,7 +19,7 @@ let
   # The delivery itself defines the unit's `systemd.services` entry, so the
   # unit exists only if another module gave it a command, an `ExecStart` set
   # directly or through `script`.
-  unitAssertions =
+  mkUnitAssertions =
     unit:
     let
       service = config.systemd.services.${serviceNameOf unit} or { serviceConfig = { }; };
@@ -55,6 +55,6 @@ in
         message = "delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`.";
       }
     ]
-    ++ lib.concatMap unitAssertions units;
+    ++ lib.concatMap mkUnitAssertions units;
   };
 }
