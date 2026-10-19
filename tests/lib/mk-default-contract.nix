@@ -30,6 +30,9 @@ in
   testWithoutOverridesTheDefaultsApply = {
     expr = (evaluateChrony { }).binds.ntp;
     expected = {
+      service = "chrony";
+      id = "ntp";
+      name = "chrony-ntp";
       proto = [ "udp" ];
       port = 123;
       addresses = [

@@ -25,7 +25,7 @@ import "${nixos-contracts}/modules" { libnet = nix-libnet.lib; }
 ```text
 contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
-contracts.services.<service>.<kind>.<id>     writable, one claim
+contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name read-only
 contracts.claimSets.<kind>.<service>-<id>    read-only
 contracts.<kind>.*                           kind settings
 contracts.adapters.<adapter>.*               adapter settings
@@ -51,13 +51,21 @@ A contract has no other fields. A service's own settings stay in the service mod
 
 ### `contracts.claimSets.<kind>`
 
-A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim's value plus its `service`, its `id` and its claim name `name` (`<service>-<id>`). An entry holds the same final values as its claim in the contract, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
+A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
 
 ### `contracts.assertions`
 
 A list of `{ assertion; message; }`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, and one per pair of claims, failing when its clash rule rejects them. `nixosModules.default` forwards them to NixOS `assertions`; with the generic module the caller reads them.
 
 ## Claim kinds
+
+Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries three read-only fields:
+
+- `service`: the name of its service.
+- `id`: its id within the contract.
+- `name`: its claim name, `<service>-<id>`.
+
+A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
 
 ### Binds
 
@@ -180,7 +188,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, `name` is the claim's id and the module argument `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it, so the claim and its claim-set entry hold the same final value.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id and `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id` and `name` on every claim, so a claim type cannot declare options with these names.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
