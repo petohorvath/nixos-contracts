@@ -1,65 +1,24 @@
 /*
-  Install every secret with agenix-rekey. A provided secret's encrypted file
-  is `<secretsDir>/<service>-<id>.age` unless `rekeyFiles` names another; a
-  generated one names its agenix-rekey generator. Requires the agenix and
-  agenix-rekey NixOS modules; `nixosModules.agenix-rekey` also imports
-  `nixosModules.default`.
+  Install every secret with agenix-rekey, owned and readable as its claim
+  says. Where a value comes from, a generator, an encrypted file or the
+  dependencies of either, is set on `age.secrets.<service>-<id>` itself.
+  Requires the agenix and agenix-rekey NixOS modules;
+  `nixosModules.agenix-rekey` also imports `nixosModules.default`.
 */
 { config, lib, ... }:
 let
-  cfg = config.contracts.adapters.agenixRekey;
   secrets = config.contracts.claimSets.secrets;
-
-  # The encrypted file of a provided secret, or null when none is known.
-  rekeyFileOrNull =
-    name:
-    cfg.rekeyFiles.${name}
-      or (if cfg.secretsDir != null then cfg.secretsDir + "/${name}.age" else null);
 in
 {
-  options.contracts.adapters.agenixRekey = {
-    secretsDir = lib.mkOption {
-      type = lib.types.nullOr lib.types.path;
-      default = null;
-      description = ''
-        The directory holding provided secrets as `<service>-<id>.age`.
-        A check fails when a provided secret has no encrypted file from
-        it, from `rekeyFiles` or from agenix-rekey's `age.rekey.secretsDir`.
-      '';
-    };
-    rekeyFiles = lib.mkOption {
-      type = lib.types.attrsOf lib.types.path;
-      default = { };
-      description = ''
-        Encrypted files of provided secrets that do not follow the
-        `secretsDir` convention, by `<service>-<id>` name.
-      '';
-    };
-  };
-
   config = {
-    age.secrets = lib.mapAttrs (
-      name: secret:
-      let
-        rekeyFile = rekeyFileOrNull name;
-      in
-      {
-        inherit (secret) group mode owner;
-      }
-      // (
-        if secret.generator != null then
-          { generator.script = secret.generator; }
-        else
-          lib.optionalAttrs (rekeyFile != null) { inherit rekeyFile; }
-      )
-    ) secrets;
+    age.secrets = lib.mapAttrs (_: secret: { inherit (secret) group mode owner; }) secrets;
 
-    # Reads the final file, which agenix-rekey's own `age.rekey.secretsDir`
-    # provides when this adapter has none.
+    # Reads the final file, which agenix-rekey defaults from its
+    # `generatedSecretsDir` or `secretsDir`.
     contracts.assertions = lib.mapAttrsToList (name: _: {
       assertion = config.age.secrets.${name}.rekeyFile != null;
-      message = "provided secret `${name}` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`.";
-    }) (lib.filterAttrs (_: secret: secret.generator == null) secrets);
+      message = "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
+    }) secrets;
 
     # Claims of disabled contracts have no `age.secrets` entry, so they take
     # agenix's default path, which an entry keeps unless a host overrides it.

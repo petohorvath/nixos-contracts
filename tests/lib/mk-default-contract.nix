@@ -92,20 +92,6 @@ in
     };
   };
 
-  testHostMakesAGeneratedSecretProvided = {
-    expr =
-      (evaluate [
-        {
-          contracts.services.chrony = mkDefaultContract {
-            identity.static.user = "chrony";
-            secrets.key.generator = "alnum";
-          };
-        }
-        { contracts.services.chrony.secrets.key.generator = null; }
-      ]).contracts.services.chrony.secrets.key.generator;
-    expected = null;
-  };
-
   testExplicitPropertiesAreKept = {
     expr =
       (evaluate [
@@ -123,14 +109,14 @@ in
     expr = mkDefaultContract {
       enable = true;
       secrets = {
-        key.generator = "alnum";
+        key.mode = "0400";
         token = { };
       };
     };
     expected = {
       enable = lib.mkDefault true;
       secrets = {
-        key.generator = lib.mkDefault "alnum";
+        key.mode = lib.mkDefault "0400";
         token = lib.mkDefault { };
       };
     };

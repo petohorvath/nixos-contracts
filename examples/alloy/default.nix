@@ -20,6 +20,7 @@ let
       ./service.nix
       {
         services.alloy.enable = true;
+        age.rekey.generatedSecretsDir = ./secrets/generated;
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";
       }
