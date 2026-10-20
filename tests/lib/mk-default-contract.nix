@@ -122,11 +122,17 @@ in
   testLeavesBecomeDefaults = {
     expr = mkDefaultContract {
       enable = true;
-      secrets.key = { };
+      secrets = {
+        key.generator = "alnum";
+        token = { };
+      };
     };
     expected = {
       enable = lib.mkDefault true;
-      secrets.key = lib.mkDefault { };
+      secrets = {
+        key.generator = lib.mkDefault "alnum";
+        token = lib.mkDefault { };
+      };
     };
   };
 }

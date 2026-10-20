@@ -118,7 +118,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `delivered` | read-only, whether the secret is delivered      | derived  |
 | `path`      | read-only, where the daemon reads the secret    | derived  |
 
-`generator` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name. A secret without one is provided: a person supplies its value, as in `secrets.admin-token = { };`. A host overrides a service module's generated secret to a provided one by setting `generator = null`, without `lib.mkForce`.
+`generator` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name. A secret without one is provided: a person supplies its value, as in `secrets.admin-token = { };`.
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
@@ -177,7 +177,7 @@ Its checks fail when a dynamic-identity secret exists but no backend adapter has
 
 `mkDefaultContract contract` marks every leaf of a contract definition with `lib.mkDefault`, so a host can override any single field at normal priority. Lists, empty attribute sets and derivations count as leaves, so a host that sets a list replaces it. A value that already carries a module property, such as `lib.mkForce`, is kept as written.
 
-Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error.
+Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error. A secret's `generator` is a plain field, so a host makes a generated secret provided by setting `generator = null`, without `lib.mkForce`.
 
 To use it without the flake, import the library directory with a caller-owned library:
 
