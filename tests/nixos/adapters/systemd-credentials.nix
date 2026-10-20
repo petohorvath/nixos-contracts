@@ -70,13 +70,12 @@ in
   };
 
   testDeliveryNeedsABackendLocation = {
-    expr = failures [
-      adapter
-      alloy
-    ];
-    expected = [
-      "nixos-contracts: delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`."
-    ];
+    expr =
+      (evaluate [
+        adapter
+        alloy
+      ]).systemd.services.alloy.serviceConfig.LoadCredential;
+    expectedError.msg = "nixos-contracts: secret `alloy-password` has no location: import a secret backend adapter";
   };
 
   testMistypedUnitIsRejected = {

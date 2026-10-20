@@ -121,12 +121,12 @@ A secret holds no value. Where its value comes from, such as a generator or an e
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
-- `location` (function of the `<service>-<id>` name, or null): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless.
+- `location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless. Without a backend adapter, it fails with an error naming the missing adapter.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
 
-A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location, or null when no adapter has set a rule.
+A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path without a backend adapter, so reading one fails, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs one imported.
 
-A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that a backend installs but no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
+A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
 Secrets clash only by sharing a name.
 
@@ -162,7 +162,7 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 
 For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Its checks fail when a dynamic-identity secret exists but no backend adapter has set a location, when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Without a backend adapter, its `LoadCredential=` fails to evaluate with the error of `contracts.secrets.location`. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 
