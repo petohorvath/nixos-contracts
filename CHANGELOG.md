@@ -16,4 +16,4 @@
 ### Migration
 
 - A service module that names a secret's generator on the backend, as in `age.secrets.<service>-<id>.generator.script = "alnum";`, names it on the claim instead: `secrets.<id>.generate = "alnum";`.
-- A `lib.mkClaimKind` check rule receives `settings` beside `identity` and `claim`, so a rule written as `{ identity, claim }:` accepts it, for example as `{ identity, claim, ... }:`.
+- A `lib.mkClaimKind` check rule receives `settings` beside `identity` and `claim`, so a rule written as `{ identity, claim }:` must accept it, for example as `{ identity, claim, ... }:`.

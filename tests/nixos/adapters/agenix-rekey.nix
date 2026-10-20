@@ -1,4 +1,5 @@
 {
+  contractsLib,
   nixos,
   adapter,
   backends,
@@ -96,16 +97,13 @@ in
     expr =
       (configuration [
         values
-        (
-          { lib, ... }:
-          {
-            contracts.services.kea = {
-              enable = true;
-              identity.static.user = "kea";
-              secrets.ddns.generate = lib.mkDefault "alnum";
-            };
-          }
-        )
+        {
+          contracts.services.kea = contractsLib.mkDefaultContract {
+            enable = true;
+            identity.static.user = "kea";
+            secrets.ddns.generate = "alnum";
+          };
+        }
         { contracts.services.kea.secrets.ddns.generate = null; }
       ]).age.secrets.kea-ddns.generator;
     expected = null;
