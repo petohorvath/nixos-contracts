@@ -12,7 +12,7 @@ in
       port = 12345;
       addresses = [ "127.0.0.1" ];
     };
-    secrets.loki-password.provenance.generated = "alnum";
+    secrets.loki-password.generator = "alnum";
   };
 
   services.alloy.extraFlags = [

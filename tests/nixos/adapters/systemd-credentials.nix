@@ -12,7 +12,7 @@ let
     contracts.services.alloy = {
       enable = true;
       identity.dynamic.unit = "alloy.service";
-      secrets.password.provenance.generated = "alnum";
+      secrets.password.generator = "alnum";
     };
     systemd.services.alloy = {
       script = "true";
@@ -23,7 +23,7 @@ let
     contracts.services.chrony = {
       enable = true;
       identity.static.user = "chrony";
-      secrets.key.provenance.generated = "alnum";
+      secrets.key.generator = "alnum";
     };
   };
   location.contracts.secrets.location = name: "/run/agenix/${name}";

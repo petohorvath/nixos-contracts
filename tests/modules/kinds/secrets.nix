@@ -9,7 +9,7 @@ let
     };
   };
   generated = {
-    key.provenance.generated = "alnum";
+    key.generator = "alnum";
   };
   configWithSecret =
     modules: identity: secret:
@@ -17,10 +17,7 @@ let
       modules
       ++ [
         (service "svc" identity {
-          key = {
-            provenance.provided = { };
-          }
-          // secret;
+          key = secret;
         })
       ]
     );
@@ -50,7 +47,7 @@ in
       service = "chrony";
       id = "key";
       name = "chrony-key";
-      provenance.generated = "alnum";
+      generator = "alnum";
       mode = "0440";
       owner = "root";
       group = "chrony";
@@ -105,15 +102,9 @@ in
     };
   };
 
-  testProvenanceTakesExactlyOneTag = {
-    expr =
-      (secretOf [ ] { static.user = "svc"; } {
-        provenance = {
-          provided = { };
-          generated = "alnum";
-        };
-      }).provenance;
-    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.provenance";
+  testSecretWithoutAGeneratorIsProvided = {
+    expr = (secretOf [ ] { static.user = "svc"; } { }).generator;
+    expected = null;
   };
 
   testStaticIdentityReadsTheBackendLocation = {

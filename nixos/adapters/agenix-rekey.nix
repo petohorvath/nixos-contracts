@@ -47,8 +47,8 @@ in
         inherit (secret) group mode owner;
       }
       // (
-        if secret.provenance ? generated then
-          { generator.script = secret.provenance.generated; }
+        if secret.generator != null then
+          { generator.script = secret.generator; }
         else
           lib.optionalAttrs (rekeyFile != null) { inherit rekeyFile; }
       )
@@ -59,7 +59,7 @@ in
     contracts.assertions = lib.mapAttrsToList (name: _: {
       assertion = config.age.secrets.${name}.rekeyFile != null;
       message = "provided secret `${name}` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`.";
-    }) (lib.filterAttrs (_: secret: secret.provenance ? provided) secrets);
+    }) (lib.filterAttrs (_: secret: secret.generator == null) secrets);
 
     # Claims of disabled contracts have no `age.secrets` entry, so they take
     # agenix's default path, which an entry keeps unless a host overrides it.

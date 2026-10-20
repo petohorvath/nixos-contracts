@@ -92,6 +92,20 @@ in
     };
   };
 
+  testHostMakesAGeneratedSecretProvided = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.chrony = mkDefaultContract {
+            identity.static.user = "chrony";
+            secrets.key.generator = "alnum";
+          };
+        }
+        { contracts.services.chrony.secrets.key.generator = null; }
+      ]).contracts.services.chrony.secrets.key.generator;
+    expected = null;
+  };
+
   testExplicitPropertiesAreKept = {
     expr =
       (evaluate [
@@ -108,11 +122,11 @@ in
   testLeavesBecomeDefaults = {
     expr = mkDefaultContract {
       enable = true;
-      secrets.key.provenance.provided = { };
+      secrets.key = { };
     };
     expected = {
       enable = lib.mkDefault true;
-      secrets.key.provenance.provided = lib.mkDefault { };
+      secrets.key = lib.mkDefault { };
     };
   };
 }

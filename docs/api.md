@@ -108,17 +108,17 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 `contracts.services.<service>.secrets.<id>`: a runtime credential the service needs.
 
-| Field        | Type                                                    | Default  |
-| ------------ | ------------------------------------------------------- | -------- |
-| `provenance` | exactly one of `provided = { }` or `generated = <name>` | required |
-| `mode`       | a mode string                                           | `"0440"` |
-| `owner`      | an account name                                         | `"root"` |
-| `group`      | a group name                                            | derived  |
-| `unit`       | read-only, the dynamic identity's unit, or null         | derived  |
-| `delivered`  | read-only, whether the secret is delivered              | derived  |
-| `path`       | read-only, where the daemon reads the secret            | derived  |
+| Field       | Type                                            | Default  |
+| ----------- | ----------------------------------------------- | -------- |
+| `generator` | a generator name, or null                       | `null`   |
+| `mode`      | a mode string                                   | `"0440"` |
+| `owner`     | an account name                                 | `"root"` |
+| `group`     | a group name                                    | derived  |
+| `unit`      | read-only, the dynamic identity's unit, or null | derived  |
+| `delivered` | read-only, whether the secret is delivered      | derived  |
+| `path`      | read-only, where the daemon reads the secret    | derived  |
 
-`provenance.generated` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name.
+`generator` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name. A secret without one is provided: a person supplies its value, as in `secrets.admin-token = { };`. A host overrides a service module's generated secret to a provided one by setting `generator = null`, without `lib.mkForce`.
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
