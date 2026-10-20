@@ -15,7 +15,7 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns.generator = "base64";
+          ddns = { };
           token = { };
         };
       };
@@ -26,9 +26,18 @@ let
       };
     };
   };
-  settings.contracts.adapters.agenixRekey = {
-    secretsDir = ./.;
-    rekeyFiles.alloy-password = ./agenix-rekey.nix;
+  # The secrets' values, set on agenix-rekey under each claim name.
+  values = {
+    age = {
+      rekey = {
+        secretsDir = ./.;
+        generatedSecretsDir = ./generated;
+      };
+      secrets = {
+        kea-ddns.generator.script = "base64";
+        alloy-password.rekeyFile = ./agenix-rekey.nix;
+      };
+    };
   };
   configuration = modules: evaluate (backends ++ [ adapter ] ++ modules);
   failures = modules: nixos.failures (backends ++ [ adapter ] ++ modules);
@@ -37,94 +46,80 @@ let
     rekeyFile = config.age.secrets.${name}.rekeyFile or null;
     generator = config.age.secrets.${name}.generator.script or null;
   };
+  # Kea without the values above, so neither secret has an encrypted file.
+  keaWithoutValues.contracts.services.kea = {
+    enable = true;
+    identity.static.user = "kea";
+    secrets = {
+      ddns = { };
+      token = { };
+    };
+  };
 in
 {
-  testGeneratedSecretNamesItsGenerator = {
+  testSecretTakesItsGeneratorFromTheBackend = {
     expr = secretOf "kea-ddns" (configuration [
       services
-      settings
+      values
     ]);
     expected = {
       owner = "root";
       group = "dhcp";
       mode = "0440";
-      rekeyFile = null;
+      rekeyFile = ./generated/kea-ddns.age;
       generator = "base64";
     };
   };
 
-  testProvidedSecretFollowsTheSecretsDir = {
-    expr =
-      (configuration [
-        services
-        settings
-      ]).age.secrets.kea-token.rekeyFile;
-    expected = ./kea-token.age;
-  };
-
-  testProvidedSecretTakesItsRekeyFileOverride = {
-    expr = secretOf "alloy-password" (configuration [
+  testSecretWithoutAGeneratorFollowsTheBackendsSecretsDir = {
+    expr = secretOf "kea-token" (configuration [
       services
-      settings
+      values
     ]);
     expected = {
       owner = "root";
-      group = "root";
+      group = "dhcp";
       mode = "0440";
-      rekeyFile = ./agenix-rekey.nix;
+      rekeyFile = ./kea-token.age;
       generator = null;
     };
   };
 
-  testProvidedSecretTakesAgenixRekeysOwnSecretsDir =
-    let
-      modules = [
-        { age.rekey.secretsDir = ./.; }
-        {
-          contracts.services.kea = {
-            enable = true;
-            identity.static.user = "kea";
-            secrets.token = { };
-          };
-        }
-      ];
-    in
-    {
-      expr = {
-        failures = failures modules;
-        rekeyFile = (configuration modules).age.secrets.kea-token.rekeyFile;
-      };
-      expected = {
-        failures = [ ];
-        rekeyFile = ./kea-token.age;
-      };
-    };
+  testValueSetOnTheBackendIsKept = {
+    expr =
+      (configuration [
+        services
+        values
+      ]).age.secrets.alloy-password.rekeyFile;
+    expected = ./agenix-rekey.nix;
+  };
 
-  testProvidedSecretWithoutAFileFailsItsCheck =
-    let
-      kea.contracts.services.kea = {
-        enable = true;
-        identity.static.user = "kea";
-        secrets.token = { };
-      };
-    in
-    {
-      expr = {
-        failures = failures [ kea ];
-        rekeyFile = (configuration [ kea ]).age.secrets.kea-token.rekeyFile;
-      };
-      expected = {
-        failures = [
-          "nixos-contracts: provided secret `kea-token` needs an encrypted file: set `contracts.adapters.agenixRekey.secretsDir`, an entry in its `rekeyFiles`, or agenix-rekey's `age.rekey.secretsDir`."
-        ];
-        rekeyFile = null;
-      };
-    };
+  testSecretWithoutAFileFailsItsCheck = {
+    expr = failures [
+      keaWithoutValues
+      { age.secrets.kea-ddns.generator.script = "base64"; }
+    ];
+    expected = [
+      "nixos-contracts: secret `kea-ddns` has no encrypted file: set its `age.secrets.kea-ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
+      "nixos-contracts: secret `kea-token` has no encrypted file: set its `age.secrets.kea-token.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
+    ];
+  };
+
+  testAdapterHasNoValueSettings = {
+    expr =
+      (configuration [
+        keaWithoutValues
+        # Another adapter's setting, so `contracts.adapters` exists.
+        ({ lib, ... }: { options.contracts.adapters.other = lib.mkOption { default = null; }; })
+        { contracts.adapters.agenixRekey.secretsDir = ./.; }
+      ]).age.secrets.kea-token.rekeyFile;
+    expectedError.msg = "contracts\\.adapters\\.agenixRekey' does not exist";
+  };
 
   testDynamicIdentityWithoutDeliveryCannotReadItsSecret = {
     expr = failures [
       services
-      settings
+      values
     ];
     expected = [
       "nixos-contracts: secrets claim `alloy-password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
@@ -135,7 +130,7 @@ in
     expr =
       (configuration [
         services
-        settings
+        values
       ]).contracts.services.kea.secrets.token.path;
     expected = "/run/agenix/kea-token";
   };

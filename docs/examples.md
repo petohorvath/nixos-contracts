@@ -11,15 +11,15 @@ The NixOS examples take:
 
 ## influxdb: a static identity with persistence and secrets
 
-The [service module](../examples/influxdb/service.nix) wraps nixpkgs' `services.influxdb2`. It writes the contract through `mkDefaultContract`: the static user `influxdb2`, a bind on port 8086, the mount `/var/lib/influxdb2` under the class `state`, a generated admin password and a provided admin token. It then wires the daemon from the contract: the bind's bindpoint becomes `http-bind-address` and the secret claims' `path` become the provisioning files.
+The [service module](../examples/influxdb/service.nix) wraps nixpkgs' `services.influxdb2`. It writes the contract through `mkDefaultContract`: the static user `influxdb2`, a bind on port 8086, the mount `/var/lib/influxdb2` under the class `state`, and an admin password and an admin token. It names the password's `alnum` generator on its `age.secrets` entry, while a person provides the token. It then wires the daemon from the contract: the bind's bindpoint becomes `http-bind-address` and the secret claims' `path` become the provisioning files.
 
-The [host](../examples/influxdb/host.nix) declares the `state` class, maps it to `/persist/state` for the preservation adapter, points the agenix-rekey adapter at a secrets directory, and narrows the bind to `127.0.0.1` with one field override.
+The [host](../examples/influxdb/host.nix) declares the `state` class, maps it to `/persist/state` for the preservation adapter, sets agenix-rekey's directories for provided and generated secrets, and narrows the bind to `127.0.0.1` with one field override.
 
 The [example](../examples/influxdb/default.nix) imports both adapters with their backends. Its result shows:
 
 - `bindAddress`: `127.0.0.1:8086`, the host's address with the service module's port.
 - `preserved`: `/var/lib/influxdb2`, owned by `influxdb2:influxdb2` with mode `0700`, under `/persist/state`.
-- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator and the token's encrypted file is `influxdb-admin-token.age` in the secrets directory.
+- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim, `influxdb-admin-password.age` in the generated secrets directory and `influxdb-admin-token.age` in the secrets directory.
 - `initialSetup`: the daemon reads both from `/run/agenix/<service>-<id>`.
 - `failures`: none.
 
@@ -27,7 +27,7 @@ The encrypted files are not part of the example, since an evaluation only refers
 
 ## alloy: a dynamic identity with a delivered secret
 
-The [service module](../examples/alloy/service.nix) wraps nixpkgs' `services.alloy`, which runs with `DynamicUser`. Its contract names the unit `alloy.service`, a loopback bind on port 12345 and a generated Loki password, and the daemon's configuration reads the password from the claim's `path`.
+The [service module](../examples/alloy/service.nix) wraps nixpkgs' `services.alloy`, which runs with `DynamicUser`. Its contract names the unit `alloy.service`, a loopback bind on port 12345 and a Loki password, whose `alnum` generator it names on the password's `age.secrets` entry, and the daemon's configuration reads the password from the claim's `path`.
 
 The [example](../examples/alloy/default.nix) imports the agenix-rekey and systemd-credentials adapters. Its result shows:
 

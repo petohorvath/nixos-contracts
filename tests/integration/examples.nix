@@ -21,7 +21,7 @@
           owner = "root";
           group = "influxdb2";
           mode = "0440";
-          rekeyFile = null;
+          rekeyFile = "influxdb-admin-password.age";
           generator = "alnum";
         };
         influxdb-admin-token = {

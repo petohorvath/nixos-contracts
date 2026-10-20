@@ -8,8 +8,8 @@ let
       inherit identity secrets;
     };
   };
-  generated = {
-    key.generator = "alnum";
+  oneSecret = {
+    key = { };
   };
   configWithSecret =
     modules: identity: secret:
@@ -41,13 +41,12 @@ in
 {
   testSecretDefaultsToAGroupReadableRootFile = {
     expr =
-      (evaluate [ (service "chrony" { static.user = "chrony"; } generated) ])
+      (evaluate [ (service "chrony" { static.user = "chrony"; } oneSecret) ])
       .contracts.claimSets.secrets.chrony-key;
     expected = {
       service = "chrony";
       id = "key";
       name = "chrony-key";
-      generator = "alnum";
       mode = "0440";
       owner = "root";
       group = "chrony";
@@ -102,9 +101,9 @@ in
     };
   };
 
-  testSecretWithoutAGeneratorIsProvided = {
-    expr = (secretOf [ ] { static.user = "svc"; } { }).generator;
-    expected = null;
+  testSecretRejectsAGenerator = {
+    expr = (secretOf [ ] { static.user = "svc"; } { generator = "alnum"; }).mode;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.generator' does not exist";
   };
 
   testStaticIdentityReadsTheBackendLocation = {
@@ -144,7 +143,7 @@ in
   testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup = {
     expr = failures [
       backendLocation
-      (service "svc" { dynamic.unit = "svc.service"; } generated)
+      (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
     ];
     expected = [
       "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
@@ -160,17 +159,17 @@ in
             unit = "svc.service";
             sharedGroup = "logs";
           };
-        } generated)
+        } oneSecret)
       ];
       delivered = failures [
         rules
-        (service "svc" { dynamic.unit = "svc.service"; } generated)
+        (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
       ];
       static = failures [
         backendLocation
-        (service "svc" { static.user = "svc"; } generated)
+        (service "svc" { static.user = "svc"; } oneSecret)
       ];
-      notInstalled = failures [ (service "svc" { dynamic.unit = "svc.service"; } generated) ];
+      notInstalled = failures [ (service "svc" { dynamic.unit = "svc.service"; } oneSecret) ];
     };
     expected = {
       sharedGroup = [ ];
@@ -183,7 +182,7 @@ in
   testSecretPathIsReadOnly = {
     expr =
       (evaluate [
-        (service "svc" { static.user = "svc"; } generated)
+        (service "svc" { static.user = "svc"; } oneSecret)
         { contracts.services.svc.secrets.key.path = "/elsewhere"; }
       ]).contracts.services.svc.secrets.key.path;
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.path' is read-only";

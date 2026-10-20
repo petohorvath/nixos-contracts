@@ -110,7 +110,6 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 | Field       | Type                                            | Default  |
 | ----------- | ----------------------------------------------- | -------- |
-| `generator` | a generator name, or null                       | `null`   |
 | `mode`      | a mode string                                   | `"0440"` |
 | `owner`     | an account name                                 | `"root"` |
 | `group`     | a group name                                    | derived  |
@@ -118,7 +117,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `delivered` | read-only, whether the secret is delivered      | derived  |
 | `path`      | read-only, where the daemon reads the secret    | derived  |
 
-`generator` names a generator that the secret backend resolves, such as `"alnum"`; the library attaches no meaning to the name. A secret without one is provided: a person supplies its value, as in `secrets.admin-token = { };`.
+A secret holds no value. Where its value comes from, such as a generator or an encrypted file, is set on the backend under the `<service>-<id>` claim name, as in `age.secrets.influxdb-admin-password.generator.script = "alnum";`.
 
 `path` is computed from two rules that adapters set under `contracts.secrets`:
 
@@ -157,13 +156,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`. A generated secret sets `generator.script` to its generator's name. A provided secret sets `rekeyFile` to its `rekeyFiles` entry or else `<secretsDir>/<service>-<id>.age`. Without either, it keeps agenix-rekey's own default from `age.rekey.secretsDir`, and a check fails when that is unset too. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
-
-`contracts.adapters.agenixRekey.secretsDir` (path or null, default `null`)
-: The directory holding provided secrets as `<service>-<id>.age`.
-
-`contracts.adapters.agenixRekey.rekeyFiles` (attribute set of paths, default `{ }`)
-: Encrypted files of provided secrets that do not follow the `secretsDir` convention, by `<service>-<id>` name.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and nothing about its value. A module sets the value on that entry: a `generator`, a `rekeyFile`, or neither, which keeps agenix-rekey's default `rekeyFile` from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules, and it has no settings.
 
 ### `nixosModules.systemd-credentials`
 
@@ -177,7 +170,7 @@ Its checks fail when a dynamic-identity secret exists but no backend adapter has
 
 `mkDefaultContract contract` marks every leaf of a contract definition with `lib.mkDefault`, so a host can override any single field at normal priority. Lists, empty attribute sets and derivations count as leaves, so a host that sets a list replaces it. A value that already carries a module property, such as `lib.mkForce`, is kept as written.
 
-Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error. A secret's `generator` is a plain field, so a host makes a generated secret provided by setting `generator = null`, without `lib.mkForce`.
+Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error.
 
 To use it without the flake, import the library directory with a caller-owned library:
 

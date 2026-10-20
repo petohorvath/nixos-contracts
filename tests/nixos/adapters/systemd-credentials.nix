@@ -12,7 +12,7 @@ let
     contracts.services.alloy = {
       enable = true;
       identity.dynamic.unit = "alloy.service";
-      secrets.password.generator = "alnum";
+      secrets.password = { };
     };
     systemd.services.alloy = {
       script = "true";
@@ -23,7 +23,7 @@ let
     contracts.services.chrony = {
       enable = true;
       identity.static.user = "chrony";
-      secrets.key.generator = "alnum";
+      secrets.key = { };
     };
   };
   location.contracts.secrets.location = name: "/run/agenix/${name}";
@@ -111,7 +111,7 @@ in
           backendAdapter
           adapter
           alloy
-          { contracts.adapters.agenixRekey.secretsDir = ./.; }
+          { age.rekey.secretsDir = ./.; }
         ]
       )).systemd.services.alloy.serviceConfig.LoadCredential;
     expected = [ "alloy-password:/run/agenix/alloy-password" ];

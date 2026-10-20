@@ -5,8 +5,8 @@
   name = "secrets";
   description = ''
     Runtime secrets the service needs, by secret id. A secret says what
-    the service needs and where its value comes from, never how a backend
-    stores or installs it.
+    the service reads and who may read it, never where its value comes
+    from or how a backend stores or installs it.
   '';
 
   settings = {
@@ -53,15 +53,6 @@
     in
     {
       options = {
-        generator = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          example = "alnum";
-          description = ''
-            The generator that produces the value, which the backend
-            resolves, or null when a person provides the value.
-          '';
-        };
         mode = lib.mkOption {
           type = lib.types.str;
           default = "0440";
