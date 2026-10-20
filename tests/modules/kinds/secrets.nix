@@ -52,6 +52,7 @@ in
       mode = "0440";
       owner = "root";
       group = "chrony";
+      generate = null;
       unit = null;
       delivered = false;
       path = "/run/agenix/chrony-key";
@@ -102,6 +103,40 @@ in
       group = "time";
     };
   };
+
+  testSecretNamesTheGeneratorOfItsValue = {
+    expr = (secretOf [ ] { static.user = "svc"; } { generate = "alnum"; }).generate;
+    expected = "alnum";
+  };
+
+  testSecretNamingAGeneratorNoAdapterProvidesFailsItsCheck =
+    let
+      generators.contracts.secrets.generators = [
+        "alnum"
+        "hex"
+      ];
+      generating = generate: service "svc" { static.user = "svc"; } { key.generate = generate; };
+    in
+    {
+      expr = {
+        unknown = failures [
+          generators
+          (generating "alnm")
+        ];
+        provided = failures [
+          generators
+          (generating "hex")
+        ];
+        withoutAVocabulary = failures [ (generating "alnm") ];
+      };
+      expected = {
+        unknown = [
+          "nixos-contracts: secrets claim `svc-key`: no adapter provides its generator `alnm`; name one of `contracts.secrets.generators`."
+        ];
+        provided = [ ];
+        withoutAVocabulary = [ ];
+      };
+    };
 
   testSecretRejectsAGenerator = {
     expr = (secretOf [ ] { static.user = "svc"; } { generator = "alnum"; }).mode;

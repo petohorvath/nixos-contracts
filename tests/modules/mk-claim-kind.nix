@@ -210,13 +210,51 @@ in
     ];
   };
 
+  testCheckRuleReadsTheKindSettings = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        settings.minimum = lib.mkOption {
+          type = lib.types.int;
+          default = 0;
+          description = "The shortest token allowed.";
+        };
+        check =
+          { claim, config, ... }:
+          if claim.length < config.contracts.tokens.minimum then "it is too short" else null;
+        claim =
+          _:
+          { lib, ... }:
+          {
+            options.length = lib.mkOption {
+              type = lib.types.int;
+              description = "The token length.";
+            };
+          };
+      })
+      {
+        contracts.tokens.minimum = 32;
+        contracts.services.a = {
+          enable = true;
+          identity.static.user = "a";
+          tokens = {
+            short.length = 16;
+            long.length = 32;
+          };
+        };
+      }
+    ];
+    expected = [ "nixos-contracts: tokens claim `a-short`: it is too short." ];
+  };
+
   testCheckRuleReportsFailingClaimsOfEnabledContracts = {
     expr = failures [
       (mkClaimKind {
         name = "tokens";
         description = "Tokens.";
         check =
-          { identity, claim }:
+          { identity, claim, ... }:
           if identity.user == null && claim.length < 32 then
             "a dynamic identity needs at least 32 characters"
           else

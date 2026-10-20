@@ -42,8 +42,12 @@ The name of a root of persistent storage a mount belongs to, such as state or ca
 _Avoid_: Category, tier
 
 **Secret**:
-A runtime credential a service needs. It says what the service reads and who may read it, never where its value comes from or how a backend stores or installs it.
+A runtime credential a service needs. It says what the service reads, who may read it and, when the service makes its own value, which generator makes it, never how a backend stores, shares or installs it.
 _Avoid_: Credential, age secret, key
+
+**Generator**:
+A named way to make a secret's value, such as `alnum`, for a value the service makes on its own rather than one a person or another party provides. A backend adapter provides the generators a secret may name.
+_Avoid_: Generator script, provenance, source
 
 **Delivery**:
 Handing a secret to a dynamic identity's unit, so its daemon reads it from where the unit receives it rather than where the backend installs it. A delivery adapter provides it.

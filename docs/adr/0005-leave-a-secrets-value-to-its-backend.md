@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0006
 ---
 
 # Leave a secret's value to its backend

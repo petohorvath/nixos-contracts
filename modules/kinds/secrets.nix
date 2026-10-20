@@ -5,8 +5,8 @@
   name = "secrets";
   description = ''
     Runtime secrets the service needs, by secret id. A secret says what
-    the service reads and who may read it, never where its value comes
-    from or how a backend stores or installs it.
+    the service reads, who may read it and whether the service makes its
+    own value, never how a backend stores, shares or installs it.
   '';
 
   settings = {
@@ -24,6 +24,19 @@
         location fails.
       '';
     };
+    generators = lib.mkOption {
+      type = lib.types.nullOr (lib.types.listOf lib.types.str);
+      default = null;
+      description = ''
+        The generators a secret's `generate` may name, such as `alnum`.
+        Set by a backend adapter to the generators its backend provides;
+        null when none is imported, which leaves `generate` unchecked.
+      '';
+      example = [
+        "alnum"
+        "hex"
+      ];
+    };
     delivery = lib.mkOption {
       type = lib.types.nullOr (lib.types.functionTo lib.types.str);
       default = null;
@@ -35,12 +48,23 @@
     };
   };
 
-  # A dynamic identity's user exists only while its unit runs, so it reads
-  # a secret the backend installs only through its shared group.
   check =
-    { identity, claim }:
+    {
+      identity,
+      claim,
+      config,
+    }:
+    let
+      inherit (config.contracts.secrets) generators;
+    in
+    # A dynamic identity's user exists only while its unit runs, so it reads
+    # a secret the backend installs only through its shared group.
     if identity.unit != null && !claim.delivered && claim.group != identity.group then
       "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
+    else if
+      claim.generate != null && generators != null && !builtins.elem claim.generate generators
+    then
+      "no adapter provides its generator `${claim.generate}`; name one of `contracts.secrets.generators`"
     else
       null;
 
@@ -72,6 +96,17 @@
           default = lib.defaultTo "root" identity.group;
           defaultText = lib.literalMD "the identity's group, or `root` when it has none";
           description = "The group of the installed secret.";
+        };
+        generate = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = ''
+            The generator that makes the secret's value, such as `alnum`,
+            when the service makes its own value; null when a person or
+            another party provides it. A backend adapter turns it into the
+            backend's generator.
+          '';
+          example = "alnum";
         };
         unit = lib.mkOption {
           type = lib.types.nullOr lib.types.str;

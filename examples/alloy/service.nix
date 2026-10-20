@@ -1,11 +1,6 @@
 # A service module for nixpkgs' alloy, which runs as a dynamic user: its
 # secret reaches the daemon as a systemd credential.
-{
-  config,
-  contractsLib,
-  lib,
-  ...
-}:
+{ config, contractsLib, ... }:
 let
   contract = config.contracts.services.alloy;
 in
@@ -17,11 +12,7 @@ in
       port = 12345;
       addresses = [ "127.0.0.1" ];
     };
-    secrets.loki-password = { };
-  };
-
-  age.secrets = lib.mkIf contract.enable {
-    alloy-loki-password.generator.script = lib.mkDefault "alnum";
+    secrets.loki-password.generate = "alnum";
   };
 
   services.alloy.extraFlags = [
