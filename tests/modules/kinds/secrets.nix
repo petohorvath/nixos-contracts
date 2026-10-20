@@ -147,22 +147,24 @@ in
     };
   };
 
-  testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup = {
-    expr = failures [
-      backendLocation
-      (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
-    ];
-    expected = [
-      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
-    ];
-  };
-
-  testDynamicIdentityCannotReadASecretWithoutABackend = {
-    expr = failures [ (service "svc" { dynamic.unit = "svc.service"; } oneSecret) ];
-    expected = [
-      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
-    ];
-  };
+  testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup =
+    let
+      message = "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group.";
+      undelivered = service "svc" { dynamic.unit = "svc.service"; } oneSecret;
+    in
+    {
+      expr = {
+        installed = failures [
+          backendLocation
+          undelivered
+        ];
+        withoutABackend = failures [ undelivered ];
+      };
+      expected = {
+        installed = [ message ];
+        withoutABackend = [ message ];
+      };
+    };
 
   testReadableSecretsPassTheCheck = {
     expr = {

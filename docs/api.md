@@ -124,7 +124,7 @@ A secret holds no value. Where its value comes from, such as a generator or an e
 - `location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless. Without a backend adapter, it fails with an error naming the missing adapter.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
 
-A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path without a backend adapter, so reading one fails, and a service module that wires a daemon from `path` needs one imported.
+A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path without a backend adapter, so reading one fails, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs one imported.
 
 A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
