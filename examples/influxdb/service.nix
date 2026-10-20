@@ -1,12 +1,8 @@
 # A service module for nixpkgs' influxdb2: it states the contract once, at
-# default priority, names the generator of its admin password on the
-# backend, and wires the daemon from the contract.
-{
-  config,
-  contractsLib,
-  lib,
-  ...
-}:
+# default priority, names the generator of its admin password on the claim,
+# and wires the daemon from the contract. It writes no backend option, so it
+# evaluates with any secret backend.
+{ config, contractsLib, ... }:
 let
   contract = config.contracts.services.influxdb;
 in
@@ -20,13 +16,9 @@ in
       class = "state";
     };
     secrets = {
-      admin-password = { };
+      admin-password.generate = "alnum";
       admin-token = { };
     };
-  };
-
-  age.secrets = lib.mkIf contract.enable {
-    influxdb-admin-password.generator.script = lib.mkDefault "alnum";
   };
 
   services.influxdb2 = {

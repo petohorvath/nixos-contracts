@@ -74,7 +74,7 @@ in
         backend = backends.preservation;
       };
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
-        inherit nixos;
+        inherit contractsLib nixos;
         adapter = self.nixosModules.agenix-rekey;
         backends = agenixRekeyBackends;
       };

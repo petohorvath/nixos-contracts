@@ -37,12 +37,14 @@
     Two claims with the same claim name always clash.
 
   `check`
-  : Optional. The kind's check rule: a function of `{ identity, claim }`,
-    where `identity` is the same resolved identity and `claim` a claim-set
-    entry, returning null when the claim is valid, or a string saying why
-    it is not. Only claims of enabled contracts are checked, and a rejected
-    claim reads "nixos-contracts: <kind> claim `<service>-<id>`: <reason>."
-    in `contracts.failures`.
+  : Optional. The kind's check rule: a function of
+    `{ identity, claim, settings }`, where `identity` is the same resolved
+    identity, `claim` a claim-set entry and `settings` the kind's settings
+    at `contracts.<name>`, returning null when the claim is valid, or a
+    string saying why it is not. Only claims of enabled contracts are
+    checked, and a rejected claim reads
+    "nixos-contracts: <kind> claim `<service>-<id>`: <reason>." in
+    `contracts.failures`.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -163,7 +165,7 @@ else
       map (
         arguments:
         let
-          reason = check arguments;
+          reason = check (arguments // { settings = config.contracts.${kindName}; });
         in
         {
           assertion = reason == null;

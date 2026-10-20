@@ -1,4 +1,5 @@
 {
+  contractsLib,
   nixos,
   adapter,
   backends,
@@ -15,7 +16,7 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns = { };
+          ddns.generate = "base64";
           token = { };
         };
       };
@@ -26,17 +27,15 @@ let
       };
     };
   };
-  # The secrets' values, set on agenix-rekey under each claim name.
+  # The backend's directories, and a value set on agenix-rekey under its
+  # claim name.
   values = {
     age = {
       rekey = {
         secretsDir = ./.;
         generatedSecretsDir = ./generated;
       };
-      secrets = {
-        kea-ddns.generator.script = "base64";
-        alloy-password.rekeyFile = ./agenix-rekey.nix;
-      };
+      secrets.alloy-password.rekeyFile = ./agenix-rekey.nix;
     };
   };
   configuration = modules: evaluate (backends ++ [ adapter ] ++ modules);
@@ -57,7 +56,71 @@ let
   };
 in
 {
-  testSecretTakesItsGeneratorFromTheBackend = {
+  testGeneratorSetOnTheBackendWinsOverTheClaim = {
+    expr =
+      (configuration [
+        services
+        values
+        { age.secrets.kea-ddns.generator.script = "hex"; }
+      ]).age.secrets.kea-ddns.generator.script;
+    expected = "hex";
+  };
+
+  testAdapterProvidesTheBackendsGenerators = {
+    expr =
+      let
+        config = configuration [
+          services
+          values
+          { age.generators.htpasswd = _: "true"; }
+        ];
+      in
+      builtins.filter (generator: !builtins.elem generator config.contracts.secrets.generators) [
+        "alnum"
+        "base64"
+        "htpasswd"
+      ];
+    expected = [ ];
+  };
+
+  testDependenciesSetOnTheBackendKeepTheClaimsGenerator = {
+    expr =
+      (configuration [
+        services
+        values
+        { age.secrets.kea-ddns.generator.dependencies = [ ]; }
+      ]).age.secrets.kea-ddns.generator.script;
+    expected = "base64";
+  };
+
+  testHostRemovesTheGeneratorOfADefaultClaim = {
+    expr =
+      (configuration [
+        values
+        {
+          contracts.services.kea = contractsLib.mkDefaultContract {
+            enable = true;
+            identity.static.user = "kea";
+            secrets.ddns.generate = "alnum";
+          };
+        }
+        { contracts.services.kea.secrets.ddns.generate = null; }
+      ]).age.secrets.kea-ddns.generator;
+    expected = null;
+  };
+
+  testSecretNamingAGeneratorTheBackendLacksFailsItsCheck = {
+    expr = failures [
+      keaWithoutValues
+      values
+      { contracts.services.kea.secrets.ddns.generate = "alnm"; }
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `kea-ddns`: no adapter provides its generator `alnm`; name one of `contracts.secrets.generators`."
+    ];
+  };
+
+  testSecretTakesItsGeneratorFromTheClaim = {
     expr = secretOf "kea-ddns" (configuration [
       services
       values
@@ -97,7 +160,7 @@ in
   testSecretWithoutAFileFailsItsCheck = {
     expr = failures [
       keaWithoutValues
-      { age.secrets.kea-ddns.generator.script = "base64"; }
+      { contracts.services.kea.secrets.ddns.generate = "base64"; }
     ];
     expected = [
       "nixos-contracts: secret `kea-ddns` has no encrypted file: set its `age.secrets.kea-ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
