@@ -52,10 +52,10 @@
     {
       identity,
       claim,
-      config,
+      settings,
     }:
     let
-      inherit (config.contracts.secrets) generators;
+      inherit (settings) generators;
     in
     # A dynamic identity's user exists only while its unit runs, so it reads
     # a secret the backend installs only through its shared group.

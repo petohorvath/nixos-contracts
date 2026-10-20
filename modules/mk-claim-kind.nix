@@ -38,12 +38,13 @@
 
   `check`
   : Optional. The kind's check rule: a function of
-    `{ identity, claim, config }`, where `identity` is the same resolved
-    identity, `claim` a claim-set entry and `config` the top-level
-    configuration, returning null when the claim is valid, or a string
-    saying why it is not. Only claims of enabled contracts are checked, and a rejected
-    claim reads "nixos-contracts: <kind> claim `<service>-<id>`: <reason>."
-    in `contracts.failures`.
+    `{ identity, claim, settings }`, where `identity` is the same resolved
+    identity, `claim` a claim-set entry and `settings` the kind's settings
+    at `contracts.<name>`, returning null when the claim is valid, or a
+    string saying why it is not. Only claims of enabled contracts are
+    checked, and a rejected claim reads
+    "nixos-contracts: <kind> claim `<service>-<id>`: <reason>." in
+    `contracts.failures`.
 
   `settings`
   : Optional. Option declarations placed under `contracts.<name>`.
@@ -164,7 +165,7 @@ else
       map (
         arguments:
         let
-          reason = check (arguments // { inherit config; });
+          reason = check (arguments // { settings = config.contracts.${kindName}; });
         in
         {
           assertion = reason == null;

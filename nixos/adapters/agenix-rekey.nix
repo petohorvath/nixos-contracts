@@ -12,15 +12,14 @@ let
 in
 {
   config = {
-    age.secrets = lib.mapAttrs (
-      _: secret:
-      {
-        inherit (secret) group mode owner;
-      }
-      // lib.optionalAttrs (secret.generate != null) {
-        generator.script = lib.mkDefault secret.generate;
-      }
-    ) secrets;
+    # The script alone is a default, so an entry adding dependencies keeps
+    # it; the claim's `generate = null` is what removes the generator.
+    age.secrets = lib.mapAttrs (_: secret: {
+      inherit (secret) group mode owner;
+      generator = lib.mkIf (secret.generate != null) {
+        script = lib.mkDefault secret.generate;
+      };
+    }) secrets;
 
     contracts = {
       secrets = {

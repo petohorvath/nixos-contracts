@@ -221,8 +221,8 @@ in
           description = "The shortest token allowed.";
         };
         check =
-          { claim, config, ... }:
-          if claim.length < config.contracts.tokens.minimum then "it is too short" else null;
+          { claim, settings, ... }:
+          if claim.length < settings.minimum then "it is too short" else null;
         claim =
           _:
           { lib, ... }:

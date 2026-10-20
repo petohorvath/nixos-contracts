@@ -118,7 +118,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `delivered` | read-only, whether the secret is delivered      | derived  |
 | `path`      | read-only, where the daemon reads the secret    | derived  |
 
-A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Everything else about the value, such as an encrypted file, a value several configurations share or a generator's dependencies, is set on the backend under the `<service>-<id>` claim name, as in `age.secrets.${contract.secrets.htpasswd.name}.generator.dependencies`; a definition there also overrides `generate` ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)).
+A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Everything else about the value, such as an encrypted file, a value several configurations share or a generator's dependencies, is set on the backend under the `<service>-<id>` claim name, as in `age.secrets.${contract.secrets.htpasswd.name}.generator.dependencies` ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A host turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
 
 `contracts.secrets.generators` (list of strings, or null; default null) is the vocabulary `generate` may name. A backend adapter sets it to the generators its backend provides. A check fails for a claim whose `generate` is not in it; while it is null, no backend adapter is imported and `generate` is not checked.
 
@@ -159,7 +159,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. A module sets anything else about the value on that entry, such as a `rekeyFile` or `generator.dependencies`, and a `generator.script` it sets wins over the claim's. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules, and it has no settings.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. A module sets anything else about the value on that entry, such as a `rekeyFile` or `generator.dependencies`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules, and it has no settings.
 
 ### `nixosModules.systemd-credentials`
 
@@ -198,7 +198,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim, config }`, with the same resolved `identity`, a claim-set entry and the top-level configuration, from which the rule reads the kind's settings, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
+: The kind's check rule: a function of `{ identity, claim, settings }`, with the same resolved `identity`, a claim-set entry and the kind's settings at `contracts.<name>`, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.<name>`.

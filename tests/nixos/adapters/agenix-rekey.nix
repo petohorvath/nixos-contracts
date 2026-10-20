@@ -74,12 +74,41 @@ in
           { age.generators.htpasswd = _: "true"; }
         ];
       in
-      builtins.all (generator: builtins.elem generator config.contracts.secrets.generators) [
+      builtins.filter (generator: !builtins.elem generator config.contracts.secrets.generators) [
         "alnum"
         "base64"
         "htpasswd"
       ];
-    expected = true;
+    expected = [ ];
+  };
+
+  testDependenciesSetOnTheBackendKeepTheClaimsGenerator = {
+    expr =
+      (configuration [
+        services
+        values
+        { age.secrets.kea-ddns.generator.dependencies = [ ]; }
+      ]).age.secrets.kea-ddns.generator.script;
+    expected = "base64";
+  };
+
+  testHostRemovesTheGeneratorOfADefaultClaim = {
+    expr =
+      (configuration [
+        values
+        (
+          { lib, ... }:
+          {
+            contracts.services.kea = {
+              enable = true;
+              identity.static.user = "kea";
+              secrets.ddns.generate = lib.mkDefault "alnum";
+            };
+          }
+        )
+        { contracts.services.kea.secrets.ddns.generate = null; }
+      ]).age.secrets.kea-ddns.generator;
+    expected = null;
   };
 
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck = {
