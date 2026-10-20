@@ -41,8 +41,10 @@ in
 {
   testSecretDefaultsToAGroupReadableRootFile = {
     expr =
-      (evaluate [ (service "chrony" { static.user = "chrony"; } oneSecret) ])
-      .contracts.claimSets.secrets.chrony-key;
+      (evaluate [
+        backendLocation
+        (service "chrony" { static.user = "chrony"; } oneSecret)
+      ]).contracts.claimSets.secrets.chrony-key;
     expected = {
       service = "chrony";
       id = "key";
@@ -52,7 +54,7 @@ in
       group = "chrony";
       unit = null;
       delivered = false;
-      path = null;
+      path = "/run/agenix/chrony-key";
     };
   };
 
@@ -106,6 +108,11 @@ in
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.generator' does not exist";
   };
 
+  testSecretPathWithoutABackendFails = {
+    expr = (secretOf [ ] { static.user = "svc"; } { }).path;
+    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`";
+  };
+
   testStaticIdentityReadsTheBackendLocation = {
     expr = (secretOf [ rules ] { static.user = "svc"; } { }).path;
     expected = "/run/agenix/svc-key";
@@ -150,6 +157,13 @@ in
     ];
   };
 
+  testDynamicIdentityCannotReadASecretWithoutABackend = {
+    expr = failures [ (service "svc" { dynamic.unit = "svc.service"; } oneSecret) ];
+    expected = [
+      "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
+    ];
+  };
+
   testReadableSecretsPassTheCheck = {
     expr = {
       sharedGroup = failures [
@@ -169,13 +183,11 @@ in
         backendLocation
         (service "svc" { static.user = "svc"; } oneSecret)
       ];
-      notInstalled = failures [ (service "svc" { dynamic.unit = "svc.service"; } oneSecret) ];
     };
     expected = {
       sharedGroup = [ ];
       delivered = [ ];
       static = [ ];
-      notInstalled = [ ];
     };
   };
 

@@ -11,13 +11,17 @@
 
   settings = {
     location = lib.mkOption {
-      type = lib.types.nullOr (lib.types.functionTo lib.types.str);
-      default = null;
+      type = lib.types.functionTo lib.types.str;
+      default =
+        name:
+        throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.secrets.location`";
+      defaultText = lib.literalMD "a function that fails, naming the missing backend adapter";
       description = ''
         Where the secret backend installs a secret, as a function of
         its `<service>-<id>` name. It must answer for any claim name,
         including claims of disabled contracts, which the backend does not
-        install. Set by a backend adapter; null when none is imported.
+        install. Set by a backend adapter; without one, reading a secret's
+        location fails.
       '';
     };
     delivery = lib.mkOption {
@@ -32,13 +36,10 @@
   };
 
   # A dynamic identity's user exists only while its unit runs, so it reads
-  # a secret the backend installs only through its shared group. An
-  # undelivered claim has a path only when a backend installs it.
+  # a secret the backend installs only through its shared group.
   check =
     { identity, claim }:
-    if
-      identity.unit != null && !claim.delivered && claim.path != null && claim.group != identity.group
-    then
+    if identity.unit != null && !claim.delivered && claim.group != identity.group then
       "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
     else
       null;
@@ -93,7 +94,7 @@
           '';
         };
         path = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
+          type = lib.types.str;
           readOnly = true;
           default =
             if delivered then
@@ -101,15 +102,13 @@
                 inherit unit;
                 name = claimName;
               }
-            else if location != null then
-              location claimName
             else
-              null;
+              location claimName;
           defaultText = lib.literalMD "the location set by the adapters";
           description = ''
             Where the daemon reads the secret: the delivered credential for
             a dynamic identity when a delivery adapter is imported, else the
-            backend's location, or null without adapters.
+            backend's location. Reading it without a backend adapter fails.
           '';
         };
       };

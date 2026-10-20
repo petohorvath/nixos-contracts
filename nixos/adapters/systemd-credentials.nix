@@ -39,22 +39,14 @@ in
   config = {
     contracts.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
 
-    systemd.services = lib.mkIf (location != null) (
-      lib.mkMerge (
-        map (secret: {
-          ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
-            "${secret.name}:${location secret.name}"
-          ];
-        }) delivered
-      )
+    systemd.services = lib.mkMerge (
+      map (secret: {
+        ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
+          "${secret.name}:${location secret.name}"
+        ];
+      }) delivered
     );
 
-    contracts.assertions = [
-      {
-        assertion = delivered == [ ] || location != null;
-        message = "delivering secrets needs a secret backend adapter that sets `contracts.secrets.location`.";
-      }
-    ]
-    ++ lib.concatMap mkUnitAssertions units;
+    contracts.assertions = lib.concatMap mkUnitAssertions units;
   };
 }
