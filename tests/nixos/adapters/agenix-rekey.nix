@@ -15,14 +15,14 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns.provenance.generated = "base64";
-          token.provenance.provided = { };
+          ddns.generator = "base64";
+          token = { };
         };
       };
       alloy = {
         enable = true;
         identity.dynamic.unit = "alloy.service";
-        secrets.password.provenance.provided = { };
+        secrets.password = { };
       };
     };
   };
@@ -84,7 +84,7 @@ in
           contracts.services.kea = {
             enable = true;
             identity.static.user = "kea";
-            secrets.token.provenance.provided = { };
+            secrets.token = { };
           };
         }
       ];
@@ -105,7 +105,7 @@ in
       kea.contracts.services.kea = {
         enable = true;
         identity.static.user = "kea";
-        secrets.token.provenance.provided = { };
+        secrets.token = { };
       };
     in
     {

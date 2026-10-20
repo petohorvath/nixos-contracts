@@ -14,8 +14,8 @@ in
       class = "state";
     };
     secrets = {
-      admin-password.provenance.generated = "alnum";
-      admin-token.provenance.provided = { };
+      admin-password.generator = "alnum";
+      admin-token = { };
     };
   };
 

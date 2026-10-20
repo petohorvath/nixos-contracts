@@ -53,24 +53,13 @@
     in
     {
       options = {
-        provenance = lib.mkOption {
-          type = lib.types.attrTag {
-            provided = lib.mkOption {
-              type = lib.types.submodule { };
-              description = "The value is authored by a person.";
-            };
-            generated = lib.mkOption {
-              type = lib.types.str;
-              description = ''
-                The value is produced by the named generator, which the
-                backend resolves.
-              '';
-              example = "alnum";
-            };
-          };
+        generator = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          example = "alnum";
           description = ''
-            Where the value comes from: exactly one of `provided` or
-            `generated`.
+            The generator that produces the value, which the backend
+            resolves, or null when a person provides the value.
           '';
         };
         mode = lib.mkOption {
