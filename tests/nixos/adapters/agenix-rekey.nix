@@ -2,6 +2,7 @@
   contractsLib,
   lib,
   nixos,
+  contracts,
   adapter,
   backends,
 }:
@@ -222,7 +223,7 @@ in
     ];
   };
 
-  testAdapterHasNoValueSettings = {
+  testAdapterLeavesTheSecretsDirectoriesToTheBackend = {
     expr =
       (configuration [
         keaWithoutValues
@@ -369,6 +370,30 @@ in
     expected = [
       "nixos-contracts: secret `influxdb-local` references `influxdb-missing`, which is no secret claim of an enabled contract."
       "nixos-contracts: secret `influxdb-remote` references `metrics:telegraf-token`, which is no secret claim of an enabled contract."
+    ];
+  };
+
+  testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
+    expr =
+      (configuration [
+        (influxdb {
+          token.from = [
+            {
+              node = "metrics";
+              name = "telegraf-token";
+            }
+          ];
+        })
+        {
+          # The metrics node holds its contracts, but no secret backend.
+          contracts.adapters.agenix-rekey.nodes.metrics.config = nixos.evaluate [
+            contracts
+            telegraf
+          ];
+        }
+      ]).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 

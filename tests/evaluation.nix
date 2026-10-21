@@ -83,6 +83,7 @@ in
       };
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
         inherit contractsLib lib nixos;
+        contracts = self.nixosModules.default;
         adapter = self.nixosModules.agenix-rekey;
         backends = agenixRekeyBackends;
       };

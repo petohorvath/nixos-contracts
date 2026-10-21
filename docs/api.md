@@ -180,7 +180,7 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 `contracts.adapters.agenix-rekey.nodes` (lazy attribute set, default `{ }`)
 : The nodes a reference may name, each with its evaluated `config`, such as nixos-cross-config's node collection. A reference without a node reads this configuration.
 
-The adapter reads a referenced node's claim set before its `age.secrets`, takes the names of its own entries from its own claim set alone, and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. Its checks fail for a reference to a node missing from `nodes`, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. A copy whose reference fails its check gets no `rekeyFile` and no second failure for it.
+The adapter reads a referenced node's claim set before its `age.secrets`, takes the names of its own entries from its own claim set alone, and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. Its checks fail for a reference to a node missing from `nodes`, to a name that is no secret claim of an enabled contract on that node, to a secret with `from` of its own, which also catches two copies referencing each other, and to a secret on a node without this adapter. A copy whose reference fails its check gets no `rekeyFile` and no second failure for it.
 
 ### `nixosModules.systemd-credentials`
 
