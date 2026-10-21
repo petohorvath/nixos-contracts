@@ -1,7 +1,9 @@
-# A service module for nixpkgs' influxdb2 that provisions one write
-# authorization per writer. Each writer's token is a copy of a secret that
-# the writer's own node holds, so influxdb reads it at its own path, with its
-# own group, and never names the backend.
+/*
+  A service module for nixpkgs' influxdb2 that provisions one write
+  authorization per writer. Each writer's token is a copy of a secret that
+  the writer's own node holds, so influxdb reads it at its own path, with its
+  own group, and never names the backend.
+*/
 {
   config,
   contractsLib,

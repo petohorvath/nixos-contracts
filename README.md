@@ -8,7 +8,7 @@ A **contract** describes one service through its **identity** and its **claims**
 
 The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 
-A contract only knows its own configuration. It names no network or firewall policy, and another node only in a secret's reference, the secret on that node its value comes from; fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
+A contract only knows its own configuration. It names no network or firewall policy, and names another node only where a secret references a secret that node holds. Fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
 
 **Adapters** are opt-in NixOS modules that map one claim set onto one backend: preservation for mounts, agenix-rekey for secrets, and systemd credentials for delivering the secrets of a dynamic identity into its unit.
 

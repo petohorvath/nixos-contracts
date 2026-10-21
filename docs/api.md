@@ -182,6 +182,8 @@ Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owne
 
 The adapter reads a referenced node's claim set before its `age.secrets`, takes the names of its own entries from its own claim set alone, and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. Its checks fail for a reference to a node missing from `nodes`, to a name that is no secret claim of an enabled contract on that node, to a secret with `from` of its own, which also catches two copies referencing each other, and to a secret on a node without this adapter. A copy whose reference fails its check gets no `rekeyFile` and no second failure for it.
 
+A generated secret with `from` defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
+
 ### `nixosModules.systemd-credentials`
 
 For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
