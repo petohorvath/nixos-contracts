@@ -25,6 +25,19 @@ let
       { contracts.services.chrony = chrony; }
       host
     ]).contracts.services.chrony;
+
+  evaluateNginx =
+    binds: host:
+    (evaluate [
+      {
+        contracts.services.nginx = mkDefaultContract {
+          enable = true;
+          identity.static.user = "nginx";
+          inherit binds;
+        };
+      }
+      host
+    ]).contracts.services.nginx.binds;
 in
 {
   testWithoutOverridesTheDefaultsApply = {
@@ -103,6 +116,61 @@ in
         { contracts.services.chrony.identity.static.user = "other"; }
       ]).contracts.services.chrony.identity.static.user;
     expected = "chrony";
+  };
+
+  testHostOverridesAFieldOfAConditionalClaim = {
+    expr =
+      let
+        bind =
+          (evaluateNginx { proxyHttp = lib.mkIf true { port = 8080; }; } {
+            contracts.services.nginx.binds.proxyHttp.port = 9090;
+          }).proxyHttp;
+      in
+      {
+        inherit (bind) port protocols;
+      };
+    expected = {
+      port = 9090;
+      protocols = [ "tcp" ];
+    };
+  };
+
+  testHostOverridesAFieldOfAMergedClaim = {
+    expr =
+      (evaluateNginx (lib.mkMerge [
+        { http.port = 80; }
+        { proxyHttp.port = 8080; }
+      ]) { contracts.services.nginx.binds.proxyHttp.port = 9090; }).proxyHttp.port;
+    expected = 9090;
+  };
+
+  testFalseConditionDropsTheClaim = {
+    expr = evaluateNginx { proxyHttp = lib.mkIf false { port = 8080; }; } { };
+    expected = { };
+  };
+
+  testHostOverrideDefinesAClaimWhoseConditionIsFalse = {
+    expr =
+      (evaluateNginx { proxyHttp = lib.mkIf false { port = 8080; }; } {
+        contracts.services.nginx.binds.proxyHttp.port = 9080;
+      }).proxyHttp.port;
+    expected = 9080;
+  };
+
+  testHostOverrideOfAConditionalClaimNeedsItsRequiredFields = {
+    expr =
+      (evaluateNginx { proxyHttp = lib.mkIf false { port = 8080; }; } {
+        contracts.services.nginx.binds.proxyHttp.addresses = "127.0.0.1";
+      }).proxyHttp.port;
+    expectedError.msg = "contracts\\.services\\.nginx\\.binds\\.proxyHttp\\.port";
+  };
+
+  testExplicitPropertiesInAConditionalClaimAreKept = {
+    expr =
+      (evaluateNginx { proxyHttp = lib.mkIf true { port = lib.mkForce 8080; }; } {
+        contracts.services.nginx.binds.proxyHttp.port = 9090;
+      }).proxyHttp.port;
+    expected = 8080;
   };
 
   testLeavesBecomeDefaults = {

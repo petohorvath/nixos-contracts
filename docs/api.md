@@ -171,7 +171,24 @@ Without a backend adapter, its `LoadCredential=` fails to evaluate with the erro
 
 ### `lib.mkDefaultContract`
 
-`mkDefaultContract contract` marks every leaf of a contract definition with `lib.mkDefault`, so a host can override any single field at normal priority. Lists, empty attribute sets and derivations count as leaves, so a host that sets a list replaces it. A value that already carries a module property, such as `lib.mkForce`, is kept as written.
+`mkDefaultContract contract` marks every leaf of a contract definition with `lib.mkDefault`, so a host can override any single field at normal priority. Lists, empty attribute sets and derivations count as leaves, so a host that sets a list replaces it. A value that already carries a module property, such as `lib.mkForce`, is kept as written, except `lib.mkIf` and `lib.mkMerge`, whose contents are marked too.
+
+A service module can therefore hold a claim on a condition, and a host can still override one field of it:
+
+```nix
+# Service module
+contracts.services.nginx = mkDefaultContract {
+  inherit (config.services.nginx) enable;
+  identity.static.user = "nginx";
+  binds.http.port = 80;
+  binds.proxyHttp = lib.mkIf cfg.proxyProtocol.enable { port = 8080; };
+};
+
+# Host
+contracts.services.nginx.binds.proxyHttp.port = 9080;
+```
+
+While the condition is false, the service module defines no `proxyHttp` claim, but a host's override still does: the port alone above makes a complete bind, and an override of a field that is not required, such as `addresses`, fails for the missing `port`. A host guards such an override with the service module's condition.
 
 Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error.
 
