@@ -2,7 +2,11 @@
 let
   defaultLeaves =
     value:
-    if value ? _type then
+    if value._type or null == "if" then
+      value // { content = defaultLeaves value.content; }
+    else if value._type or null == "merge" then
+      value // { contents = map defaultLeaves value.contents; }
+    else if value ? _type then
       value
     else if lib.isAttrs value && value != { } && !(lib.isDerivation value) then
       lib.mapAttrs (_: defaultLeaves) value
@@ -16,8 +20,10 @@ in
 
   Recurses through attribute sets and wraps each leaf in `lib.mkDefault`.
   Lists, empty attribute sets and derivations count as leaves, so a host that
-  sets a list replaces it. A value that already carries a module property,
-  such as `lib.mkForce`, is kept as written.
+  sets a list replaces it. Recurses into the contents of `lib.mkIf` and
+  `lib.mkMerge` too, so a claim held on a condition stays overridable field
+  by field. Any other value that already carries a module property, such as
+  `lib.mkForce`, is kept as written.
 
   # Inputs
 

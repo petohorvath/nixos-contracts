@@ -105,6 +105,77 @@ in
     expected = "chrony";
   };
 
+  testHostOverridesAFieldOfAConditionalClaim = {
+    expr =
+      let
+        bind =
+          (evaluate [
+            {
+              contracts.services.nginx = mkDefaultContract {
+                enable = true;
+                identity.static.user = "nginx";
+                binds.proxy = lib.mkIf true { port = 8080; };
+              };
+            }
+            { contracts.services.nginx.binds.proxy.port = 9090; }
+          ]).contracts.services.nginx.binds.proxy;
+      in
+      {
+        inherit (bind) port protocols;
+      };
+    expected = {
+      port = 9090;
+      protocols = [ "tcp" ];
+    };
+  };
+
+  testHostOverridesAFieldOfAMergedClaim = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.nginx = mkDefaultContract {
+            enable = true;
+            identity.static.user = "nginx";
+            binds = lib.mkMerge [
+              { http.port = 80; }
+              { proxy.port = 8080; }
+            ];
+          };
+        }
+        { contracts.services.nginx.binds.proxy.port = 9090; }
+      ]).contracts.services.nginx.binds.proxy.port;
+    expected = 9090;
+  };
+
+  testFalseConditionDropsTheClaim = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.nginx = mkDefaultContract {
+            enable = true;
+            identity.static.user = "nginx";
+            binds.proxy = lib.mkIf false { port = 8080; };
+          };
+        }
+      ]).contracts.services.nginx.binds;
+    expected = { };
+  };
+
+  testExplicitPropertiesInAConditionalClaimAreKept = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.nginx = mkDefaultContract {
+            enable = true;
+            identity.static.user = "nginx";
+            binds.proxy = lib.mkIf true { port = lib.mkForce 8080; };
+          };
+        }
+        { contracts.services.nginx.binds.proxy.port = 9090; }
+      ]).contracts.services.nginx.binds.proxy.port;
+    expected = 8080;
+  };
+
   testLeavesBecomeDefaults = {
     expr = mkDefaultContract {
       enable = true;
