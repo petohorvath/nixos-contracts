@@ -2,11 +2,14 @@
 let
   defaultLeaves =
     value:
-    if value._type or null == "if" then
+    let
+      type = value._type or null;
+    in
+    if type == "if" then
       value // { content = defaultLeaves value.content; }
-    else if value._type or null == "merge" then
+    else if type == "merge" then
       value // { contents = map defaultLeaves value.contents; }
-    else if value ? _type then
+    else if type != null then
       value
     else if lib.isAttrs value && value != { } && !(lib.isDerivation value) then
       lib.mapAttrs (_: defaultLeaves) value
