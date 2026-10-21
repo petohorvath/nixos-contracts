@@ -8,17 +8,95 @@
 */
 { config, lib, ... }:
 let
+  cfg = config.contracts.adapters.agenix-rekey;
   secrets = config.contracts.claimSets.secrets;
+
+  isCopy = secret: secret.generate == null && secret.from != [ ];
+
+  configOf = reference: if reference.node == null then config else cfg.nodes.${reference.node}.config;
+  knowsNode = reference: reference.node == null || cfg.nodes ? ${reference.node};
+  labelOf =
+    reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
+
+  # The claim a reference names, or null.
+  targetOf =
+    reference:
+    if knowsNode reference then
+      (configOf reference).contracts.claimSets.secrets.${reference.name} or null
+    else
+      null;
+
+  /*
+    The backend entry a reference names, or null when a check below rejects
+    the reference, so the check reports it rather than a missing attribute.
+    It reads the claim before the entry and does not follow a claim with
+    `from` of its own, so two copies referencing each other fail their
+    checks instead of recursing.
+  */
+  resolve =
+    reference:
+    let
+      target = targetOf reference;
+    in
+    if target == null || target.from != [ ] then
+      null
+    else
+      (configOf reference).age.secrets.${reference.name};
+
+  referenceAssertions =
+    secret: reference:
+    let
+      target = targetOf reference;
+    in
+    [
+      {
+        assertion = knowsNode reference;
+        message = "secret `${secret.name}` references node `${toString reference.node}`, which is not in `contracts.adapters.agenix-rekey.nodes`.";
+      }
+      {
+        assertion = !knowsNode reference || target != null;
+        message = "secret `${secret.name}` references `${labelOf reference}`, which is no secret claim of an enabled contract.";
+      }
+      {
+        assertion = target == null || target.from == [ ];
+        message = "secret `${secret.name}` references `${labelOf reference}`, which references secrets itself; reference a secret without `from`.";
+      }
+    ];
 in
 {
+  options.contracts.adapters.agenix-rekey.nodes = lib.mkOption {
+    type = lib.types.lazyAttrsOf lib.types.raw;
+    default = { };
+    description = ''
+      The nodes a secret's `from` may name, each with its evaluated
+      `config`, such as nixos-cross-config's node collection.
+    '';
+  };
+
   config = {
-    # The script alone is a default, so an entry adding dependencies keeps
-    # it; the claim's `generate = null` is what removes the generator.
+    /*
+      The script alone is a default, so an entry adding dependencies keeps
+      it; the claim's `generate = null` is what removes the generator. The
+      entries' names come from the claim set alone: one depending on another
+      node's entries would recurse through `age.secrets`.
+    */
     age.secrets = lib.mapAttrs (_: secret: {
       inherit (secret) group mode owner;
       generator = lib.mkIf (secret.generate != null) {
         script = lib.mkDefault secret.generate;
+        dependencies = lib.mkIf (secret.from != [ ]) (
+          lib.filter (entry: entry != null) (map resolve secret.from)
+        );
       };
+      # A copy reads the encrypted file of the one secret it references.
+      rekeyFile = lib.mkIf (isCopy secret) (
+        lib.mkDefault (
+          let
+            entry = resolve (lib.head secret.from);
+          in
+          if entry == null then null else entry.rekeyFile
+        )
+      );
     }) secrets;
 
     contracts = {
@@ -31,12 +109,19 @@ in
         location = name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
       };
 
-      # Reads the final file, which agenix-rekey defaults from its
-      # `generatedSecretsDir` or `secretsDir`.
-      assertions = lib.mapAttrsToList (name: _: {
-        assertion = config.age.secrets.${name}.rekeyFile != null;
-        message = "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
-      }) secrets;
+      /*
+        Reads the final file, which agenix-rekey defaults from its
+        `generatedSecretsDir` or `secretsDir`. A copy whose reference fails
+        its check has no file either, which that check reports.
+      */
+      assertions =
+        lib.mapAttrsToList (name: _: {
+          assertion = config.age.secrets.${name}.rekeyFile != null;
+          message = "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
+        }) (lib.filterAttrs (_: secret: !(isCopy secret) || resolve (lib.head secret.from) != null) secrets)
+        ++ lib.concatLists (
+          lib.mapAttrsToList (_: secret: lib.concatMap (referenceAssertions secret) secret.from) secrets
+        );
     };
   };
 }

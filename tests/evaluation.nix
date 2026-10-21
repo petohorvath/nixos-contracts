@@ -59,6 +59,14 @@ in
           system
           ;
       };
+      sharedToken = import ../examples/shared-token {
+        inherit
+          backends
+          exports
+          nixpkgs
+          system
+          ;
+      };
       customKind = import ../examples/custom-kind { inherit exports lib; };
     };
   };
@@ -74,7 +82,7 @@ in
         backend = backends.preservation;
       };
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
-        inherit contractsLib nixos;
+        inherit contractsLib lib nixos;
         adapter = self.nixosModules.agenix-rekey;
         backends = agenixRekeyBackends;
       };

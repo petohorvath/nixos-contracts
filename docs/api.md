@@ -114,11 +114,27 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `owner`     | an account name                                 | `"root"` |
 | `group`     | a group name                                    | derived  |
 | `generate`  | a generator name, or null                       | `null`   |
+| `from`      | a list of references                            | `[ ]`    |
 | `unit`      | read-only, the dynamic identity's unit, or null | derived  |
 | `delivered` | read-only, whether the secret is delivered      | derived  |
 | `path`      | read-only, where the daemon reads the secret    | derived  |
 
-A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Everything else about the value, such as an encrypted file, a value several configurations share or a generator's dependencies, is set on the backend under the `<service>-<id>` claim name, as in `age.secrets.${contract.secrets.htpasswd.name}.generator.dependencies` ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A host turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
+A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A host turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
+
+`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)). A reference is a claim name, for a secret of this configuration, or `{ node; name; }`, for one another configuration holds:
+
+```nix
+# A copy of a token the `metrics` node generates
+secrets.writer-token.from = [ { node = "metrics"; name = "telegraf-token"; } ];
+
+# An htpasswd file the generator makes from two clients' passwords
+secrets.htpasswd = {
+  generate = "basic-auth";
+  from = [ { node = "grafana"; name = "grafana-loki-password"; } "alloy-loki-password" ];
+};
+```
+
+Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A backend adapter resolves the references, and its checks reject one it cannot resolve. A check fails for a claim that references several secrets without a `generate`. `from` is a list, so a host that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
 `contracts.secrets.generators` (list of strings, or null; default null) is the vocabulary `generate` may name. A backend adapter sets it to the generators its backend provides. A check fails for a claim whose `generate` is not in it; while it is null, no backend adapter is imported and `generate` is not checked.
 
@@ -159,7 +175,12 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. A module sets anything else about the value on that entry, such as a `rekeyFile` or `generator.dependencies`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules, and it has no settings.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. A claim's `from` becomes the entry's `rekeyFile` at default priority for a copy, the `rekeyFile` of the entry it references, and `generator.dependencies` for a generated secret, the entries it references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+
+`contracts.adapters.agenix-rekey.nodes` (lazy attribute set, default `{ }`)
+: The nodes a reference may name, each with its evaluated `config`, such as nixos-cross-config's node collection. A reference without a node reads this configuration.
+
+The adapter reads a referenced node's claim set before its `age.secrets`, takes the names of its own entries from its own claim set alone, and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. Its checks fail for a reference to a node missing from `nodes`, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. A copy whose reference fails its check gets no `rekeyFile` and no second failure for it.
 
 ### `nixosModules.systemd-credentials`
 
