@@ -49,6 +49,7 @@ let
     secret: reference:
     let
       known = nodeConfigOrNull reference != null;
+      withContracts = known && nodeConfigOrNull reference ? contracts.claimSets.secrets;
       claim = claimOrNull reference;
       references = "secret `${secret.name}` references `${labelOf reference}`";
     in
@@ -58,7 +59,11 @@ let
         message = "secret `${secret.name}` references node `${toString reference.node}`, which is not in `contracts.adapters.agenix-rekey.nodes`.";
       }
       {
-        assertion = !known || claim != null;
+        assertion = !known || withContracts;
+        message = "${references}, whose node imports no nixos-contracts module.";
+      }
+      {
+        assertion = !withContracts || claim != null;
         message = "${references}, which is no secret claim of an enabled contract.";
       }
       {
@@ -110,13 +115,21 @@ in
         location = name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
       };
 
-      # Reads the final file, which agenix-rekey defaults from its
-      # `generatedSecretsDir` or `secretsDir`. A copy whose reference fails
-      # its check has no file either, which that check reports.
+      /*
+        Reads the final file, which agenix-rekey defaults from its
+        `generatedSecretsDir` or `secretsDir`, and a copy from the secret it
+        references, so a copy's message names that secret. A copy whose
+        reference fails its check has no file either, which that check
+        reports.
+      */
       assertions =
-        lib.mapAttrsToList (name: _: {
+        lib.mapAttrsToList (name: secret: {
           assertion = config.age.secrets.${name}.rekeyFile != null;
-          message = "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
+          message =
+            if isCopy secret then
+              "secret `${name}` copies `${labelOf (lib.head secret.from)}`, which has no encrypted file: give it one on its node, or set `age.secrets.${name}.rekeyFile`."
+            else
+              "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
         }) (lib.filterAttrs (_: secret: !(isCopy secret) || copiedEntryOrNull secret != null) secrets)
         ++ lib.concatLists (
           lib.mapAttrsToList (_: secret: lib.concatMap (referenceAssertions secret) secret.from) secrets

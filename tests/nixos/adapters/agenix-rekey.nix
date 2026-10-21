@@ -428,6 +428,49 @@ in
     ];
   };
 
+  testReferenceToANodeWithoutContractsFailsItsCheck = {
+    expr =
+      (configuration [
+        (influxdb {
+          token.from = [
+            {
+              node = "metrics";
+              name = "telegraf-token";
+            }
+          ];
+        })
+        {
+          # The metrics node imports no nixos-contracts module at all.
+          contracts.adapters.agenix-rekey.nodes.metrics.config = nixos.evaluate [ ];
+        }
+      ]).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, whose node imports no nixos-contracts module."
+    ];
+  };
+
+  testCopyOfASecretWithoutAFileNamesTheSecretItReferences = {
+    expr =
+      (configuration [
+        (influxdb {
+          token.from = [
+            {
+              node = "metrics";
+              name = "telegraf-token";
+            }
+          ];
+        })
+        {
+          # The metrics node sets no secrets directories, so its token has
+          # no encrypted file.
+          contracts.adapters.agenix-rekey.nodes.metrics.config = configuration [ telegraf ];
+        }
+      ]).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb-token` copies `metrics:telegraf-token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb-token.rekeyFile`."
+    ];
+  };
+
   testReferenceToASecretWithReferencesFailsItsCheck = {
     expr =
       (nodesOf {
