@@ -50,7 +50,7 @@ let
     let
       known = nodeConfigOrNull reference != null;
       claim = claimOrNull reference;
-      label = labelOf reference;
+      references = "secret `${secret.name}` references `${labelOf reference}`";
     in
     [
       {
@@ -59,15 +59,15 @@ let
       }
       {
         assertion = !known || claim != null;
-        message = "secret `${secret.name}` references `${label}`, which is no secret claim of an enabled contract.";
+        message = "${references}, which is no secret claim of an enabled contract.";
       }
       {
         assertion = claim == null || claim.from == [ ];
-        message = "secret `${secret.name}` references `${label}`, which references secrets itself; reference a secret without `from`.";
+        message = "${references}, which references secrets itself; reference a secret without `from`.";
       }
       {
         assertion = claim == null || claim.from != [ ] || entryOrNull reference != null;
-        message = "secret `${secret.name}` references `${label}`, whose node has no `nixosModules.agenix-rekey`.";
+        message = "${references}, whose node has no `nixosModules.agenix-rekey`.";
       }
     ];
 in
@@ -97,14 +97,7 @@ in
         );
       };
       # A copy reads the encrypted file of the one secret it references.
-      rekeyFile = lib.mkIf (isCopy secret) (
-        lib.mkDefault (
-          let
-            entry = copiedEntryOrNull secret;
-          in
-          if entry == null then null else entry.rekeyFile
-        )
-      );
+      rekeyFile = lib.mkIf (isCopy secret) (lib.mkDefault (copiedEntryOrNull secret).rekeyFile or null);
     }) secrets;
 
     contracts = {

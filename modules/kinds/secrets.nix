@@ -135,7 +135,7 @@ in
           default = [ ];
           description = ''
             The secrets the value comes from, each a claim name, or
-            `{ node; name; }` for a secret another configuration holds.
+            `{ node; name; }` for a secret another node holds.
             Without `generate`, the secret is a copy of the one secret it
             references; with it, the generator makes the value from the
             secrets it references. A backend adapter resolves them.

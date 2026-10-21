@@ -284,6 +284,37 @@ in
     };
   };
 
+  testCopyReferencingItsOwnNodeByNameReadsThisConfiguration =
+    let
+      inherit
+        ((nodesOf {
+          store = [
+            (influxdb {
+              origin.generate = "alnum";
+              copy.from = [
+                {
+                  node = "store";
+                  name = "influxdb-origin";
+                }
+              ];
+            })
+          ];
+        }).store
+        )
+        config
+        ;
+    in
+    {
+      expr = {
+        inherit (config.age.secrets.influxdb-copy) rekeyFile;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        rekeyFile = ./generated/store/influxdb-origin.age;
+        failures = [ ];
+      };
+    };
+
   testGeneratorMakesTheValueFromTheSecretsItReferences = {
     expr =
       let
