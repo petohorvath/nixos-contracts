@@ -46,11 +46,11 @@ A runtime credential a service needs. It says what the service reads, who may re
 _Avoid_: Credential, age secret, key
 
 **Reference**:
-A secret's pointer to a secret its value comes from: that secret's claim name, and its node when it is held by another configuration. A secret without a generator is a copy of the one secret it references; a generator makes a secret's value from the secrets it references.
+A secret's pointer to a secret its value comes from: that secret's claim name, and its node when another node holds it. A secret without a generator is a copy of the one secret it references; a generator makes a secret's value from the secrets it references.
 _Avoid_: Handle, link, dependency, source
 
 **Node**:
-Another NixOS configuration evaluated beside this one, named as a reference names it. Only an adapter resolves a node.
+One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names another node by its name, which only an adapter resolves.
 _Avoid_: Host, machine, peer
 
 **Generator**:

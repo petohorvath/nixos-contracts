@@ -104,7 +104,7 @@ in
         generators = lib.attrNames config.age.generators;
 
         # Claims of disabled contracts have no `age.secrets` entry, so they
-        # take agenix's default path, which an entry keeps unless a host
+        # take agenix's default path, which an entry keeps unless a node
         # overrides it.
         location = name: config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
       };

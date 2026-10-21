@@ -147,7 +147,7 @@ in
     expected = [ "kea-token" ];
   };
 
-  testHostRemovesTheGeneratorOfADefaultClaim = {
+  testNodeRemovesTheGeneratorOfADefaultClaim = {
     expr =
       (configuration [
         values

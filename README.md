@@ -72,7 +72,7 @@ in
 }
 ```
 
-A host that differs overrides one field at normal priority, and the rest of the contract stays in place:
+A node that differs overrides one field at normal priority, and the rest of the contract stays in place:
 
 ```nix
 contracts.services.chrony.binds.ntp.addresses = [ "127.0.0.1" ];
