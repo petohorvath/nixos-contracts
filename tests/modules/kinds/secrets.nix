@@ -285,7 +285,7 @@ in
         backendLocation
         { contracts.kinds.secrets.location = name: "/run/secrets/${name}"; }
       ] { static.user = "svc"; } { }).path;
-    expectedError.msg = "contracts\\.kinds\\.secrets\\.location' is defined multiple times while it's expected to be unique\\.\nA configuration imports one secret backend adapter";
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.location'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
 
   testSecondBackendGeneratorsFail = {
@@ -295,7 +295,7 @@ in
       { contracts.kinds.secrets.generators = [ "hex" ]; }
       (service "svc" { static.user = "svc"; } { key.generate = "hex"; })
     ];
-    expectedError.msg = "contracts\\.kinds\\.secrets\\.generators' is defined multiple times while it's expected to be unique\\.\nA configuration imports one secret backend adapter";
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.generators'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
 
   testSecondDeliveryFails = {
@@ -304,7 +304,7 @@ in
         rules
         { contracts.kinds.secrets.delivery = { unit, name }: "/run/keys/${unit}/${name}"; }
       ] { dynamic.unit = "svc.service"; } { }).path;
-    expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery' is defined multiple times while it's expected to be unique\\.\nA configuration imports one delivery adapter";
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery'[^\n]*\nA configuration imports one delivery adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
 
   testNodeForcesTheBackendLocation = {

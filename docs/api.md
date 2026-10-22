@@ -147,7 +147,7 @@ Without `generate`, the secret is a copy of the one secret it references: it rea
 - `location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless. Without a backend adapter, it fails with an error naming the missing adapter.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
 
-A configuration imports at most one backend adapter and one delivery adapter: a second definition of `location`, `generators` or `delivery` fails to evaluate, naming both, unless one is set with `lib.mkForce`.
+A configuration imports at most one backend adapter and one delivery adapter: a second definition of `location`, `generators` or `delivery` fails once the option is read, naming both, unless the definitions differ in priority, such as through `lib.mkForce`.
 
 A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path without a backend adapter, so reading one fails, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs one imported.
 
