@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0009
 ---
 
 # Describe a helper daemon as its own service

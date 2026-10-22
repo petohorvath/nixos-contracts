@@ -67,6 +67,7 @@ in
           system
           ;
       };
+      exporter = import ../examples/exporter { inherit exports nixpkgs system; };
       customKind = import ../examples/custom-kind { inherit exports lib; };
     };
   };
