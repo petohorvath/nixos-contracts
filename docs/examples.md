@@ -13,11 +13,11 @@ The NixOS examples take:
 
 The [service module](../examples/influxdb/service.nix) wraps nixpkgs' `services.influxdb2`. It writes the contract through `mkDefaultContract`: the static user `influxdb2`, a bind on port 8086, the mount `/var/lib/influxdb2` under the class `state`, and an admin password and an admin token. Its password claim names the `alnum` generator, while a person provides the token. It writes no backend option, so it evaluates with any secret backend. It then wires the daemon from the contract: the bind's bindpoint becomes `http-bind-address` and the secret claims' `path` become the provisioning files.
 
-The [host](../examples/influxdb/host.nix) declares the `state` class, maps it to `/persist/state` for the preservation adapter, sets agenix-rekey's directories for provided and generated secrets, and narrows the bind to `127.0.0.1` with one field override.
+The [node](../examples/influxdb/node.nix) declares the `state` class, maps it to `/persist/state` for the preservation adapter, sets agenix-rekey's directories for provided and generated secrets, and narrows the bind to `127.0.0.1` with one field override.
 
 The [example](../examples/influxdb/default.nix) imports both adapters with their backends. Its result shows:
 
-- `bindAddress`: `127.0.0.1:8086`, the host's address with the service module's port.
+- `bindAddress`: `127.0.0.1:8086`, the node's address with the service module's port.
 - `preserved`: `/var/lib/influxdb2`, owned by `influxdb2:influxdb2` with mode `0700`, under `/persist/state`.
 - `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim, `influxdb-admin-password.age` in the generated secrets directory and `influxdb-admin-token.age` in the secrets directory.
 - `initialSetup`: the daemon reads both from `/run/agenix/<service>-<id>`.
@@ -35,6 +35,17 @@ The [example](../examples/alloy/default.nix) imports the agenix-rekey and system
 - `loadCredential`: the unit loads it as `alloy-loki-password`.
 - `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy-loki-password`.
 - `failures`: none, since the unit exists and sets `DynamicUser`.
+
+## shared-token: one value on two nodes
+
+A [telegraf module](../examples/shared-token/telegraf.nix) generates the token its node writes metrics with. An [influxdb module](../examples/shared-token/influxdb.nix) provisions one write authorization per writer, and declares each writer's token as a copy that references the writer's node and claim name. It reads the copy at its own `path` and writes no backend option.
+
+The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given the collection at `contracts.adapters.agenix-rekey.nodes`. The store node names the writer `telegraf-metrics`, a reference that nixos-cross-config would carry in a fleet. Its result shows:
+
+- `copy`: the store installs the token root-owned with its own group `influxdb2` and mode `0440`, from the metrics node's encrypted file, `metrics/telegraf-token.age`, without a generator of its own.
+- `original`: the metrics node's file is the same one.
+- `auths`: the authorization reads `/run/agenix/influxdb-writer-telegraf-metrics`.
+- `failures`: none on either node.
 
 ## custom-kind: a claim kind of a project's own
 

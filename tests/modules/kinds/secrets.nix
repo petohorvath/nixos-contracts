@@ -53,6 +53,7 @@ in
       owner = "root";
       group = "chrony";
       generate = null;
+      from = [ ];
       unit = null;
       delivered = false;
       path = "/run/agenix/chrony-key";
@@ -135,6 +136,56 @@ in
         ];
         provided = [ ];
         withoutAVocabulary = [ ];
+      };
+    };
+
+  testSecretReferenceByClaimNameNamesThisConfiguration = {
+    expr =
+      (secretOf [ ] { static.user = "svc"; } {
+        from = [
+          "svc-other"
+          {
+            node = "metrics";
+            name = "telegraf-token";
+          }
+        ];
+      }).from;
+    expected = [
+      {
+        node = null;
+        name = "svc-other";
+      }
+      {
+        node = "metrics";
+        name = "telegraf-token";
+      }
+    ];
+  };
+
+  testSecretReferencingSeveralSecretsNeedsAGenerator =
+    let
+      referencing =
+        secret:
+        service "svc" { static.user = "svc"; } {
+          key = {
+            from = [
+              "svc-a"
+              "svc-b"
+            ];
+          }
+          // secret;
+        };
+    in
+    {
+      expr = {
+        copy = failures [ (referencing { }) ];
+        generated = failures [ (referencing { generate = "basic-auth"; }) ];
+      };
+      expected = {
+        copy = [
+          "nixos-contracts: secrets claim `svc-key`: it references several secrets but has no `generate`; a copy references one."
+        ];
+        generated = [ ];
       };
     };
 

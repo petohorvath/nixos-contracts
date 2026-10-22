@@ -22,7 +22,7 @@ let
       exports.nixosModules.preservation
       exports.nixosModules.agenix-rekey
       ./service.nix
-      ./host.nix
+      ./node.nix
       {
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";

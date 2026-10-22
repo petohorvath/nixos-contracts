@@ -1,6 +1,26 @@
 # The arguments of `mkClaimKind` for secrets: what a service needs to read at
 # runtime and must keep private.
 { lib }:
+let
+  # A claim name alone references a secret of this configuration.
+  referenceType = lib.types.coercedTo lib.types.str (name: { inherit name; }) (
+    lib.types.submodule {
+      options = {
+        node = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = ''
+            The node holding the secret, or null for this configuration.
+          '';
+        };
+        name = lib.mkOption {
+          type = lib.types.str;
+          description = "The secret's claim name, `<service>-<id>`.";
+        };
+      };
+    }
+  );
+in
 {
   name = "secrets";
   description = ''
@@ -65,6 +85,8 @@
       claim.generate != null && generators != null && !builtins.elem claim.generate generators
     then
       "no adapter provides its generator `${claim.generate}`; name one of `contracts.secrets.generators`"
+    else if claim.generate == null && builtins.length claim.from > 1 then
+      "it references several secrets but has no `generate`; a copy references one"
     else
       null;
 
@@ -107,6 +129,23 @@
             backend's generator.
           '';
           example = "alnum";
+        };
+        from = lib.mkOption {
+          type = lib.types.listOf referenceType;
+          default = [ ];
+          description = ''
+            The secrets the value comes from, each a claim name, or
+            `{ node; name; }` for a secret another node holds.
+            Without `generate`, the secret is a copy of the one secret it
+            references; with it, the generator makes the value from the
+            secrets it references. A backend adapter resolves them.
+          '';
+          example = [
+            {
+              node = "metrics";
+              name = "telegraf-token";
+            }
+          ];
         };
         unit = lib.mkOption {
           type = lib.types.nullOr lib.types.str;

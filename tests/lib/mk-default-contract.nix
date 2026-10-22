@@ -20,14 +20,14 @@ let
     };
   };
   evaluateChrony =
-    host:
+    node:
     (evaluate [
       { contracts.services.chrony = chrony; }
-      host
+      node
     ]).contracts.services.chrony;
 
   evaluateNginx =
-    binds: host:
+    binds: node:
     (evaluate [
       {
         contracts.services.nginx = mkDefaultContract {
@@ -36,7 +36,7 @@ let
           inherit binds;
         };
       }
-      host
+      node
     ]).contracts.services.nginx.binds;
 in
 {
@@ -59,7 +59,7 @@ in
     };
   };
 
-  testHostOverridesOneFieldAndKeepsItsSiblings = {
+  testNodeOverridesOneFieldAndKeepsItsSiblings = {
     expr =
       let
         bind = (evaluateChrony { contracts.services.chrony.binds.ntp.port = 1123; }).binds.ntp;
@@ -73,14 +73,14 @@ in
     };
   };
 
-  testHostListReplacesTheDefaultList = {
+  testNodeListReplacesTheDefaultList = {
     expr =
       (evaluateChrony { contracts.services.chrony.binds.ntp.addresses = [ "127.0.0.1" ]; })
       .binds.ntp.addresses;
     expected = [ "127.0.0.1" ];
   };
 
-  testHostOverridesTheIdentityTagFields = {
+  testNodeOverridesTheIdentityTagFields = {
     expr = (evaluateChrony { contracts.services.chrony.identity.static.group = "time"; }).identity;
     expected.static = {
       user = "chrony";
@@ -118,7 +118,7 @@ in
     expected = "chrony";
   };
 
-  testHostOverridesAFieldOfAConditionalClaim = {
+  testNodeOverridesAFieldOfAConditionalClaim = {
     expr =
       let
         bind =
@@ -135,7 +135,7 @@ in
     };
   };
 
-  testHostOverridesAFieldOfAMergedClaim = {
+  testNodeOverridesAFieldOfAMergedClaim = {
     expr =
       (evaluateNginx (lib.mkMerge [
         { http.port = 80; }
@@ -149,7 +149,7 @@ in
     expected = { };
   };
 
-  testHostOverrideDefinesAClaimWhoseConditionIsFalse = {
+  testNodeOverrideDefinesAClaimWhoseConditionIsFalse = {
     expr =
       (evaluateNginx { proxyHttp = lib.mkIf false { port = 8080; }; } {
         contracts.services.nginx.binds.proxyHttp.port = 9080;
@@ -157,7 +157,7 @@ in
     expected = 9080;
   };
 
-  testHostOverrideOfAConditionalClaimNeedsItsRequiredFields = {
+  testNodeOverrideOfAConditionalClaimNeedsItsRequiredFields = {
     expr =
       (evaluateNginx { proxyHttp = lib.mkIf false { port = 8080; }; } {
         contracts.services.nginx.binds.proxyHttp.addresses = "127.0.0.1";

@@ -53,6 +53,25 @@
     };
   };
 
+  testSharedTokenExampleCopiesAnotherNodesSecret = {
+    expr = examples.sharedToken.result;
+    expected = {
+      copy = {
+        owner = "root";
+        group = "influxdb2";
+        mode = "0440";
+        rekeyFile = "metrics/telegraf-token.age";
+        generator = null;
+      };
+      original = "metrics/telegraf-token.age";
+      auths.telegraf-metrics = "/run/agenix/influxdb-writer-telegraf-metrics";
+      failures = {
+        metrics = [ ];
+        store = [ ];
+      };
+    };
+  };
+
   testCustomKindExampleFoldsAndClashes = {
     expr = examples.customKind.result;
     expected = {

@@ -5,7 +5,7 @@ A service contract describes what a service on one NixOS configuration runs as, 
 ## Language
 
 **Contract**:
-A typed, writable description of one service's identity and claims within one configuration. It names no fleet concept, such as a network or another node, and holds none of the service's own settings.
+A typed, writable description of one service's identity and claims within one configuration. It names no fleet concept, such as a network, except the node of a reference, and holds none of the service's own settings.
 _Avoid_: Manifest, interface, surface
 
 **Service**:
@@ -42,8 +42,16 @@ The name of a root of persistent storage a mount belongs to, such as state or ca
 _Avoid_: Category, tier
 
 **Secret**:
-A runtime credential a service needs. It says what the service reads, who may read it and, when the service makes its own value, which generator makes it, never how a backend stores, shares or installs it.
+A runtime credential a service needs. It says what the service reads, who may read it, which generator makes its value when the service makes its own, and which secrets its value comes from, never how a backend stores, shares or installs it.
 _Avoid_: Credential, age secret, key
+
+**Reference**:
+A secret's pointer to a secret its value comes from: that secret's claim name, and its node when another node holds it. A secret without a generator is a copy of the one secret it references; a generator makes a secret's value from the secrets it references.
+_Avoid_: Handle, link, dependency, source
+
+**Node**:
+One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its name, which only an adapter resolves.
+_Avoid_: Host, machine, peer
 
 **Generator**:
 A named way to make a secret's value, such as `alnum`, for a value the service makes on its own rather than one a person or another party provides. A backend adapter provides the generators a secret may name.

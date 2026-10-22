@@ -17,12 +17,12 @@ let
       lib.mkDefault value;
 in
 /**
-  Mark every value of a contract definition as a default, so a host can
+  Mark every value of a contract definition as a default, so a node can
   override any single field at normal priority while the rest of the
   definition stays in place.
 
   Recurses through attribute sets and wraps each leaf in `lib.mkDefault`.
-  Lists, empty attribute sets and derivations count as leaves, so a host that
+  Lists, empty attribute sets and derivations count as leaves, so a node that
   sets a list replaces it. Recurses into the contents of `lib.mkIf` and
   `lib.mkMerge` too, so a claim held on a condition stays overridable field
   by field. Any other value that already carries a module property, such as

@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0007
 ---
 
 # Mark a secret the service generates
