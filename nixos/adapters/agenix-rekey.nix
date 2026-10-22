@@ -106,7 +106,7 @@ in
     }) secrets;
 
     contracts = {
-      secrets = {
+      kinds.secrets = {
         generators = lib.attrNames config.age.generators;
 
         # Claims of disabled contracts have no `age.secrets` entry, so they

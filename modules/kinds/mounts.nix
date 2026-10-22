@@ -35,7 +35,7 @@ in
     { identity, config, ... }:
     let
       # Read before the claim's own `config` shadows the top-level one.
-      inherit (config.contracts.mounts) classes;
+      inherit (config.contracts.kinds.mounts) classes;
     in
     { config, ... }:
     {
@@ -52,7 +52,7 @@ in
           type = lib.types.enum classes;
           description = ''
             The class of storage the path belongs to, one of
-            `contracts.mounts.classes`.
+            `contracts.kinds.mounts.classes`.
           '';
           example = "state";
         };

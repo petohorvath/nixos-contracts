@@ -32,8 +32,8 @@ let
       {
         options = {
           engine = lib.mkOption {
-            type = lib.types.enum config.contracts.databases.engines;
-            default = builtins.head config.contracts.databases.engines;
+            type = lib.types.enum config.contracts.kinds.databases.engines;
+            default = builtins.head config.contracts.kinds.databases.engines;
             description = "The database engine.";
           };
           database = lib.mkOption {
@@ -123,7 +123,7 @@ in
   };
 
   testCustomKindDeclaresItsSettings = {
-    expr = (evaluate [ databases ]).contracts.databases.engines;
+    expr = (evaluate [ databases ]).contracts.kinds.databases.engines;
     expected = [ "postgresql" ];
   };
 
@@ -266,7 +266,7 @@ in
           };
       })
       {
-        contracts.tokens.minimum = 32;
+        contracts.kinds.tokens.minimum = 32;
         contracts.services.a = {
           enable = true;
           identity.static.user = "a";
@@ -357,22 +357,37 @@ in
     expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
   };
 
-  testFailuresKindNameIsRejected = {
-    expr = mkClaimKind {
-      name = "failures";
-      description = "Clashes with the failed checks.";
-      claim = _: { };
+  testKindMayTakeANameOfTheContractsRoot = {
+    expr =
+      let
+        config = evaluate [
+          (mkClaimKind {
+            name = "services";
+            description = "Services the service depends on.";
+            settings.limit = lib.mkOption {
+              type = lib.types.int;
+              default = 3;
+              description = "A setting of the kind's own.";
+            };
+            claim = _: { };
+          })
+          {
+            contracts.services.a = {
+              enable = true;
+              identity.static.user = "a";
+              services.b = { };
+            };
+          }
+        ];
+      in
+      {
+        claimNames = builtins.attrNames config.contracts.claimSets.services;
+        inherit (config.contracts.kinds.services) limit;
+      };
+    expected = {
+      claimNames = [ "a-b" ];
+      limit = 3;
     };
-    expectedError.msg = "claim kind name `failures` is reserved; choose another name";
-  };
-
-  testReservedKindNamesAreRejected = {
-    expr = mkClaimKind {
-      name = "services";
-      description = "Clashes with the contracts root.";
-      claim = _: { };
-    };
-    expectedError.msg = "claim kind name `services` is reserved; choose another name";
   };
 
   testEnableKindNameIsRejected = {
@@ -381,7 +396,7 @@ in
       description = "Clashes with the contract's enable.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `enable` is reserved; choose another name";
+    expectedError.msg = "claim kind name `enable` is reserved for the contract's own `enable` field; choose another name";
   };
 
   testIdentityKindNameIsRejected = {
@@ -390,6 +405,6 @@ in
       description = "Clashes with the contract's identity.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `identity` is reserved; choose another name";
+    expectedError.msg = "claim kind name `identity` is reserved for the contract's own `identity` field; choose another name";
   };
 }

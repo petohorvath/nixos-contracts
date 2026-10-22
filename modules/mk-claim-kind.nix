@@ -12,9 +12,8 @@
   `name`
   : The kind's name. It becomes the field `contracts.services.<service>.<name>`,
     the claim set `contracts.claimSets.<name>` and the settings root
-    `contracts.<name>`. `services`, `claimSets`, `assertions`, `failures` and
-    `adapters` are reserved, and so are the contract's own fields `enable` and
-    `identity`.
+    `contracts.kinds.<name>`. The contract's own fields `enable` and
+    `identity` are reserved.
 
   `description`
   : Description of the contract field holding this kind's claims.
@@ -41,14 +40,14 @@
   : Optional. The kind's check rule: a function of
     `{ identity, claim, settings }`, where `identity` is the same resolved
     identity, `claim` a claim-set entry and `settings` the kind's settings
-    at `contracts.<name>`, returning null when the claim is valid, or a
+    at `contracts.kinds.<name>`, returning null when the claim is valid, or a
     string saying why it is not. Only claims of enabled contracts are
     checked, and a rejected claim reads
     "nixos-contracts: <kind> claim `<service>-<id>`: <reason>." in
     `contracts.failures`.
 
   `settings`
-  : Optional. Option declarations placed under `contracts.<name>`.
+  : Optional. Option declarations placed under `contracts.kinds.<name>`.
 
   # Output
 
@@ -76,14 +75,10 @@
 }:
 let
   kindName = name;
+  # A kind's claims sit beside the contract's own fields.
   reservedNames = [
-    "adapters"
-    "assertions"
-    "claimSets"
     "enable"
-    "failures"
     "identity"
-    "services"
   ];
   # A claim's claim name, which keys its claim set.
   toClaimName = service: id: "${service}-${id}";
@@ -111,7 +106,7 @@ let
       };
 in
 if builtins.elem kindName reservedNames then
-  throw "nixos-contracts: claim kind name `${kindName}` is reserved; choose another name"
+  throw "nixos-contracts: claim kind name `${kindName}` is reserved for the contract's own `${kindName}` field; choose another name"
 else
   { config, lib, ... }:
   let
@@ -168,7 +163,7 @@ else
       map (
         arguments:
         let
-          reason = check (arguments // { settings = config.contracts.${kindName}; });
+          reason = check (arguments // { settings = config.contracts.kinds.${kindName}; });
         in
         {
           assertion = reason == null;
@@ -251,7 +246,7 @@ else
         '';
       };
 
-      ${kindName} = settings;
+      kinds.${kindName} = settings;
     };
 
     config.contracts.assertions = nameAssertions ++ clashAssertions ++ checkAssertions;

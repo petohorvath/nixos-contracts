@@ -27,7 +27,7 @@ contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
 contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name read-only
 contracts.claimSets.<kind>.<service>-<id>    read-only
-contracts.<kind>.*                           kind settings
+contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
 contracts.failures                           read-only, messages of failed checks
@@ -53,6 +53,10 @@ A contract has no other fields. A service's own settings stay in the service mod
 ### `contracts.claimSets.<kind>`
 
 A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
+
+### `contracts.kinds.<kind>`
+
+The settings of one claim kind, such as `contracts.kinds.mounts.classes`, as the kind declares them. A node writes some, such as the mount classes, and adapters others, such as the secrets' `location`. They sit under `kinds` rather than at the root, so a kind may take any name but the contract's own fields ([ADR 0008](adr/0008-keep-kind-settings-under-contracts-kinds.md)).
 
 ### `contracts.assertions`
 
@@ -91,16 +95,16 @@ Two binds clash when they share a protocol, their ports or ranges overlap, and s
 
 `contracts.services.<service>.mounts.<id>`: a path whose contents must survive.
 
-| Field   | Type                               | Default     |
-| ------- | ---------------------------------- | ----------- |
-| `path`  | an absolute path outside the store | required    |
-| `class` | one of `contracts.mounts.classes`  | required    |
-| `type`  | `directory` or `file`              | `directory` |
-| `mode`  | a mode string                      | `"0700"`    |
-| `owner` | an account name                    | derived     |
-| `group` | a group name                       | derived     |
+| Field   | Type                                    | Default     |
+| ------- | --------------------------------------- | ----------- |
+| `path`  | an absolute path outside the store      | required    |
+| `class` | one of `contracts.kinds.mounts.classes` | required    |
+| `type`  | `directory` or `file`                   | `directory` |
+| `mode`  | a mode string                           | `"0700"`    |
+| `owner` | an account name                         | derived     |
+| `group` | a group name                            | derived     |
 
-`contracts.mounts.classes` (list of strings, default `[ ]`) declares the classes mounts may name, such as `state` or `cache`. A mount naming an undeclared class fails to evaluate. Where a class physically lives is up to an adapter.
+`contracts.kinds.mounts.classes` (list of strings, default `[ ]`) declares the classes mounts may name, such as `state` or `cache`. A mount naming an undeclared class fails to evaluate. Where a class physically lives is up to an adapter.
 
 Two mounts clash when their paths are equal, ignoring a trailing slash. Nested paths do not clash.
 
@@ -136,9 +140,9 @@ secrets.htpasswd = {
 
 Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A backend adapter resolves the references, and its checks reject one it cannot resolve. A check fails for a claim that references several secrets without a `generate`. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
-`contracts.secrets.generators` (list of strings, or null; default null) is the vocabulary `generate` may name. A backend adapter sets it to the generators its backend provides. A check fails for a claim whose `generate` is not in it; while it is null, no backend adapter is imported and `generate` is not checked.
+`contracts.kinds.secrets.generators` (list of strings, or null; default null) is the vocabulary `generate` may name. A backend adapter sets it to the generators its backend provides. A check fails for a claim whose `generate` is not in it; while it is null, no backend adapter is imported and `generate` is not checked.
 
-`path` is computed from two rules that adapters set under `contracts.secrets`:
+`path` is computed from two rules that adapters set under `contracts.kinds.secrets`:
 
 - `location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless. Without a backend adapter, it fails with an error naming the missing adapter.
 - `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
@@ -175,7 +179,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.kinds.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.kinds.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 `contracts.adapters.agenix-rekey.nodes` (lazy attribute set, default `{ }`)
 : The nodes a reference may name, each with its evaluated `config`, such as nixos-cross-config's node collection. A reference without a node reads this configuration.
@@ -186,9 +190,9 @@ A generated secret with `from` defines its entry's `generator.dependencies` as a
 
 ### `nixosModules.systemd-credentials`
 
-For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.kinds.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.kinds.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Without a backend adapter, its `LoadCredential=` fails to evaluate with the error of `contracts.secrets.location`. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Without a backend adapter, its `LoadCredential=` fails to evaluate with the error of `contracts.kinds.secrets.location`. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 
@@ -226,7 +230,7 @@ To use it without the flake, import the library directory with a caller-owned li
 `mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
-: The kind's name: the contract field, the claim set and the settings root. `services`, `claimSets`, `assertions`, `failures` and `adapters` are reserved, and so are the contract's own fields `enable` and `identity`.
+: The kind's name: the contract field, the claim set and the settings root. The contract's own fields `enable` and `identity` are reserved.
 
 `description`
 : The description of the contract field.
@@ -238,10 +242,10 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim, settings }`, with the same resolved `identity`, a claim-set entry and the kind's settings at `contracts.<name>`, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
+: The kind's check rule: a function of `{ identity, claim, settings }`, with the same resolved `identity`, a claim-set entry and the kind's settings at `contracts.kinds.<name>`, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
-: Option declarations placed under `contracts.<name>`.
+: Option declarations placed under `contracts.kinds.<name>`.
 
 ```nix
 mkClaimKind {
