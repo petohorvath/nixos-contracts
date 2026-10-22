@@ -3,7 +3,7 @@ let
   inherit (contracts) evaluate failures;
 
   classes = {
-    contracts.mounts.classes = [
+    contracts.kinds.mounts.classes = [
       "state"
       "cache"
     ];

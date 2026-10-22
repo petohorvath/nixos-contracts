@@ -34,7 +34,7 @@ in
       type = lib.types.functionTo lib.types.str;
       default =
         name:
-        throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.secrets.location`";
+        throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.location`";
       defaultText = lib.literalMD "a function that fails, naming the missing backend adapter";
       description = ''
         Where the secret backend installs a secret, as a function of
@@ -84,7 +84,7 @@ in
     else if
       claim.generate != null && generators != null && !builtins.elem claim.generate generators
     then
-      "no adapter provides its generator `${claim.generate}`; name one of `contracts.secrets.generators`"
+      "no adapter provides its generator `${claim.generate}`; name one of `contracts.kinds.secrets.generators`"
     else if claim.generate == null && builtins.length claim.from > 1 then
       "it references several secrets but has no `generate`; a copy references one"
     else
@@ -94,7 +94,7 @@ in
     { identity, config, ... }:
     { claimName, ... }:
     let
-      inherit (config.contracts.secrets) delivery location;
+      inherit (config.contracts.kinds.secrets) delivery location;
       inherit (identity) unit;
       delivered = unit != null && delivery != null;
     in

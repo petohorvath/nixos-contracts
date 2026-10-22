@@ -26,7 +26,7 @@ let
       secrets.key = { };
     };
   };
-  location.contracts.secrets.location = name: "/run/agenix/${name}";
+  location.contracts.kinds.secrets.location = name: "/run/agenix/${name}";
 in
 {
   testDynamicIdentitySecretIsLoadedIntoItsUnit = {

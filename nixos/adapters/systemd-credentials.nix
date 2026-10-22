@@ -6,7 +6,7 @@
 */
 { config, lib, ... }:
 let
-  inherit (config.contracts.secrets) location;
+  inherit (config.contracts.kinds.secrets) location;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
@@ -37,7 +37,7 @@ let
 in
 {
   config = {
-    contracts.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
 
     systemd.services = lib.mkMerge (
       map (secret: {

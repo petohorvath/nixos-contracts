@@ -51,7 +51,7 @@ let
 in
 {
   # Usually declared once per configuration, beside the adapters.
-  contracts.mounts.classes = [ "state" ];
+  contracts.kinds.mounts.classes = [ "state" ];
 
   contracts.services.chrony = mkDefaultContract {
     enable = config.services.chrony.enable;

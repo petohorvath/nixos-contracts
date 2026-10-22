@@ -32,10 +32,10 @@ let
     {
       inherit (claim) owner group;
     };
-  backendLocation.contracts.secrets.location = name: "/run/agenix/${name}";
+  backendLocation.contracts.kinds.secrets.location = name: "/run/agenix/${name}";
   rules = {
     imports = [ backendLocation ];
-    contracts.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
   };
 in
 {
@@ -112,7 +112,7 @@ in
 
   testSecretNamingAGeneratorNoAdapterProvidesFailsItsCheck =
     let
-      generators.contracts.secrets.generators = [
+      generators.contracts.kinds.secrets.generators = [
         "alnum"
         "hex"
       ];
@@ -132,7 +132,7 @@ in
       };
       expected = {
         unknown = [
-          "nixos-contracts: secrets claim `svc-key`: no adapter provides its generator `alnm`; name one of `contracts.secrets.generators`."
+          "nixos-contracts: secrets claim `svc-key`: no adapter provides its generator `alnm`; name one of `contracts.kinds.secrets.generators`."
         ];
         provided = [ ];
         withoutAVocabulary = [ ];
@@ -196,7 +196,7 @@ in
 
   testSecretPathWithoutABackendFails = {
     expr = (secretOf [ ] { static.user = "svc"; } { }).path;
-    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`";
+    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.location`";
   };
 
   testStaticIdentityReadsTheBackendLocation = {

@@ -112,7 +112,7 @@ in
           { age.generators.htpasswd = _: "true"; }
         ];
       in
-      builtins.filter (generator: !builtins.elem generator config.contracts.secrets.generators) [
+      builtins.filter (generator: !builtins.elem generator config.contracts.kinds.secrets.generators) [
         "alnum"
         "base64"
         "htpasswd"
@@ -171,7 +171,7 @@ in
       { contracts.services.kea.secrets.ddns.generate = "alnm"; }
     ];
     expected = [
-      "nixos-contracts: secrets claim `kea-ddns`: no adapter provides its generator `alnm`; name one of `contracts.secrets.generators`."
+      "nixos-contracts: secrets claim `kea-ddns`: no adapter provides its generator `alnm`; name one of `contracts.kinds.secrets.generators`."
     ];
   };
 

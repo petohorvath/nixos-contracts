@@ -8,7 +8,7 @@ let
   inherit (nixos) evaluate failures;
 
   influxdb = {
-    contracts.mounts.classes = [
+    contracts.kinds.mounts.classes = [
       "state"
       "cache"
     ];
@@ -105,7 +105,7 @@ in
       adapter
       influxdb
       roots
-      { contracts.mounts.classes = [ "archive" ]; }
+      { contracts.kinds.mounts.classes = [ "archive" ]; }
     ];
     expected = [ ];
   };
