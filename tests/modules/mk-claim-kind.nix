@@ -363,7 +363,7 @@ in
       description = "Clashes with the failed checks.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `failures` is reserved";
+    expectedError.msg = "claim kind name `failures` is reserved; choose another name";
   };
 
   testReservedKindNamesAreRejected = {
@@ -372,7 +372,7 @@ in
       description = "Clashes with the contracts root.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `services` is reserved";
+    expectedError.msg = "claim kind name `services` is reserved; choose another name";
   };
 
   testEnableKindNameIsRejected = {
@@ -381,7 +381,7 @@ in
       description = "Clashes with the contract's enable.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `enable` is reserved";
+    expectedError.msg = "claim kind name `enable` is reserved; choose another name";
   };
 
   testIdentityKindNameIsRejected = {
@@ -390,6 +390,6 @@ in
       description = "Clashes with the contract's identity.";
       claim = _: { };
     };
-    expectedError.msg = "claim kind name `identity` is reserved";
+    expectedError.msg = "claim kind name `identity` is reserved; choose another name";
   };
 }

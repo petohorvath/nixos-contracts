@@ -111,7 +111,7 @@ let
       };
 in
 if builtins.elem kindName reservedNames then
-  throw "nixos-contracts: claim kind name `${kindName}` is reserved"
+  throw "nixos-contracts: claim kind name `${kindName}` is reserved; choose another name"
 else
   { config, lib, ... }:
   let
