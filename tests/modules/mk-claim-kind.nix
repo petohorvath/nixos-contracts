@@ -206,7 +206,39 @@ in
       }
     ];
     expected = [
-      "nixos-contracts: tokens claims `b-c` of `a` and `c` of `a-b` share the name `a-b-c`."
+      "nixos-contracts: tokens claims `b-c` of `a` and `c` of `a-b` share the claim name `a-b-c`, since a claim name joins its service and id with `-`; give all but one of them another id."
+    ];
+  };
+
+  testThreeClaimsSharingANameFailOneCheck = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        claim = _: { };
+      })
+      {
+        contracts.services = {
+          a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.b-c-d = { };
+          };
+          a-b = {
+            enable = true;
+            identity.static.user = "ab";
+            tokens.c-d = { };
+          };
+          a-b-c = {
+            enable = true;
+            identity.static.user = "abc";
+            tokens.d = { };
+          };
+        };
+      }
+    ];
+    expected = [
+      "nixos-contracts: tokens claims `b-c-d` of `a` and `c-d` of `a-b` and `d` of `a-b-c` share the claim name `a-b-c-d`, since a claim name joins its service and id with `-`; give all but one of them another id."
     ];
   };
 

@@ -136,7 +136,7 @@ else
           assertion = builtins.length group == 1;
           message = "${kindName} claims ${
             lib.concatMapStringsSep " and " (entry: "`${entry.id}` of `${entry.service}`") group
-          } share the name `${name}`.";
+          } share the claim name `${name}`, since a claim name joins its service and id with `-`; give all but one of them another id.";
         }
       ))
     ];
