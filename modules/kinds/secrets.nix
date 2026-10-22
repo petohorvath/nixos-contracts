@@ -20,6 +20,15 @@ let
       };
     }
   );
+
+  # A second adapter's definition fails, naming both, rather than merging
+  # with the first, as two backends' generator lists otherwise would.
+  setByOneBackendAdapter = lib.types.unique {
+    message = "A configuration imports one secret backend adapter, which sets `location` and `generators`.";
+  };
+  setByOneDeliveryAdapter = lib.types.unique {
+    message = "A configuration imports one delivery adapter, which sets `delivery`.";
+  };
 in
 {
   name = "secrets";
@@ -31,7 +40,7 @@ in
 
   settings = {
     location = lib.mkOption {
-      type = lib.types.functionTo lib.types.str;
+      type = setByOneBackendAdapter (lib.types.functionTo lib.types.str);
       default =
         name:
         throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.location`";
@@ -45,7 +54,7 @@ in
       '';
     };
     generators = lib.mkOption {
-      type = lib.types.nullOr (lib.types.listOf lib.types.str);
+      type = setByOneBackendAdapter (lib.types.nullOr (lib.types.listOf lib.types.str));
       default = null;
       description = ''
         The generators a secret's `generate` may name, such as `alnum`.
@@ -58,7 +67,7 @@ in
       ];
     };
     delivery = lib.mkOption {
-      type = lib.types.nullOr (lib.types.functionTo lib.types.str);
+      type = setByOneDeliveryAdapter (lib.types.nullOr (lib.types.functionTo lib.types.str));
       default = null;
       description = ''
         Where a dynamic identity's unit reads a delivered secret, as a

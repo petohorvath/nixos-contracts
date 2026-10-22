@@ -279,6 +279,48 @@ in
     };
   };
 
+  testSecondBackendLocationFails = {
+    expr =
+      (secretOf [
+        backendLocation
+        { contracts.kinds.secrets.location = name: "/run/secrets/${name}"; }
+      ] { static.user = "svc"; } { }).path;
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.location'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
+  };
+
+  testSecondBackendGeneratorsFail = {
+    expr = failures [
+      backendLocation
+      { contracts.kinds.secrets.generators = [ "alnum" ]; }
+      { contracts.kinds.secrets.generators = [ "hex" ]; }
+      (service "svc" { static.user = "svc"; } { key.generate = "hex"; })
+    ];
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.generators'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
+  };
+
+  testSecondDeliveryFails = {
+    expr =
+      (secretOf [
+        rules
+        { contracts.kinds.secrets.delivery = { unit, name }: "/run/keys/${unit}/${name}"; }
+      ] { dynamic.unit = "svc.service"; } { }).path;
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery'[^\n]*\nA configuration imports one delivery adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
+  };
+
+  testNodeForcesTheBackendLocation = {
+    expr =
+      (secretOf [
+        backendLocation
+        (
+          { lib, ... }:
+          {
+            contracts.kinds.secrets.location = lib.mkForce (name: "/run/secrets/${name}");
+          }
+        )
+      ] { static.user = "svc"; } { }).path;
+    expected = "/run/secrets/svc-key";
+  };
+
   testSecretPathIsReadOnly = {
     expr =
       (evaluate [
