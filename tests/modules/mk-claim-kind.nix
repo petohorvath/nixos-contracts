@@ -374,4 +374,22 @@ in
     };
     expectedError.msg = "claim kind name `services` is reserved";
   };
+
+  testEnableKindNameIsRejected = {
+    expr = mkClaimKind {
+      name = "enable";
+      description = "Clashes with the contract's enable.";
+      claim = _: { };
+    };
+    expectedError.msg = "claim kind name `enable` is reserved";
+  };
+
+  testIdentityKindNameIsRejected = {
+    expr = mkClaimKind {
+      name = "identity";
+      description = "Clashes with the contract's identity.";
+      claim = _: { };
+    };
+    expectedError.msg = "claim kind name `identity` is reserved";
+  };
 }

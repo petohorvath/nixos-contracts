@@ -13,7 +13,8 @@
   : The kind's name. It becomes the field `contracts.services.<service>.<name>`,
     the claim set `contracts.claimSets.<name>` and the settings root
     `contracts.<name>`. `services`, `claimSets`, `assertions`, `failures` and
-    `adapters` are reserved.
+    `adapters` are reserved, and so are the contract's own fields `enable` and
+    `identity`.
 
   `description`
   : Description of the contract field holding this kind's claims.
@@ -79,7 +80,9 @@ let
     "adapters"
     "assertions"
     "claimSets"
+    "enable"
     "failures"
+    "identity"
     "services"
   ];
   # A claim's claim name, which keys its claim set.
