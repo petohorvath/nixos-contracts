@@ -279,6 +279,48 @@ in
     };
   };
 
+  testSecondBackendLocationFails = {
+    expr =
+      (secretOf [
+        backendLocation
+        { contracts.kinds.secrets.location = name: "/run/secrets/${name}"; }
+      ] { static.user = "svc"; } { }).path;
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.location' is defined multiple times while it's expected to be unique\\.\nA configuration imports one secret backend adapter";
+  };
+
+  testSecondBackendGeneratorsFail = {
+    expr = failures [
+      backendLocation
+      { contracts.kinds.secrets.generators = [ "alnum" ]; }
+      { contracts.kinds.secrets.generators = [ "hex" ]; }
+      (service "svc" { static.user = "svc"; } { key.generate = "hex"; })
+    ];
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.generators' is defined multiple times while it's expected to be unique\\.\nA configuration imports one secret backend adapter";
+  };
+
+  testSecondDeliveryFails = {
+    expr =
+      (secretOf [
+        rules
+        { contracts.kinds.secrets.delivery = { unit, name }: "/run/keys/${unit}/${name}"; }
+      ] { dynamic.unit = "svc.service"; } { }).path;
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery' is defined multiple times while it's expected to be unique\\.\nA configuration imports one delivery adapter";
+  };
+
+  testNodeForcesTheBackendLocation = {
+    expr =
+      (secretOf [
+        backendLocation
+        (
+          { lib, ... }:
+          {
+            contracts.kinds.secrets.location = lib.mkForce (name: "/run/secrets/${name}");
+          }
+        )
+      ] { static.user = "svc"; } { }).path;
+    expected = "/run/secrets/svc-key";
+  };
+
   testSecretPathIsReadOnly = {
     expr =
       (evaluate [
