@@ -13,7 +13,8 @@
   : The kind's name. It becomes the field `contracts.services.<service>.<name>`,
     the claim set `contracts.claimSets.<name>` and the settings root
     `contracts.<name>`. `services`, `claimSets`, `assertions`, `failures` and
-    `adapters` are reserved.
+    `adapters` are reserved, and so are the contract's own fields `enable` and
+    `identity`.
 
   `description`
   : Description of the contract field holding this kind's claims.
@@ -79,7 +80,9 @@ let
     "adapters"
     "assertions"
     "claimSets"
+    "enable"
     "failures"
+    "identity"
     "services"
   ];
   # A claim's claim name, which keys its claim set.
@@ -108,7 +111,7 @@ let
       };
 in
 if builtins.elem kindName reservedNames then
-  throw "nixos-contracts: claim kind name `${kindName}` is reserved"
+  throw "nixos-contracts: claim kind name `${kindName}` is reserved; choose another name"
 else
   { config, lib, ... }:
   let
@@ -136,7 +139,7 @@ else
           assertion = builtins.length group == 1;
           message = "${kindName} claims ${
             lib.concatMapStringsSep " and " (entry: "`${entry.id}` of `${entry.service}`") group
-          } share the name `${name}`.";
+          } share the claim name `${name}`, since a claim name joins its service and id with `-`; give all but one of them another id.";
         }
       ))
     ];
