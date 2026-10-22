@@ -48,7 +48,9 @@ One contract per service, keyed by the service's name.
 
 The identity must match what the daemon actually becomes, which is not always the unit's `User=`: chrony's unit starts as root and the daemon drops to `chrony` itself.
 
-A contract has no other fields. A service's own settings stay in the service module's namespace, and a helper daemon such as an exporter gets a contract of its own ([ADR 0002](adr/0002-describe-a-helper-daemon-as-its-own-service.md)).
+A contract has no other fields. A service's own settings stay in the service module's namespace, and a helper daemon such as an exporter gets a contract of its own ([ADR 0009](adr/0009-hold-a-claim-on-the-contract-of-the-process-that-reads-it.md)).
+
+Several modules may define one contract, and the module system merges their claims by id. A feature of a service, such as an output that needs a token, adds its claims to the service's contract from its own module, derived from or conditioned on its own settings. A `lib.mkIf` that wraps a whole contract and reads `contracts.*` recurses, since the set of contracts then depends on itself, while one at a claim does not.
 
 ### `contracts.claimSets.<kind>`
 

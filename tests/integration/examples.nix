@@ -40,13 +40,13 @@
     expr = examples.alloy.result;
     expected = {
       listenFlags = [ "--server.http.listen-addr=127.0.0.1:12345" ];
-      passwordFile = "/run/credentials/alloy.service/alloy-loki-password";
-      loadCredential = [ "alloy-loki-password:/run/agenix/alloy-loki-password" ];
+      passwordFile = "/run/credentials/alloy.service/alloy-loki-main-password";
+      loadCredential = [ "alloy-loki-main-password:/run/agenix/alloy-loki-main-password" ];
       installed = {
         owner = "root";
         group = "root";
         mode = "0440";
-        path = "/run/agenix/alloy-loki-password";
+        path = "/run/agenix/alloy-loki-main-password";
         generator = "alnum";
       };
       failures = [ ];
@@ -69,6 +69,28 @@
         metrics = [ ];
         store = [ ];
       };
+    };
+  };
+
+  testExporterExampleHoldsTheHelpersBindOnItsOwnContract = {
+    expr = examples.exporter.result;
+    expected = {
+      binds = {
+        chrony-ntp = [ "0.0.0.0:123" ];
+        chrony-exporter-metrics = [ "127.0.0.1:9123" ];
+      };
+      identities = {
+        chrony.static = {
+          user = "chrony";
+          group = null;
+        };
+        chrony-exporter.static = {
+          user = "chrony";
+          group = null;
+        };
+      };
+      exporterListen = "127.0.0.1:9123";
+      failures = [ ];
     };
   };
 

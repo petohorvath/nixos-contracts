@@ -106,7 +106,7 @@ With the adapters imported, the same contract also persists `/var/lib/chrony` an
 }
 ```
 
-The [examples](docs/examples.md) show complete contracts for nixpkgs' influxdb2 and alloy, a token shared between two nodes, and a claim kind of a project's own. The [API reference](docs/api.md) describes every option, the ownership rules, the clash rules and how to define a claim kind.
+The [examples](docs/examples.md) show complete contracts for nixpkgs' influxdb2, alloy and chrony with its exporter, a token shared between two nodes, and a claim kind of a project's own. The [API reference](docs/api.md) describes every option, the ownership rules, the clash rules and how to define a claim kind.
 
 ## Related projects
 

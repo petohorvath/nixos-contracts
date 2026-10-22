@@ -27,14 +27,29 @@ The encrypted files are not part of the example, since an evaluation only refers
 
 ## alloy: a dynamic identity with a delivered secret
 
-The [service module](../examples/alloy/service.nix) wraps nixpkgs' `services.alloy`, which runs with `DynamicUser`. Its contract names the unit `alloy.service`, a loopback bind on port 12345 and a Loki password whose claim names the `alnum` generator, and the daemon's configuration reads the password from the claim's `path`.
+The [service module](../examples/alloy/service.nix) wraps nixpkgs' `services.alloy`, which runs with `DynamicUser`. Its contract names the unit `alloy.service` and a loopback bind on port 12345, and holds no secret.
 
-The [example](../examples/alloy/default.nix) imports the agenix-rekey and systemd-credentials adapters. Its result shows:
+A [Loki module](../examples/alloy/loki.nix) ships alloy's logs to the Loki instances its `example.alloy.loki.instances` names. alloy's own process reads each instance's password, so the module adds one secret per instance to alloy's contract, each naming the `alnum` generator, and the daemon's configuration reads each password from its claim's `path`.
 
-- `installed`: agenix-rekey installs the secret root-owned at `/run/agenix/alloy-loki-password`, since a dynamic user has no account to own it.
-- `loadCredential`: the unit loads it as `alloy-loki-password`.
-- `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy-loki-password`.
+The [example](../examples/alloy/default.nix) names one instance, `main`, and imports the agenix-rekey and systemd-credentials adapters. Its result shows:
+
+- `installed`: agenix-rekey installs the secret root-owned at `/run/agenix/alloy-loki-main-password`, since a dynamic user has no account to own it.
+- `loadCredential`: the unit loads it as `alloy-loki-main-password`.
+- `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy-loki-main-password`.
 - `failures`: none, since the unit exists and sets `DynamicUser`.
+
+## exporter: a helper daemon as a service of its own
+
+The [chrony module](../examples/exporter/chrony.nix) wraps nixpkgs' `services.chrony` with a contract of the static user `chrony` and a UDP bind on port 123. It never mentions the exporter.
+
+The [exporter module](../examples/exporter/exporter.nix) wraps nixpkgs' chrony exporter, a helper with a process of its own, in a contract named `chrony-exporter`. The contract takes its identity from the exporter's own `user`, which nixpkgs sets to `chrony` so the exporter can read chronyd's socket. The exporter listens at the address and port of the contract's loopback bind.
+
+The [example](../examples/exporter/default.nix) enables both with only `nixosModules.default`, since neither holds a mount or a secret. Its result shows:
+
+- `binds`: `chrony-ntp` at `0.0.0.0:123`, and the exporter's own claim, `chrony-exporter-metrics`, at `127.0.0.1:9123`.
+- `identities`: both contracts run as `chrony`, each stating it.
+- `exporterListen`: `127.0.0.1:9123`, from the exporter's bind.
+- `failures`: none.
 
 ## shared-token: one value on two nodes
 
