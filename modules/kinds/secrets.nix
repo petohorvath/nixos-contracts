@@ -21,14 +21,31 @@ let
     }
   );
 
-  # A second adapter's definition fails, naming both, rather than merging
-  # with the first, as two backends' generator lists otherwise would.
-  setByOneBackendAdapter = lib.types.unique {
-    message = "A configuration imports one secret backend adapter, which sets `location` and `generators`.";
-  };
-  setByOneDeliveryAdapter = lib.types.unique {
-    message = "A configuration imports one delivery adapter, which sets `delivery`.";
-  };
+  # `types.unique` turns into `types.uniq`, losing its message, when the
+  # module system substitutes the submodules of an option it wraps.
+  uniqueWithSubmodules =
+    message: type:
+    lib.types.unique { inherit message; } type
+    // {
+      substSubModules = modules: uniqueWithSubmodules message (type.substSubModules modules);
+    };
+
+  /*
+    A slot holds the data of one adapter, or null when none is imported.
+    A second adapter's definition fails, naming both, rather than merging
+    with the first, so one backend sets both its location and generators.
+  */
+  mkAdapterSlot =
+    {
+      message,
+      options,
+      description,
+    }:
+    lib.mkOption {
+      type = uniqueWithSubmodules message (lib.types.nullOr (lib.types.submodule { inherit options; }));
+      default = null;
+      inherit description;
+    };
 in
 {
   name = "secrets";
@@ -39,41 +56,49 @@ in
   '';
 
   settings = {
-    location = lib.mkOption {
-      type = setByOneBackendAdapter (lib.types.functionTo lib.types.str);
-      default =
-        name:
-        throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.location`";
-      defaultText = lib.literalMD "a function that fails, naming the missing backend adapter";
+    backend = mkAdapterSlot {
+      message = "A configuration imports one secret backend adapter, which sets `backend`.";
       description = ''
-        Where the secret backend installs a secret, as a function of
-        its `<service>-<id>` name. It must answer for any claim name,
-        including claims of disabled contracts, which the backend does not
-        install. Set by a backend adapter; without one, reading a secret's
-        location fails.
+        The secret backend: where it installs a secret and which
+        generators it provides. Set by a backend adapter, such as
+        `nixosModules.agenix-rekey`; null when none is imported, which
+        leaves `generate` unchecked and fails reading a secret's location.
+        A node does not set it.
       '';
+      options = {
+        location = lib.mkOption {
+          type = lib.types.functionTo lib.types.str;
+          description = ''
+            Where the backend installs a secret, as a function of its
+            `<service>-<id>` name. It must answer for any claim name,
+            including claims of disabled contracts, which the backend does
+            not install.
+          '';
+        };
+        generators = lib.mkOption {
+          type = lib.types.listOf lib.types.str;
+          description = "The generators a secret's `generate` may name, such as `alnum`.";
+          example = [
+            "alnum"
+            "hex"
+          ];
+        };
+      };
     };
-    generators = lib.mkOption {
-      type = setByOneBackendAdapter (lib.types.nullOr (lib.types.listOf lib.types.str));
-      default = null;
+    delivery = mkAdapterSlot {
+      message = "A configuration imports one delivery adapter, which sets `delivery`.";
       description = ''
-        The generators a secret's `generate` may name, such as `alnum`.
-        Set by a backend adapter to the generators its backend provides;
-        null when none is imported, which leaves `generate` unchecked.
+        The delivery of a dynamic identity's secrets into its unit. Set by
+        a delivery adapter, such as `nixosModules.systemd-credentials`;
+        null when none is imported. A node does not set it.
       '';
-      example = [
-        "alnum"
-        "hex"
-      ];
-    };
-    delivery = lib.mkOption {
-      type = setByOneDeliveryAdapter (lib.types.nullOr (lib.types.functionTo lib.types.str));
-      default = null;
-      description = ''
-        Where a dynamic identity's unit reads a delivered secret, as a
-        function of `{ unit, name }`. Set by a delivery adapter; null when
-        none is imported.
-      '';
+      options.path = lib.mkOption {
+        type = lib.types.functionTo lib.types.str;
+        description = ''
+          Where a unit reads a delivered secret, as a function of
+          `{ unit, name }`.
+        '';
+      };
     };
   };
 
@@ -84,16 +109,19 @@ in
       settings,
     }:
     let
-      inherit (settings) generators;
+      inherit (settings) backend;
     in
     # A dynamic identity's user exists only while its unit runs, so it reads
     # a secret the backend installs only through its shared group.
     if identity.unit != null && !claim.delivered && claim.group != identity.group then
       "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
     else if
-      claim.generate != null && generators != null && !builtins.elem claim.generate generators
+      claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
     then
-      "no adapter provides its generator `${claim.generate}`; name one of `contracts.kinds.secrets.generators`"
+      "the secret backend provides no generator `${claim.generate}`"
+      +
+        lib.optionalString (backend.generators != [ ])
+          "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
     else if claim.generate == null && builtins.length claim.from > 1 then
       "it references several secrets but has no `generate`; a copy references one"
     else
@@ -103,7 +131,7 @@ in
     { identity, config, ... }:
     { claimName, ... }:
     let
-      inherit (config.contracts.kinds.secrets) delivery location;
+      inherit (config.contracts.kinds.secrets) backend delivery;
       inherit (identity) unit;
       delivered = unit != null && delivery != null;
     in
@@ -181,13 +209,15 @@ in
           readOnly = true;
           default =
             if delivered then
-              delivery {
+              delivery.path {
                 inherit unit;
                 name = claimName;
               }
+            else if backend == null then
+              throw "nixos-contracts: secret `${claimName}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
             else
-              location claimName;
-          defaultText = lib.literalMD "the location set by the adapters";
+              backend.location claimName;
+          defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the delivered credential for
             a dynamic identity when a delivery adapter is imported, else the

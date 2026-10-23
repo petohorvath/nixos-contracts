@@ -58,7 +58,7 @@ A read-only attribute set of every enabled contract's claims of one kind, keyed 
 
 ### `contracts.kinds.<kind>`
 
-The settings of one claim kind, such as `contracts.kinds.mounts.classes`, as the kind declares them. A node writes some, such as the mount classes, and adapters others, such as the secrets' `location`. They sit under `kinds` rather than at the root, so a kind may take any name but the contract's own fields ([ADR 0008](adr/0008-keep-kind-settings-under-contracts-kinds.md)).
+The settings of one claim kind, such as `contracts.kinds.mounts.classes`, as the kind declares them. A node writes settings, such as the mount classes. A kind may also declare adapter slots, such as the secrets' `backend`, which one adapter fills and a node does not write ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)). They sit under `kinds` rather than at the root, so a kind may take any name but the contract's own fields ([ADR 0008](adr/0008-keep-kind-settings-under-contracts-kinds.md)).
 
 ### `contracts.assertions`
 
@@ -142,16 +142,28 @@ secrets.htpasswd = {
 
 Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A backend adapter resolves the references, and its checks reject one it cannot resolve. A check fails for a claim that references several secrets without a `generate`. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
-`contracts.kinds.secrets.generators` (list of strings, or null; default null) is the vocabulary `generate` may name. A backend adapter sets it to the generators its backend provides. A check fails for a claim whose `generate` is not in it; while it is null, no backend adapter is imported and `generate` is not checked.
+`path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
-`path` is computed from two rules that adapters set under `contracts.kinds.secrets`:
+```nix
+# Set by a backend adapter, such as nixosModules.agenix-rekey
+contracts.kinds.secrets.backend = {
+  location = name: "/run/agenix/${name}";
+  generators = [ "alnum" "hex" ];
+};
 
-- `location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless. Without a backend adapter, it fails with an error naming the missing adapter.
-- `delivery` (function of `{ unit, name }`, or null): where a dynamic identity's unit reads a delivered secret, such as `/run/credentials/<unit>/<name>`.
+# Set by a delivery adapter, such as nixosModules.systemd-credentials
+contracts.kinds.secrets.delivery = {
+  path = { unit, name }: "/run/credentials/${unit}/${name}";
+};
+```
 
-A configuration imports at most one backend adapter and one delivery adapter: a second definition of `location`, `generators` or `delivery` fails once the option is read, naming both, unless the definitions differ in priority, such as through `lib.mkForce`.
+- `backend.location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless.
+- `backend.generators` (list of strings): the generators `generate` may name. A check fails for a claim whose `generate` is not in it, and lists the ones the backend provides. While `backend` is null, `generate` is not checked.
+- `delivery.path` (function of `{ unit, name }`): where a dynamic identity's unit reads a delivered secret.
 
-A secret is `delivered` when its identity is dynamic and a delivery rule is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path without a backend adapter, so reading one fails, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs one imported.
+A configuration imports at most one backend adapter and one delivery adapter: a second definition of `backend` or `delivery` fails once the slot is read, naming both, unless the definitions differ in priority. A slot takes its adapter's data as one definition, so a module that replaces part of it, such as the backend's location, replaces the whole slot with `lib.mkForce`, generators included.
+
+A secret is `delivered` when its identity is dynamic and `delivery` is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path while `backend` is null, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs a backend adapter imported.
 
 A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
@@ -183,7 +195,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets `contracts.kinds.secrets.location` to the installed `age.secrets.<name>.path`, and `contracts.kinds.secrets.generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `location` to the installed `age.secrets.<name>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 `contracts.adapters.agenix-rekey.nodes` (lazy attribute set, default `{ }`)
 : The nodes a reference may name, each with its evaluated `config`, such as nixos-cross-config's node collection. A reference without a node reads this configuration.
@@ -194,9 +206,9 @@ A generated secret with `from` defines its entry's `generator.dependencies` as a
 
 ### `nixosModules.systemd-credentials`
 
-For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets `contracts.kinds.secrets.delivery` so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from `contracts.kinds.secrets.location`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from the location in `contracts.kinds.secrets.backend`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Without a backend adapter, its `LoadCredential=` fails to evaluate with the error of `contracts.kinds.secrets.location`. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 

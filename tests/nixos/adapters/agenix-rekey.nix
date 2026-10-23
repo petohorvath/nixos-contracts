@@ -112,11 +112,13 @@ in
           { age.generators.htpasswd = _: "true"; }
         ];
       in
-      builtins.filter (generator: !builtins.elem generator config.contracts.kinds.secrets.generators) [
-        "alnum"
-        "base64"
-        "htpasswd"
-      ];
+      builtins.filter
+        (generator: !builtins.elem generator config.contracts.kinds.secrets.backend.generators)
+        [
+          "alnum"
+          "base64"
+          "htpasswd"
+        ];
     expected = [ ];
   };
 
@@ -165,14 +167,15 @@ in
   };
 
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck = {
-    expr = failures [
-      keaWithoutValues
-      values
-      { contracts.services.kea.secrets.ddns.generate = "alnm"; }
-    ];
-    expected = [
-      "nixos-contracts: secrets claim `kea-ddns`: no adapter provides its generator `alnm`; name one of `contracts.kinds.secrets.generators`."
-    ];
+    expr =
+      map
+        (lib.hasPrefix "nixos-contracts: secrets claim `kea-ddns`: the secret backend provides no generator `alnm`; name one of ")
+        (failures [
+          keaWithoutValues
+          values
+          { contracts.services.kea.secrets.ddns.generate = "alnm"; }
+        ]);
+    expected = [ true ];
   };
 
   testSecretTakesItsGeneratorFromTheClaim = {

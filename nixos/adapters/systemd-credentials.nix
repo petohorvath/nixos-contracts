@@ -2,11 +2,19 @@
   Deliver every secret of a dynamic-identity service into its unit with
   `LoadCredential=`, so the dynamic user reads it under
   `/run/credentials/<unit>/<service>-<id>`. Loads from the location a secret
-  backend adapter sets, so import one beside it.
+  backend adapter sets in `contracts.kinds.secrets.backend`, so import one
+  beside it.
 */
 { config, lib, ... }:
 let
-  inherit (config.contracts.kinds.secrets) location;
+  inherit (config.contracts.kinds.secrets) backend;
+
+  location =
+    name:
+    if backend == null then
+      throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+    else
+      backend.location name;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
@@ -37,7 +45,7 @@ let
 in
 {
   config = {
-    contracts.kinds.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
 
     systemd.services = lib.mkMerge (
       map (secret: {

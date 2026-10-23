@@ -32,17 +32,20 @@ let
     {
       inherit (claim) owner group;
     };
-  backendLocation.contracts.kinds.secrets.location = name: "/run/agenix/${name}";
+  backend.contracts.kinds.secrets.backend = {
+    location = name: "/run/agenix/${name}";
+    generators = [ ];
+  };
   rules = {
-    imports = [ backendLocation ];
-    contracts.kinds.secrets.delivery = { unit, name }: "/run/credentials/${unit}/${name}";
+    imports = [ backend ];
+    contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
   };
 in
 {
   testSecretDefaultsToAGroupReadableRootFile = {
     expr =
       (evaluate [
-        backendLocation
+        backend
         (service "chrony" { static.user = "chrony"; } oneSecret)
       ]).contracts.claimSets.secrets.chrony-key;
     expected = {
@@ -110,32 +113,42 @@ in
     expected = "alnum";
   };
 
-  testSecretNamingAGeneratorNoAdapterProvidesFailsItsCheck =
+  testSecretNamingAGeneratorTheBackendLacksFailsItsCheck =
     let
-      generators.contracts.kinds.secrets.generators = [
-        "alnum"
-        "hex"
-      ];
+      alnumAndHex.contracts.kinds.secrets.backend = {
+        location = name: "/run/agenix/${name}";
+        generators = [
+          "alnum"
+          "hex"
+        ];
+      };
       generating = generate: service "svc" { static.user = "svc"; } { key.generate = generate; };
     in
     {
       expr = {
         unknown = failures [
-          generators
+          alnumAndHex
           (generating "alnm")
         ];
         provided = failures [
-          generators
+          alnumAndHex
           (generating "hex")
         ];
-        withoutAVocabulary = failures [ (generating "alnm") ];
+        noneProvided = failures [
+          backend
+          (generating "alnum")
+        ];
+        withoutABackend = failures [ (generating "alnm") ];
       };
       expected = {
         unknown = [
-          "nixos-contracts: secrets claim `svc-key`: no adapter provides its generator `alnm`; name one of `contracts.kinds.secrets.generators`."
+          "nixos-contracts: secrets claim `svc-key`: the secret backend provides no generator `alnm`; name one of `alnum`, `hex`."
         ];
         provided = [ ];
-        withoutAVocabulary = [ ];
+        noneProvided = [
+          "nixos-contracts: secrets claim `svc-key`: the secret backend provides no generator `alnum`."
+        ];
+        withoutABackend = [ ];
       };
     };
 
@@ -196,7 +209,7 @@ in
 
   testSecretPathWithoutABackendFails = {
     expr = (secretOf [ ] { static.user = "svc"; } { }).path;
-    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.location`";
+    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.backend`";
   };
 
   testStaticIdentityReadsTheBackendLocation = {
@@ -215,15 +228,14 @@ in
   };
 
   testDynamicIdentityWithoutDeliveryReadsTheBackendLocation = {
-    expr = (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).path;
+    expr = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).path;
     expected = "/run/agenix/svc-key";
   };
 
   testOnlyADynamicIdentityWithADeliveryAdapterIsDelivered = {
     expr = {
       dynamicWithDelivery = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
-      dynamicWithoutDelivery =
-        (secretOf [ backendLocation ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamicWithoutDelivery = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).delivered;
       static = (secretOf [ rules ] { static.user = "svc"; } { }).delivered;
     };
     expected = {
@@ -241,7 +253,7 @@ in
     {
       expr = {
         installed = failures [
-          backendLocation
+          backend
           undelivered
         ];
         withoutABackend = failures [ undelivered ];
@@ -255,7 +267,7 @@ in
   testReadableSecretsPassTheCheck = {
     expr = {
       sharedGroup = failures [
-        backendLocation
+        backend
         (service "svc" {
           dynamic = {
             unit = "svc.service";
@@ -268,7 +280,7 @@ in
         (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
       ];
       static = failures [
-        backendLocation
+        backend
         (service "svc" { static.user = "svc"; } oneSecret)
       ];
     };
@@ -279,46 +291,58 @@ in
     };
   };
 
-  testSecondBackendLocationFails = {
+  testSecondBackendFails = {
     expr =
       (secretOf [
-        backendLocation
-        { contracts.kinds.secrets.location = name: "/run/secrets/${name}"; }
+        backend
+        {
+          contracts.kinds.secrets.backend = {
+            location = name: "/run/secrets/${name}";
+            generators = [ "hex" ];
+          };
+        }
       ] { static.user = "svc"; } { }).path;
-    expectedError.msg = "contracts\\.kinds\\.secrets\\.location'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
-  };
-
-  testSecondBackendGeneratorsFail = {
-    expr = failures [
-      backendLocation
-      { contracts.kinds.secrets.generators = [ "alnum" ]; }
-      { contracts.kinds.secrets.generators = [ "hex" ]; }
-      (service "svc" { static.user = "svc"; } { key.generate = "hex"; })
-    ];
-    expectedError.msg = "contracts\\.kinds\\.secrets\\.generators'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.backend'[^\n]*\nA configuration imports one secret backend adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
 
   testSecondDeliveryFails = {
     expr =
       (secretOf [
         rules
-        { contracts.kinds.secrets.delivery = { unit, name }: "/run/keys/${unit}/${name}"; }
+        { contracts.kinds.secrets.delivery.path = { unit, name }: "/run/keys/${unit}/${name}"; }
       ] { dynamic.unit = "svc.service"; } { }).path;
     expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery'[^\n]*\nA configuration imports one delivery adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
 
-  testNodeForcesTheBackendLocation = {
+  testNodeForcesTheWholeBackend = {
     expr =
       (secretOf [
-        backendLocation
+        backend
         (
           { lib, ... }:
           {
-            contracts.kinds.secrets.location = lib.mkForce (name: "/run/secrets/${name}");
+            contracts.kinds.secrets.backend = lib.mkForce {
+              location = name: "/run/secrets/${name}";
+              generators = [ ];
+            };
           }
         )
       ] { static.user = "svc"; } { }).path;
     expected = "/run/secrets/svc-key";
+  };
+
+  testNodeCannotForceOnlyTheBackendLocation = {
+    expr =
+      (secretOf [
+        backend
+        (
+          { lib, ... }:
+          {
+            contracts.kinds.secrets.backend.location = lib.mkForce (name: "/run/secrets/${name}");
+          }
+        )
+      ] { static.user = "svc"; } { }).path;
+    expectedError.msg = "contracts\\.kinds\\.secrets\\.backend'[^\n]*\nA configuration imports one secret backend adapter";
   };
 
   testSecretPathIsReadOnly = {
