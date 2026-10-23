@@ -65,6 +65,10 @@ _Avoid_: Injection, mounting
 An opt-in module that turns one claim kind's claim set into one backend's configuration, such as preservation or agenix-rekey.
 _Avoid_: Materialiser, consumer
 
+**Adapter slot**:
+The place where one adapter gives a claim kind the data it needs, such as the secret backend's location and generators. Only one adapter fills a slot, and a node writes none.
+_Avoid_: Rule, hook, setting
+
 **Check**:
 A condition over the configuration's contracts that must hold, such as two claims not clashing. A failed check reports its message.
 _Avoid_: Assertion, validation

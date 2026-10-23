@@ -26,7 +26,10 @@ let
       secrets.key = { };
     };
   };
-  location.contracts.kinds.secrets.location = name: "/run/agenix/${name}";
+  backend.contracts.kinds.secrets.backend = {
+    location = name: "/run/agenix/${name}";
+    generators = [ ];
+  };
 in
 {
   testDynamicIdentitySecretIsLoadedIntoItsUnit = {
@@ -35,7 +38,7 @@ in
         adapter
         alloy
         chrony
-        location
+        backend
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
     expected = [ "alloy-password:/run/agenix/alloy-password" ];
   };
@@ -45,7 +48,7 @@ in
       (evaluate [
         adapter
         alloy
-        location
+        backend
       ]).contracts.services.alloy.secrets.password.path;
     expected = "/run/credentials/alloy.service/alloy-password";
   };
@@ -56,7 +59,7 @@ in
         configuration = evaluate [
           adapter
           chrony
-          location
+          backend
         ];
       in
       {
@@ -81,7 +84,7 @@ in
   testMistypedUnitIsRejected = {
     expr = failures [
       adapter
-      location
+      backend
       alloy
       { contracts.services.alloy.identity.dynamic.unit = lib.mkForce "alloy-typo.service"; }
     ];
@@ -93,7 +96,7 @@ in
   testUnitWithoutDynamicUserIsRejected = {
     expr = failures [
       adapter
-      location
+      backend
       alloy
       { systemd.services.alloy.serviceConfig.DynamicUser = lib.mkForce false; }
     ];
