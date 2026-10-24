@@ -5,7 +5,7 @@
 */
 { lib }:
 let
-  field =
+  requiredString =
     description:
     lib.mkOption {
       type = lib.types.str;
@@ -30,15 +30,15 @@ let
         };
         kind =
           if kind == null then
-            field "The claim's kind, such as `secrets`."
+            requiredString "The claim's kind, such as `secrets`."
           else
             lib.mkOption {
               type = lib.types.enum [ kind ];
               default = kind;
               description = "The claim's kind, which must be `${kind}`.";
             };
-        service = field "The claim's service.";
-        id = field "The claim's id within its contract.";
+        service = requiredString "The claim's service.";
+        id = requiredString "The claim's id within its contract.";
       };
     };
 in
@@ -60,5 +60,10 @@ in
     };
     ```
   */
-  referenceTo = mkReference;
+  referenceTo =
+    kind:
+    if builtins.isString kind then
+      mkReference kind
+    else
+      throw "nixos-contracts: `types.referenceTo` takes a kind's name; use `types.reference` for any kind";
 }

@@ -83,7 +83,7 @@ let
     "identity"
   ];
   # A claim's claim name, which keys its claim set.
-  toClaimName = service: id: "${service}-${id}";
+  toClaimName = (import ./references.nix).claimNameOf;
 
   /*
     Resolve a contract's identity to the account its files are owned by and

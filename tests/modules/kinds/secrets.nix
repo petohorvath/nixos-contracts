@@ -52,9 +52,9 @@ let
   };
 
   # A configuration whose node identity is `store`, without a node
-  # collection, and a reference to one of its influxdb secrets.
+  # collection, and a reference to an influxdb secret on the `store` node.
   onStore.contracts.node = "store";
-  own = id: {
+  storeSecret = id: {
     node = "store";
     service = "influxdb";
     inherit id;
@@ -414,7 +414,7 @@ in
           (store {
             origin.generate = "alnum";
             remote.from = [ remoteToken ];
-            local.from = [ (own "origin") ];
+            local.from = [ (storeSecret "origin") ];
           })
         ];
       };
@@ -465,7 +465,20 @@ in
       )
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-copy`: it references `:secrets.influxdb.origin`: it names no node, since the configuration holding the claim sets no `contracts.node`."
+      "nixos-contracts: secrets claim `influxdb-copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
+    ];
+  };
+
+  testHandWrittenReferenceWithANullNodeFailsItsCheck = {
+    expr = failures [
+      onStore
+      (store {
+        origin.generate = "alnum";
+        copy.from = [ (storeSecret "origin" // { node = null; }) ];
+      })
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
     ];
   };
 
@@ -499,7 +512,7 @@ in
         store = [
           (store {
             remote.from = [ remoteToken ];
-            local.from = [ (own "missing") ];
+            local.from = [ (storeSecret "missing") ];
           })
         ];
       }).store.config.contracts.failures;
@@ -531,8 +544,8 @@ in
         hashes = {
           generate = "basic-auth";
           from = [
-            (own "a")
-            (own "b")
+            (storeSecret "a")
+            (storeSecret "b")
           ];
         };
       })
@@ -548,8 +561,8 @@ in
       onStore
       (store {
         origin.generate = "alnum";
-        copy.from = [ (own "origin") ];
-        chained.from = [ (own "copy") ];
+        copy.from = [ (storeSecret "origin") ];
+        chained.from = [ (storeSecret "copy") ];
       })
     ];
     expected = [
@@ -562,7 +575,7 @@ in
       nodes = nodesOf {
         metrics = [
           (service "telegraf" { static.user = "telegraf"; } {
-            token.from = [ (own "token") ];
+            token.from = [ (storeSecret "token") ];
           })
         ];
         store = [ (store { token.from = [ remoteToken ]; }) ];

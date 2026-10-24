@@ -206,7 +206,7 @@ in
         );
       };
       expected = {
-        noNode = "it names no node, since the configuration holding the claim sets no `contracts.node`";
+        noNode = "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`";
         unknownNode = "node `nope` is not in `contracts.nodes`";
         unknownKind = "node `backend` has no claim kind `databases`";
         disabled = "no enabled contract on `backend` holds it";
@@ -227,7 +227,12 @@ in
         config = evaluate [ web ];
       in
       reasonOf config config.contracts.services.web.binds.http.ref;
-    expected = "it names no node, since the configuration holding the claim sets no `contracts.node`";
+    expected = "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`";
+  };
+
+  testLookupIsReadOnly = {
+    expr = (evaluate [ { contracts.lookup = _: { }; } ]).contracts.lookup;
+    expectedError.msg = "contracts\\.lookup' is read-only";
   };
 
   testResolveIsReadOnly = {

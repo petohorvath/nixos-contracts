@@ -2,8 +2,9 @@
   Two nodes sharing one value: a telegraf node generates its token, and an
   influxdb node copies it by the token's reference. Each node is given its
   node identity and all nodes as its node collection, as
-  `nixosModules.cross-config` would set them. The encrypted files under `secrets/` are not part of the
-  example; the configurations are evaluated, not built.
+  `nixosModules.cross-config` would set them. The encrypted files under
+  `secrets/` are not part of the example; the configurations are evaluated,
+  not built.
 */
 {
   nixpkgs,

@@ -163,7 +163,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A node turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
 
-`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)), each a [reference](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }`:
+`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md), [ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)), each a [reference](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }`:
 
 ```nix
 # A copy of a token the `metrics` node generates

@@ -14,9 +14,15 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
+  # The claim name a claim set keys a claim by, `<service>-<id>`.
+  claimNameOf = service: id: "${service}-${id}";
+
   # A reference as messages name it.
   labelOf =
-    reference: "${toString reference.node}:${reference.kind}.${reference.service}.${reference.id}";
+    reference:
+    "${
+      if reference.node == null then "<no node>" else reference.node
+    }:${reference.kind}.${reference.service}.${reference.id}";
 
   # `{ claim; reason; }`: the claim-set entry a reference names, or a null
   # claim and why it does not resolve.
@@ -24,7 +30,7 @@ rec {
     config: reference:
     let
       nodeConfig = nodeConfigOrNull config reference;
-      claimName = "${reference.service}-${reference.id}";
+      claimName = claimNameOf reference.service reference.id;
       claimSets = nodeConfig.contracts.claimSets;
       entry = claimSets.${reference.kind}.${claimName} or null;
       fail = reason: {
@@ -35,7 +41,7 @@ rec {
     # A claim's `ref` names no node while its configuration has no node
     # identity; it must not resolve as this configuration's claim.
     if reference.node == null then
-      fail "it names no node, since the configuration holding the claim sets no `contracts.node`"
+      fail "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`"
     else if nodeConfig == null then
       fail "node `${reference.node}` is not in `contracts.nodes`"
     else if !(nodeConfig ? contracts.claimSets) then

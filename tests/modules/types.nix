@@ -49,6 +49,11 @@ in
     expectedError.msg = "token\\.kind' is not of type `value \"secrets\"";
   };
 
+  testReferenceToOneKindTakesAKindsName = {
+    expr = contractsLib.types.referenceTo null;
+    expectedError.msg = "nixos-contracts: `types\\.referenceTo` takes a kind's name";
+  };
+
   testReferenceNeedsANode = {
     expr = (secretReferenceOf (removeAttrs token [ "node" ])).node;
     expectedError.msg = "token\\.node' was accessed but has no value defined";

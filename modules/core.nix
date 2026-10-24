@@ -99,7 +99,7 @@ in
       default =
         reference:
         let
-          result = references.lookup config reference;
+          result = config.contracts.lookup reference;
         in
         if result.reason == null then
           result.claim

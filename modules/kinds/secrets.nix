@@ -11,9 +11,9 @@ let
   # referencing each other fail their checks instead of recursing.
   resolves = claim: claim != null && claim.from == [ ];
 
-  # A reference with the claim it resolves to, or a null claim when a check
-  # rejects it.
-  resolve =
+  # A `referenced` entry: a reference with the claim it resolves to, or a
+  # null claim when a check rejects it.
+  toReferenced =
     config: reference:
     let
       inherit (lookup config reference) claim;
@@ -216,12 +216,13 @@ in
         referenced = lib.mkOption {
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
-          default = map (resolve topConfig) config.from;
+          default = map (toReferenced topConfig) config.from;
           defaultText = lib.literalMD "each reference in `from` with the claim it resolves to";
           description = ''
-            Each reference in `from` as `{ node; kind; service; id; claim; }`, where
-            `claim` is the claim-set entry of the secret it names, read from
-            the node collection, or null when a check rejects the reference.
+            Each reference in `from` as
+            `{ node; kind; service; id; claim; }`, where `claim` is the
+            claim-set entry of the secret it names, read from the node
+            collection, or null when a check rejects the reference.
             A backend adapter reads the references from it rather than
             resolving them itself.
           '';
