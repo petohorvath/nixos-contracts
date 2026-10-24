@@ -92,6 +92,12 @@ in
         database = "grafana_main";
         unit = null;
         claimName = "grafana-main";
+        ref = {
+          node = null;
+          kind = "databases";
+          service = "grafana";
+          id = "main";
+        };
       };
       vaultwarden-main = {
         service = "vaultwarden";
@@ -101,6 +107,12 @@ in
         database = "vault";
         unit = "vaultwarden.service";
         claimName = "vaultwarden-main";
+        ref = {
+          node = null;
+          kind = "databases";
+          service = "vaultwarden";
+          id = "main";
+        };
       };
     };
   };
@@ -120,6 +132,34 @@ in
       grafana-main = true;
       vaultwarden-main = true;
     };
+  };
+
+  testCustomKindClaimRefNamesTheNodeIdentity = {
+    expr =
+      (evaluate [
+        databases
+        services
+        { contracts.node = "db"; }
+      ]).contracts.services.grafana.databases.main.ref;
+    expected = {
+      node = "db";
+      kind = "databases";
+      service = "grafana";
+      id = "main";
+    };
+  };
+
+  testCustomKindClaimResolvesByItsRef = {
+    expr =
+      let
+        config = evaluate [
+          databases
+          services
+          { contracts.node = "db"; }
+        ];
+      in
+      (config.contracts.resolve config.contracts.services.vaultwarden.databases.main.ref).database;
+    expected = "vault";
   };
 
   testCustomKindDeclaresItsSettings = {
@@ -438,6 +478,34 @@ in
         }
       ]).contracts.claimSets.tokens.a-t.name;
     expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimTypeCannotDeclareTheRef = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.ref = lib.mkOption {
+                type = lib.types.str;
+                default = "mine";
+                description = "A ref of the kind's own.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens.a-t.ref;
+    expectedError.msg = "tokens\\.t\\.ref' .* already declared in .*mk-claim-kind\\.nix";
   };
 
   testKindMayTakeANameOfTheContractsRoot = {

@@ -2,35 +2,29 @@
 # runtime and must keep private.
 { lib }:
 let
-  referenceType = (import ../types.nix { inherit lib; }).reference;
-  inherit (import ../references.nix) labelOf nodeConfigOrNull;
-
-  hasContracts = nodeConfig: nodeConfig != null && nodeConfig ? contracts.claimSets.secrets;
-
-  # The claim a reference names, or null.
-  claimOrNull =
-    config: reference:
-    let
-      nodeConfig = nodeConfigOrNull config reference;
-    in
-    if hasContracts nodeConfig then
-      nodeConfig.contracts.claimSets.secrets.${reference.name} or null
-    else
-      null;
+  referenceType = (import ../types.nix { inherit lib; }).referenceTo "secrets";
+  # References resolve through the lookup every kind shares; `from` adds
+  # only its own rules.
+  inherit (import ../references.nix) labelOf lookup;
 
   # Only a claim without `from` of its own resolves, so two copies
   # referencing each other fail their checks instead of recursing.
   resolves = claim: claim != null && claim.from == [ ];
 
-  # A reference with the claim it resolves to, or a null claim when a check
-  # rejects it.
-  resolve =
+  # A `referenced` entry: a reference with the claim it resolves to, or a
+  # null claim when a check rejects it.
+  toReferenced =
     config: reference:
     let
-      claim = claimOrNull config reference;
+      inherit (lookup config reference) claim;
     in
     {
-      inherit (reference) node name;
+      inherit (reference)
+        node
+        kind
+        service
+        id
+        ;
       claim = if resolves claim then claim else null;
     };
 
@@ -38,17 +32,12 @@ let
   referenceReason =
     config: reference:
     let
-      nodeConfig = nodeConfigOrNull config reference;
-      claim = claimOrNull config reference;
+      result = lookup config reference;
       references = "it references `${labelOf reference}`";
     in
-    if nodeConfig == null then
-      "it references node `${reference.node}`, which is not in `contracts.nodes`"
-    else if !hasContracts nodeConfig then
-      "${references}, whose node imports no nixos-contracts module"
-    else if claim == null then
-      "${references}, which is no secret claim of an enabled contract"
-    else if !resolves claim then
+    if result.reason != null then
+      "${references}: ${result.reason}"
+    else if !resolves result.claim then
       "${references}, which references secrets itself; reference a secret without `from`"
     else
       null;
@@ -208,29 +197,32 @@ in
           type = lib.types.listOf referenceType;
           default = [ ];
           description = ''
-            The secrets the value comes from, each a claim name, or
-            `{ node; name; }` for a secret another node holds.
+            The secrets the value comes from, each a reference
+            `{ node; service; id; }`, such as another secret's `ref`.
             Without `generate`, the secret is a copy of the one secret it
             references; with it, the generator makes the value from the
-            secrets it references. Each reference names a node in
-            `contracts.nodes`, and the core resolves it into `referenced`.
+            secrets it references. Each reference names `contracts.node` or
+            a node in `contracts.nodes`, and the core resolves it into
+            `referenced`.
           '';
           example = [
             {
               node = "metrics";
-              name = "telegraf-token";
+              service = "telegraf";
+              id = "token";
             }
           ];
         };
         referenced = lib.mkOption {
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
-          default = map (resolve topConfig) config.from;
+          default = map (toReferenced topConfig) config.from;
           defaultText = lib.literalMD "each reference in `from` with the claim it resolves to";
           description = ''
-            Each reference in `from` as `{ node; name; claim; }`, where
-            `claim` is the claim-set entry of the secret it names, read from
-            the node collection, or null when a check rejects the reference.
+            Each reference in `from` as
+            `{ node; kind; service; id; claim; }`, where `claim` is the
+            claim-set entry of the secret it names, read from the node
+            collection, or null when a check rejects the reference.
             A backend adapter reads the references from it rather than
             resolving them itself.
           '';

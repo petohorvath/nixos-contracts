@@ -64,6 +64,7 @@
         generator = null;
       };
       original = "metrics/telegraf-token.age";
+      storesOwn = "store/telegraf-token.age";
       auths.telegraf-metrics = "/run/agenix/influxdb-writer-telegraf-metrics";
       failures = {
         metrics = [ ];

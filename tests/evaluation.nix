@@ -77,6 +77,10 @@ in
       inherit nixos;
       module = self.nixosModules.default;
     };
+    crossConfig = import ./nixos/cross-config.nix {
+      inherit lib nixos;
+      module = self.nixosModules.cross-config;
+    };
     adapters = {
       preservation = import ./nixos/adapters/preservation.nix {
         inherit lib nixos;

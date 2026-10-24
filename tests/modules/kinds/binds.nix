@@ -23,6 +23,12 @@ in
       service = "web";
       id = "http";
       name = "web-http";
+      ref = {
+        node = null;
+        kind = "binds";
+        service = "web";
+        id = "http";
+      };
       protocols = [ "tcp" ];
       port = 80;
       addresses = [ "0.0.0.0" ];

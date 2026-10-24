@@ -49,6 +49,12 @@ in
       service = "influxdb";
       id = "data";
       name = "influxdb-data";
+      ref = {
+        node = null;
+        kind = "mounts";
+        service = "influxdb";
+        id = "data";
+      };
       path = "/var/lib/influxdb2";
       class = "state";
       type = "directory";

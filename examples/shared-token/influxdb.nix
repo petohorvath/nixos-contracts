@@ -16,7 +16,7 @@ let
 in
 {
   options.example.influxdb.writers = lib.mkOption {
-    type = lib.types.attrsOf contractsLib.types.reference;
+    type = lib.types.attrsOf (contractsLib.types.referenceTo "secrets");
     default = { };
     description = ''
       The writers of the `metrics` bucket, by authorization name, each a

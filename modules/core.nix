@@ -2,6 +2,7 @@
 # them, and prefixes the messages of the checks that fail.
 { config, lib, ... }:
 let
+  references = import ./references.nix;
   identityType = lib.types.attrTag {
     static = lib.mkOption {
       type = lib.types.submodule {
@@ -71,13 +72,54 @@ in
       description = "The contracts of this configuration's services, by name.";
     };
 
+    node = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = ''
+        This configuration's node identity, its name in the node
+        collection, which every claim's `ref` names. While it is null, no
+        lookup resolves a claim's `ref`.
+      '';
+    };
+
+    lookup = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      default = references.lookup config;
+      defaultText = lib.literalMD "the lookup of a reference in this configuration or `contracts.nodes`";
+      description = ''
+        A function of a reference returning `{ claim; reason; }`: the
+        claim-set entry it names, or a null claim and why not.
+      '';
+    };
+
+    resolve = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      default =
+        reference:
+        let
+          result = config.contracts.lookup reference;
+        in
+        if result.reason == null then
+          result.claim
+        else
+          throw "nixos-contracts: cannot resolve `${references.labelOf reference}`: ${result.reason}";
+      defaultText = lib.literalMD "the claim `contracts.lookup` finds, or an error with its reason";
+      description = ''
+        A function of a reference returning the claim-set entry it names,
+        failing with the reason when it names none.
+      '';
+    };
+
     nodes = lib.mkOption {
       type = lib.types.lazyAttrsOf lib.types.raw;
       default = { };
       description = ''
         The node collection: the nodes a reference may name, each with its
         evaluated `config`, such as nixos-cross-config's node collection.
-        A reference without a node names this configuration.
+        A reference naming `contracts.node` resolves in this configuration
+        itself.
       '';
     };
 
@@ -120,4 +162,12 @@ in
       '';
     };
   };
+
+  # A configuration without a node collection needs none to name itself.
+  config.contracts.assertions =
+    lib.optional (config.contracts.node != null && config.contracts.nodes != { })
+      {
+        assertion = config.contracts.nodes ? ${config.contracts.node};
+        message = "`contracts.node` is `${config.contracts.node}`, which is not in `contracts.nodes`.";
+      };
 }

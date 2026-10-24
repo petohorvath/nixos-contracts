@@ -23,7 +23,7 @@ _Avoid_: Resource, requirement, building block
 One kind of claim, such as binds, mounts or secrets. The set of kinds is open: a new kind is defined the same way as the shipped ones.
 
 **Claim name**:
-The name a claim goes by across the configuration, made of its service's name and the id the claim has within its contract, such as `influxdb-data`. Two claims of one kind with the same claim name clash.
+The name a claim goes by within one configuration and on its backend, made of its service's name and the id the claim has within its contract, such as `influxdb-data`. Two claims of one kind with the same claim name clash; a reference does not name a claim by it.
 _Avoid_: Key, full name
 
 **Claim set**:
@@ -46,16 +46,20 @@ A runtime credential a service needs. It says what the service reads, who may re
 _Avoid_: Credential, age secret, key
 
 **Reference**:
-A secret's pointer to a secret its value comes from: that secret's claim name, and its node when another node holds it. A secret without a generator is a copy of the one secret it references; a generator makes a secret's value from the secrets it references.
+A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it. A secret references the secrets its value comes from: without a generator it is a copy of the one secret it references, and a generator makes its value from the secrets it references.
 _Avoid_: Handle, link, dependency, source
 
 **Node**:
-One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its name in the node collection.
+One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its node identity.
 _Avoid_: Host, machine, peer
 
 **Node collection**:
-The nodes a reference may name, each by its name, as one configuration is given them.
+The nodes a reference may name, each by its node identity, as one configuration is given them.
 _Avoid_: Nodes list, peers
+
+**Node identity**:
+A node's name within its node collection, independent of its hostname.
+_Avoid_: Hostname, node name
 
 **Generator**:
 A named way to make a secret's value, such as `alnum`, for a value the service makes on its own rather than one a person or another party provides. A backend adapter provides the generators a secret may name.

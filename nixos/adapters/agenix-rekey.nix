@@ -24,7 +24,8 @@ let
     if reference.claim == null then
       null
     else
-      (nodeConfigOrNull config reference).age.secrets.${reference.name} or null;
+      # A reference carries no claim name; the resolved claim's is the key.
+      (nodeConfigOrNull config reference).age.secrets.${reference.claim.name} or null;
 
   # The entry of the one secret a copy references, or null.
   copiedEntryOrNull = secret: entryOrNull (lib.head secret.referenced);

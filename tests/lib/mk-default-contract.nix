@@ -46,6 +46,12 @@ in
       service = "chrony";
       id = "ntp";
       name = "chrony-ntp";
+      ref = {
+        node = null;
+        kind = "binds";
+        service = "chrony";
+        id = "ntp";
+      };
       protocols = [ "udp" ];
       port = 123;
       addresses = [
