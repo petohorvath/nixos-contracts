@@ -55,7 +55,7 @@ The [example](../examples/exporter/default.nix) enables both with only `nixosMod
 
 A [telegraf module](../examples/shared-token/telegraf.nix) generates the token its node writes metrics with. An [influxdb module](../examples/shared-token/influxdb.nix) provisions one write authorization per writer, and declares each writer's token as a copy that references the writer's node and claim name. It reads the copy at its own `path` and writes no backend option.
 
-The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given the collection at `contracts.adapters.agenix-rekey.nodes`. The store node names the writer `telegraf-metrics`, a reference that nixos-cross-config would carry in a fleet. Its result shows:
+The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given both as its node collection at `contracts.nodes`. The store node names the writer `telegraf-metrics`, a reference that nixos-cross-config would carry in a fleet. Its result shows:
 
 - `copy`: the store installs the token root-owned with its own group `influxdb2` and mode `0440`, from the metrics node's encrypted file, `metrics/telegraf-token.age`, without a generator of its own.
 - `original`: the metrics node's file is the same one.

@@ -38,11 +38,12 @@
 
   `check`
   : Optional. The kind's check rule: a function of
-    `{ identity, claim, settings }`, where `identity` is the same resolved
-    identity, `claim` a claim-set entry and `settings` the kind's settings
-    at `contracts.kinds.<name>`, returning null when the claim is valid, or a
-    string saying why it is not. Only claims of enabled contracts are
-    checked, and a rejected claim reads
+    `{ identity, claim, settings, config }`, where `identity` is the same
+    resolved identity, `claim` a claim-set entry, `settings` the kind's
+    settings at `contracts.kinds.<name>` and `config` the configuration's
+    top-level `config`, returning null when the claim is valid, or a string
+    or a list of strings saying why it is not. Only claims of enabled
+    contracts are checked, and each reason reads
     "nixos-contracts: <kind> claim `<service>-<id>`: <reason>." in
     `contracts.failures`.
 
@@ -159,16 +160,29 @@ else
       ) pairs
     );
 
+    # A check rule returns null, one reason or a list of them; each reason
+    # is one failed check.
+    toReasons = reasons: if reasons == null then [ ] else lib.toList reasons;
+
     checkAssertions = lib.optionals (check != null) (
-      map (
+      lib.concatMap (
         arguments:
-        let
-          reason = check (arguments // { settings = config.contracts.kinds.${kindName}; });
-        in
-        {
-          assertion = reason == null;
-          message = "${kindName} claim `${arguments.claim.name}`: ${toString reason}.";
-        }
+        lib.pipe
+          (
+            arguments
+            // {
+              settings = config.contracts.kinds.${kindName};
+              inherit config;
+            }
+          )
+          [
+            check
+            toReasons
+            (map (reason: {
+              assertion = false;
+              message = "${kindName} claim `${arguments.claim.name}`: ${reason}.";
+            }))
+          ]
       ) claims
     );
   in

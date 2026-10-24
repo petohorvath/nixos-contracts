@@ -1,5 +1,5 @@
-# Declares contracts, their identities and the checks over them, and prefixes
-# the messages of the checks that fail.
+# Declares contracts, their identities, the node collection and the checks over
+# them, and prefixes the messages of the checks that fail.
 { config, lib, ... }:
 let
   identityType = lib.types.attrTag {
@@ -69,6 +69,16 @@ in
       );
       default = { };
       description = "The contracts of this configuration's services, by name.";
+    };
+
+    nodes = lib.mkOption {
+      type = lib.types.lazyAttrsOf lib.types.raw;
+      default = { };
+      description = ''
+        The node collection: the nodes a reference may name, each with its
+        evaluated `config`, such as nixos-cross-config's node collection.
+        A reference without a node names this configuration.
+      '';
     };
 
     assertions = lib.mkOption {

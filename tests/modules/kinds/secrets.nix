@@ -1,6 +1,6 @@
 { contracts }:
 let
-  inherit (contracts) evaluate failures;
+  inherit (contracts) evaluate failures nodesOf;
 
   service = name: identity: secrets: {
     contracts.services.${name} = {
@@ -40,6 +40,15 @@ let
     imports = [ backend ];
     contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
   };
+
+  # A telegraf service generating its token, and a store service copying
+  # the secrets its references name.
+  telegraf = service "telegraf" { static.user = "telegraf"; } { token.generate = "alnum"; };
+  store = service "influxdb" { static.user = "influxdb2"; };
+  remoteToken = {
+    node = "metrics";
+    name = "telegraf-token";
+  };
 in
 {
   testSecretDefaultsToAGroupReadableRootFile = {
@@ -57,6 +66,7 @@ in
       group = "chrony";
       generate = null;
       from = [ ];
+      referenced = [ ];
       unit = null;
       delivered = false;
       path = "/run/agenix/chrony-key";
@@ -180,6 +190,8 @@ in
       referencing =
         secret:
         service "svc" { static.user = "svc"; } {
+          a = { };
+          b = { };
           key = {
             from = [
               "svc-a"
@@ -352,5 +364,177 @@ in
         { contracts.services.svc.secrets.key.path = "/elsewhere"; }
       ]).contracts.services.svc.secrets.key.path;
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.path' is read-only";
+  };
+
+  testReferenceResolvesToTheClaimItNames =
+    let
+      nodes = nodesOf {
+        metrics = [ telegraf ];
+        store = [
+          (store {
+            origin.generate = "alnum";
+            remote.from = [ remoteToken ];
+            local.from = [ "influxdb-origin" ];
+          })
+        ];
+      };
+      inherit (nodes.store.config.contracts.claimSets) secrets;
+      namesOf = secret: map (reference: reference.claim.name) secret.referenced;
+    in
+    {
+      expr = {
+        remote = namesOf secrets.influxdb-remote;
+        local = namesOf secrets.influxdb-local;
+        inherit (nodes.store.config.contracts) failures;
+      };
+      expected = {
+        remote = [ "telegraf-token" ];
+        local = [ "influxdb-origin" ];
+        failures = [ ];
+      };
+    };
+
+  testReferenceToItsOwnNodeByNameReadsThisConfiguration =
+    let
+      nodes = nodesOf {
+        store = [
+          (store {
+            origin.generate = "alnum";
+            copy.from = [
+              {
+                node = "store";
+                name = "influxdb-origin";
+              }
+            ];
+          })
+        ];
+      };
+    in
+    {
+      expr = map (
+        reference: reference.claim.name
+      ) nodes.store.config.contracts.claimSets.secrets.influxdb-copy.referenced;
+      expected = [ "influxdb-origin" ];
+    };
+
+  testReferenceToAnUnknownNodeFailsItsCheck = {
+    expr =
+      (nodesOf { store = [ (store { token.from = [ remoteToken ]; }) ]; })
+      .store.config.contracts.failures;
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-token`: it references node `metrics`, which is not in `contracts.nodes`."
+    ];
+  };
+
+  testReferenceToANodeWithoutContractsFailsItsCheck = {
+    expr = failures [
+      (store { token.from = [ remoteToken ]; })
+      # The metrics node imports no nixos-contracts module.
+      { contracts.nodes.metrics.config = { }; }
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:telegraf-token`, whose node imports no nixos-contracts module."
+    ];
+  };
+
+  testReferenceToNoSecretOfAnEnabledContractFailsItsCheck = {
+    expr =
+      (nodesOf {
+        metrics = [
+          telegraf
+          ({ lib, ... }: { contracts.services.telegraf.enable = lib.mkForce false; })
+        ];
+        store = [
+          (store {
+            remote.from = [ remoteToken ];
+            local.from = [ "influxdb-missing" ];
+          })
+        ];
+      }).store.config.contracts.failures;
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-local`: it references `influxdb-missing`, which is no secret claim of an enabled contract."
+      "nixos-contracts: secrets claim `influxdb-remote`: it references `metrics:telegraf-token`, which is no secret claim of an enabled contract."
+    ];
+  };
+
+  testRejectedReferenceResolvesToANullClaim = {
+    expr =
+      (nodesOf { store = [ (store { token.from = [ remoteToken ]; }) ]; })
+      .store.config.contracts.claimSets.secrets.influxdb-token.referenced;
+    expected = [
+      {
+        node = "metrics";
+        name = "telegraf-token";
+        claim = null;
+      }
+    ];
+  };
+
+  testEachRejectedReferenceFailsItsOwnCheck = {
+    expr = failures [
+      (store {
+        hashes = {
+          generate = "basic-auth";
+          from = [
+            "influxdb-a"
+            "influxdb-b"
+          ];
+        };
+      })
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-hashes`: it references `influxdb-a`, which is no secret claim of an enabled contract."
+      "nixos-contracts: secrets claim `influxdb-hashes`: it references `influxdb-b`, which is no secret claim of an enabled contract."
+    ];
+  };
+
+  testReferenceToASecretWithReferencesFailsItsCheck = {
+    expr = failures [
+      (store {
+        origin.generate = "alnum";
+        copy.from = [ "influxdb-origin" ];
+        chained.from = [ "influxdb-copy" ];
+      })
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-chained`: it references `influxdb-copy`, which references secrets itself; reference a secret without `from`."
+    ];
+  };
+
+  testCopiesReferencingEachOtherFailTheirChecks =
+    let
+      nodes = nodesOf {
+        metrics = [
+          (service "telegraf" { static.user = "telegraf"; } {
+            token.from = [
+              {
+                node = "store";
+                name = "influxdb-token";
+              }
+            ];
+          })
+        ];
+        store = [ (store { token.from = [ remoteToken ]; }) ];
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
+      expected = {
+        metrics = [
+          "nixos-contracts: secrets claim `telegraf-token`: it references `store:influxdb-token`, which references secrets itself; reference a secret without `from`."
+        ];
+        store = [
+          "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:telegraf-token`, which references secrets itself; reference a secret without `from`."
+        ];
+      };
+    };
+
+  testSecretReferencedIsReadOnly = {
+    expr =
+      (evaluate [
+        (service "svc" { static.user = "svc"; } oneSecret)
+        { contracts.services.svc.secrets.key.referenced = [ ]; }
+      ]).contracts.services.svc.secrets.key.referenced;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.referenced' is read-only";
   };
 }

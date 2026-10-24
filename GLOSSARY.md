@@ -50,8 +50,12 @@ A secret's pointer to a secret its value comes from: that secret's claim name, a
 _Avoid_: Handle, link, dependency, source
 
 **Node**:
-One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its name, which only an adapter resolves.
+One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its name in the node collection.
 _Avoid_: Host, machine, peer
+
+**Node collection**:
+The nodes a reference may name, each by its name, as one configuration is given them.
+_Avoid_: Nodes list, peers
 
 **Generator**:
 A named way to make a secret's value, such as `alnum`, for a value the service makes on its own rather than one a person or another party provides. A backend adapter provides the generators a secret may name.

@@ -35,6 +35,7 @@ in
     };
     core = import ./modules/core.nix { inherit contracts; };
     mkClaimKind = import ./modules/mk-claim-kind.nix { inherit contracts contractsLib lib; };
+    types = import ./modules/types.nix { inherit contractsLib lib; };
     kinds = {
       binds = import ./modules/kinds/binds.nix { inherit contracts; };
       mounts = import ./modules/kinds/mounts.nix { inherit contracts; };

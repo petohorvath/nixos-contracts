@@ -27,6 +27,7 @@ contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
 contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name read-only
 contracts.claimSets.<kind>.<service>-<id>    read-only
+contracts.nodes.<node>                       the node collection
 contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
@@ -55,6 +56,10 @@ Several modules may define one contract, and the module system merges their clai
 ### `contracts.claimSets.<kind>`
 
 A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
+
+### `contracts.nodes`
+
+The node collection: the nodes a [reference](#secrets) may name, keyed by node name, each with its evaluated `config`, such as nixos-cross-config's node collection (default `{ }`). The core resolves and checks references against it ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)), reading only each node's `contracts.claimSets`, and a backend adapter reads what else it needs of a node from the same entry. A reference without a node names this configuration, so the collection need not contain it.
 
 ### `contracts.kinds.<kind>`
 
@@ -114,20 +119,21 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 `contracts.services.<service>.secrets.<id>`: a runtime credential the service needs.
 
-| Field       | Type                                            | Default  |
-| ----------- | ----------------------------------------------- | -------- |
-| `mode`      | a mode string                                   | `"0440"` |
-| `owner`     | an account name                                 | `"root"` |
-| `group`     | a group name                                    | derived  |
-| `generate`  | a generator name, or null                       | `null`   |
-| `from`      | a list of references                            | `[ ]`    |
-| `unit`      | read-only, the dynamic identity's unit, or null | derived  |
-| `delivered` | read-only, whether the secret is delivered      | derived  |
-| `path`      | read-only, where the daemon reads the secret    | derived  |
+| Field        | Type                                              | Default  |
+| ------------ | ------------------------------------------------- | -------- |
+| `mode`       | a mode string                                     | `"0440"` |
+| `owner`      | an account name                                   | `"root"` |
+| `group`      | a group name                                      | derived  |
+| `generate`   | a generator name, or null                         | `null`   |
+| `from`       | a list of references                              | `[ ]`    |
+| `referenced` | read-only, each reference with its resolved claim | derived  |
+| `unit`       | read-only, the dynamic identity's unit, or null   | derived  |
+| `delivered`  | read-only, whether the secret is delivered        | derived  |
+| `path`       | read-only, where the daemon reads the secret      | derived  |
 
 A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A node turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
 
-`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)). A reference is a claim name, for a secret of this node, or `{ node; name; }`, for one another node holds:
+`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)). A reference is a claim name, for a secret of this node, or `{ node; name; }`, for one a node of [`contracts.nodes`](#contractsnodes) holds, of the type [`lib.types.reference`](#libtypesreference):
 
 ```nix
 # A copy of a token the `metrics` node generates
@@ -140,7 +146,9 @@ secrets.htpasswd = {
 };
 ```
 
-Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A backend adapter resolves the references, and its checks reject one it cannot resolve. A check fails for a claim that references several secrets without a `generate`. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
+Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A check fails for a claim that references several secrets without a `generate`.
+
+The core resolves each reference into `referenced`, in the order of `from`, as `{ node; name; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). A backend adapter reads `referenced` rather than resolving references itself. A check fails, once per reference, for a reference to a node missing from `contracts.nodes`, to a node that imports no nixos-contracts module, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
 `path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
@@ -197,10 +205,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `location` to the installed `age.secrets.<name>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
-`contracts.adapters.agenix-rekey.nodes` (lazy attribute set, default `{ }`)
-: The nodes a reference may name, each with its evaluated `config`, such as nixos-cross-config's node collection. A reference without a node reads this configuration.
-
-The adapter reads a referenced node's claim set before its `age.secrets`, takes the names of its own entries from its own claim set alone, and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. Its checks fail for a reference to a node missing from `nodes`, to a node that imports no nixos-contracts module, to a name that is no secret claim of an enabled contract on that node, to a secret with `from` of its own, which also catches two copies referencing each other, and to a secret on a node without this adapter. A copy whose reference fails its check gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
+The adapter has no settings. It reads the claims a secret's references resolve to from its `referenced`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, so entries across nodes, in either direction, evaluate without cycles. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
 
 A generated secret with `from` defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
 
@@ -258,7 +263,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim, settings }`, with the same resolved `identity`, a claim-set entry and the kind's settings at `contracts.kinds.<name>`, returning null or a reason string. Only claims of enabled contracts are checked, and a rejected claim reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
+: The kind's check rule: a function of `{ identity, claim, settings, config }`, with the same resolved `identity`, a claim-set entry, the kind's settings at `contracts.kinds.<name>` and the top-level configuration, returning null, a reason string or a list of them. Only claims of enabled contracts are checked, and each reason reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.kinds.<name>`.
@@ -279,4 +284,19 @@ mkClaimKind {
       };
     };
 }
+```
+
+### `lib.types.reference`
+
+The option type of a [reference](#secrets), the type of the entries of a secret's `from`: `{ node ? null; name; }`, where a plain claim name coerces to a reference with a null node. A service module whose own settings carry a reference into `from`, such as one a nixos-cross-config contribution delivers, types the setting with it, so the value it receives is already a reference:
+
+```nix
+options.example.influxdb.writers = lib.mkOption {
+  type = lib.types.attrsOf contractsLib.types.reference;
+  default = { };
+};
+
+config.contracts.services.influxdb.secrets = lib.mapAttrs' (
+  writer: token: lib.nameValuePair "writer-${writer}" { from = [ token ]; }
+) config.example.influxdb.writers;
 ```

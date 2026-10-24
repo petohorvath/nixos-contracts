@@ -57,27 +57,19 @@ let
     };
   };
 
-  # Configurations by node name, each given the whole collection as its
-  # nodes, as nixos-cross-config's node collection would be.
-  nodesOf =
-    modulesByNode:
-    lib.fix (
-      nodes:
-      lib.mapAttrs (node: modules: {
-        config = configuration (
-          [
-            {
-              age.rekey = {
-                secretsDir = ./. + "/${node}";
-                generatedSecretsDir = ./generated + "/${node}";
-              };
-              contracts.adapters.agenix-rekey = { inherit nodes; };
-            }
-          ]
-          ++ modules
-        );
-      }) modulesByNode
-    );
+  # Configurations by node name sharing one node collection, each with its
+  # own secrets directories under its name.
+  nodesOf = import ../../fixtures/nodes.nix {
+    evaluate = configuration;
+    modulesOf = node: [
+      {
+        age.rekey = {
+          secretsDir = ./. + "/${node}";
+          generatedSecretsDir = ./generated + "/${node}";
+        };
+      }
+    ];
+  };
   # A telegraf node generating its token, and an influxdb node.
   telegraf.contracts.services.telegraf = {
     enable = true;
@@ -363,50 +355,6 @@ in
     };
   };
 
-  testReferenceToAnUnknownNodeFailsItsCheck = {
-    expr =
-      (nodesOf {
-        store = [
-          (influxdb {
-            token.from = [
-              {
-                node = "metrics";
-                name = "telegraf-token";
-              }
-            ];
-          })
-        ];
-      }).store.config.contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb-token` references node `metrics`, which is not in `contracts.adapters.agenix-rekey.nodes`."
-    ];
-  };
-
-  testReferenceToNoSecretOfAnEnabledContractFailsItsCheck = {
-    expr =
-      (nodesOf {
-        metrics = [
-          telegraf
-          ({ lib, ... }: { contracts.services.telegraf.enable = lib.mkForce false; })
-        ];
-        store = [
-          (influxdb {
-            remote.from = [
-              {
-                node = "metrics";
-                name = "telegraf-token";
-              }
-            ];
-            local.from = [ "influxdb-missing" ];
-          })
-        ];
-      }).store.config.contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb-local` references `influxdb-missing`, which is no secret claim of an enabled contract."
-      "nixos-contracts: secret `influxdb-remote` references `metrics:telegraf-token`, which is no secret claim of an enabled contract."
-    ];
-  };
-
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
     expr =
       (configuration [
@@ -420,7 +368,7 @@ in
         })
         {
           # The metrics node holds its contracts, but no secret backend.
-          contracts.adapters.agenix-rekey.nodes.metrics.config = nixos.evaluate [
+          contracts.nodes.metrics.config = nixos.evaluate [
             contracts
             telegraf
           ];
@@ -428,27 +376,6 @@ in
       ]).contracts.failures;
     expected = [
       "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, whose node has no `nixosModules.agenix-rekey`."
-    ];
-  };
-
-  testReferenceToANodeWithoutContractsFailsItsCheck = {
-    expr =
-      (configuration [
-        (influxdb {
-          token.from = [
-            {
-              node = "metrics";
-              name = "telegraf-token";
-            }
-          ];
-        })
-        {
-          # The metrics node imports no nixos-contracts module at all.
-          contracts.adapters.agenix-rekey.nodes.metrics.config = nixos.evaluate [ ];
-        }
-      ]).contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, whose node imports no nixos-contracts module."
     ];
   };
 
@@ -466,7 +393,7 @@ in
         {
           # The metrics node sets no secrets directories, so its token has
           # no encrypted file.
-          contracts.adapters.agenix-rekey.nodes.metrics.config = configuration [ telegraf ];
+          contracts.nodes.metrics.config = configuration [ telegraf ];
         }
       ]).contracts.failures;
     expected = [
@@ -474,42 +401,9 @@ in
     ];
   };
 
-  testReferenceToASecretWithReferencesFailsItsCheck = {
+  testCopyWithARejectedReferenceFailsOnlyTheReferenceCheck = {
     expr =
       (nodesOf {
-        store = [
-          (influxdb {
-            origin.generate = "alnum";
-            copy.from = [ "influxdb-origin" ];
-            chained.from = [ "influxdb-copy" ];
-          })
-        ];
-      }).store.config.contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb-chained` references `influxdb-copy`, which references secrets itself; reference a secret without `from`."
-    ];
-  };
-
-  testCopiesReferencingEachOtherFailTheirChecks =
-    let
-      nodes = nodesOf {
-        metrics = [
-          (
-            { lib, ... }:
-            {
-              imports = [ telegraf ];
-              contracts.services.telegraf.secrets.token = {
-                generate = lib.mkForce null;
-                from = [
-                  {
-                    node = "store";
-                    name = "influxdb-token";
-                  }
-                ];
-              };
-            }
-          )
-        ];
         store = [
           (influxdb {
             token.from = [
@@ -520,19 +414,11 @@ in
             ];
           })
         ];
-      };
-    in
-    {
-      expr = lib.mapAttrs (_: node: node.config.contracts.failures) nodes;
-      expected = {
-        metrics = [
-          "nixos-contracts: secret `telegraf-token` references `store:influxdb-token`, which references secrets itself; reference a secret without `from`."
-        ];
-        store = [
-          "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, which references secrets itself; reference a secret without `from`."
-        ];
-      };
-    };
+      }).store.config.contracts.failures;
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-token`: it references node `metrics`, which is not in `contracts.nodes`."
+    ];
+  };
 
   testClaimReadsTheInstalledPath = {
     expr =

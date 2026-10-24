@@ -1,9 +1,9 @@
 /*
   Two nodes sharing one value: a telegraf node generates its token, and an
   influxdb node copies it by reference to the node and claim name. Each node
-  is given the collection, as nixos-cross-config's node collection would be.
-  The encrypted files under `secrets/` are not part of the example; the
-  configurations are evaluated, not built.
+  is given all nodes as its node collection, as nixos-cross-config would
+  give them. The encrypted files under `secrets/` are not part of the
+  example; the configurations are evaluated, not built.
 */
 {
   nixpkgs,
@@ -24,7 +24,7 @@ let
         exports.nixosModules.agenix-rekey
         {
           age.rekey.generatedSecretsDir = ./secrets + "/${name}";
-          contracts.adapters.agenix-rekey = { inherit nodes; };
+          contracts = { inherit nodes; };
           nixpkgs.hostPlatform = system;
           system.stateVersion = "26.05";
         }
