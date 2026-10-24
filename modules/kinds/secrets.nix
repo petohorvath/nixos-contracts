@@ -3,12 +3,7 @@
 { lib }:
 let
   referenceType = (import ../types.nix { inherit lib; }).reference;
-
-  # The configuration a reference reads, or null for a node missing from
-  # the node collection.
-  nodeConfigOrNull =
-    config: reference:
-    if reference.node == null then config else config.contracts.nodes.${reference.node}.config or null;
+  inherit (import ../references.nix) labelOf nodeConfigOrNull;
 
   hasContracts = nodeConfig: nodeConfig != null && nodeConfig ? contracts.claimSets.secrets;
 
@@ -39,9 +34,6 @@ let
       claim = if resolves claim then claim else null;
     };
 
-  labelOf =
-    reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
-
   # Why a reference does not resolve, or null when it does.
   referenceReason =
     config: reference:
@@ -70,11 +62,9 @@ let
       substSubModules = modules: uniqueWithSubmodules message (type.substSubModules modules);
     };
 
-  /*
-    A slot holds the data of one adapter, or null when none is imported.
-    A second adapter's definition fails, naming both, rather than merging
-    with the first, so one backend sets both its location and generators.
-  */
+  # A slot holds the data of one adapter, or null when none is imported. A
+  # second adapter's definition fails, naming both, rather than merging with
+  # the first, so one backend sets both its location and generators.
   mkAdapterSlot =
     {
       message,

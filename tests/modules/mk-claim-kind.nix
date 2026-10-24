@@ -280,15 +280,18 @@ in
     expected = [ "nixos-contracts: tokens claim `a-short`: it is too short." ];
   };
 
-  testCheckRuleReportsEachReasonAndReadsTheConfiguration = {
+  testCheckRuleReportsEachReason = {
     expr = failures [
       (mkClaimKind {
         name = "tokens";
         description = "Tokens.";
         check =
-          { claim, config, ... }:
-          map (reserved: "it uses the reserved word `${reserved}`") (
-            lib.intersectLists config.reserved claim.words
+          { claim, ... }:
+          map (word: "it uses the reserved word `${word}`") (
+            lib.intersectLists [
+              "admin"
+              "root"
+            ] claim.words
           );
         claim =
           _:
@@ -300,20 +303,7 @@ in
             };
           };
       })
-      (
-        { lib, ... }:
-        {
-          options.reserved = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            description = "Words no token may use.";
-          };
-        }
-      )
       {
-        reserved = [
-          "admin"
-          "root"
-        ];
         contracts.services.a = {
           enable = true;
           identity.static.user = "a";
@@ -329,6 +319,48 @@ in
       "nixos-contracts: tokens claim `a-main`: it uses the reserved word `admin`."
       "nixos-contracts: tokens claim `a-main`: it uses the reserved word `root`."
     ];
+  };
+
+  testCheckRuleReadsTheConfiguration = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        check =
+          { claim, config, ... }:
+          if builtins.elem claim.word config.reserved then "it uses a reserved word" else null;
+        claim =
+          _:
+          { lib, ... }:
+          {
+            options.word = lib.mkOption {
+              type = lib.types.str;
+              description = "The word of the token.";
+            };
+          };
+      })
+      (
+        { lib, ... }:
+        {
+          options.reserved = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            description = "Words no token may use.";
+          };
+        }
+      )
+      {
+        reserved = [ "admin" ];
+        contracts.services.a = {
+          enable = true;
+          identity.static.user = "a";
+          tokens = {
+            admin.word = "admin";
+            plain.word = "plain";
+          };
+        };
+      }
+    ];
+    expected = [ "nixos-contracts: tokens claim `a-admin`: it uses a reserved word." ];
   };
 
   testCheckRuleReportsFailingClaimsOfEnabledContracts = {

@@ -1,6 +1,6 @@
 { contracts }:
 let
-  inherit (contracts) evaluate failures;
+  inherit (contracts) evaluate failures nodesOf;
 
   service = name: identity: secrets: {
     contracts.services.${name} = {
@@ -41,16 +41,6 @@ let
     contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
   };
 
-  # Configurations by node name, each given the whole collection as its
-  # node collection, as nixos-cross-config's would be.
-  nodesOf =
-    modulesByNode:
-    let
-      nodes = builtins.mapAttrs (_: modules: {
-        config = evaluate ([ { contracts.nodes = nodes; } ] ++ modules);
-      }) modulesByNode;
-    in
-    nodes;
   # A telegraf service generating its token, and a store service copying
   # the secrets its references name.
   telegraf = service "telegraf" { static.user = "telegraf"; } { token.generate = "alnum"; };

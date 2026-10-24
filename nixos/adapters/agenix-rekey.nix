@@ -15,18 +15,16 @@ let
 
   isCopy = secret: secret.generate == null && secret.from != [ ];
 
-  labelOf =
-    reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
+  inherit (import ../../modules/references.nix) labelOf nodeConfigOrNull;
 
   # The backend entry a reference names, or null when the core rejected the
   # reference or its node has no entry for it.
   entryOrNull =
     reference:
-    let
-      nodeConfig =
-        if reference.node == null then config else config.contracts.nodes.${reference.node}.config;
-    in
-    if reference.claim == null then null else nodeConfig.age.secrets.${reference.name} or null;
+    if reference.claim == null then
+      null
+    else
+      (nodeConfigOrNull config reference).age.secrets.${reference.name} or null;
 
   # The entry of the one secret a copy references, or null.
   copiedEntryOrNull = secret: entryOrNull (lib.head secret.referenced);

@@ -57,27 +57,19 @@ let
     };
   };
 
-  # Configurations by node name, each given the whole collection as its
-  # node collection, as nixos-cross-config's would be.
-  nodesOf =
-    modulesByNode:
-    lib.fix (
-      nodes:
-      lib.mapAttrs (node: modules: {
-        config = configuration (
-          [
-            {
-              age.rekey = {
-                secretsDir = ./. + "/${node}";
-                generatedSecretsDir = ./generated + "/${node}";
-              };
-              contracts = { inherit nodes; };
-            }
-          ]
-          ++ modules
-        );
-      }) modulesByNode
-    );
+  # Configurations by node name sharing one node collection, each with its
+  # own secrets directories under its name.
+  nodesOf = import ../../fixtures/nodes.nix {
+    evaluate = configuration;
+    modulesOf = node: [
+      {
+        age.rekey = {
+          secretsDir = ./. + "/${node}";
+          generatedSecretsDir = ./generated + "/${node}";
+        };
+      }
+    ];
+  };
   # A telegraf node generating its token, and an influxdb node.
   telegraf.contracts.services.telegraf = {
     enable = true;
