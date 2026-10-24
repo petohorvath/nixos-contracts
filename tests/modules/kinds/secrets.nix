@@ -47,7 +47,17 @@ let
   store = service "influxdb" { static.user = "influxdb2"; };
   remoteToken = {
     node = "metrics";
-    name = "telegraf-token";
+    service = "telegraf";
+    id = "token";
+  };
+
+  # A configuration whose node identity is `store`, without a node
+  # collection, and a reference to one of its influxdb secrets.
+  onStore.contracts.node = "store";
+  own = id: {
+    node = "store";
+    service = "influxdb";
+    inherit id;
   };
 in
 {
@@ -65,6 +75,12 @@ in
       owner = "root";
       group = "chrony";
       generate = null;
+      ref = {
+        node = null;
+        kind = "secrets";
+        service = "chrony";
+        id = "key";
+      };
       from = [ ];
       referenced = [ ];
       unit = null;
@@ -162,27 +178,37 @@ in
       };
     };
 
-  testSecretReferenceByClaimNameNamesThisConfiguration = {
-    expr =
-      (secretOf [ ] { static.user = "svc"; } {
-        from = [
-          "svc-other"
-          {
-            node = "metrics";
-            name = "telegraf-token";
-          }
-        ];
-      }).from;
+  testSecretReferenceDefaultsItsKind = {
+    expr = (secretOf [ ] { static.user = "svc"; } { from = [ remoteToken ]; }).from;
     expected = [
       {
-        node = null;
-        name = "svc-other";
-      }
-      {
         node = "metrics";
-        name = "telegraf-token";
+        kind = "secrets";
+        service = "telegraf";
+        id = "token";
       }
     ];
+  };
+
+  testSecretReferenceOfAnotherKindIsATypeError = {
+    expr =
+      (secretOf [ ] { static.user = "svc"; } {
+        from = [ (remoteToken // { kind = "binds"; }) ];
+      }).from;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.from[^\n]*\\.kind' is not of type";
+  };
+
+  testSecretReferenceByClaimNameIsATypeError = {
+    expr = (secretOf [ ] { static.user = "svc"; } { from = [ "telegraf-token" ]; }).from;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.from[^\n]*' is not of type `submodule'";
+  };
+
+  testSecretReferenceNeedsANode = {
+    expr =
+      (secretOf [ ] { static.user = "svc"; } {
+        from = [ (removeAttrs remoteToken [ "node" ]) ];
+      }).from;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.from[^\n]*\\.node' was accessed but has no value defined";
   };
 
   testSecretReferencingSeveralSecretsNeedsAGenerator =
@@ -193,18 +219,32 @@ in
           a = { };
           b = { };
           key = {
-            from = [
-              "svc-a"
-              "svc-b"
-            ];
+            from =
+              map
+                (id: {
+                  node = "here";
+                  service = "svc";
+                  inherit id;
+                })
+                [
+                  "a"
+                  "b"
+                ];
           }
           // secret;
         };
+      here.contracts.node = "here";
     in
     {
       expr = {
-        copy = failures [ (referencing { }) ];
-        generated = failures [ (referencing { generate = "basic-auth"; }) ];
+        copy = failures [
+          here
+          (referencing { })
+        ];
+        generated = failures [
+          here
+          (referencing { generate = "basic-auth"; })
+        ];
       };
       expected = {
         copy = [
@@ -374,7 +414,7 @@ in
           (store {
             origin.generate = "alnum";
             remote.from = [ remoteToken ];
-            local.from = [ "influxdb-origin" ];
+            local.from = [ (own "origin") ];
           })
         ];
       };
@@ -394,35 +434,47 @@ in
       };
     };
 
-  testReferenceToItsOwnNodeByNameReadsThisConfiguration =
-    let
-      nodes = nodesOf {
-        store = [
-          (store {
-            origin.generate = "alnum";
-            copy.from = [
-              {
-                node = "store";
-                name = "influxdb-origin";
-              }
-            ];
-          })
-        ];
-      };
-    in
-    {
-      expr = map (
-        reference: reference.claim.name
-      ) nodes.store.config.contracts.claimSets.secrets.influxdb-copy.referenced;
-      expected = [ "influxdb-origin" ];
-    };
+  testReferenceToItsOwnNodeReadsThisConfiguration = {
+    expr =
+      map (reference: reference.claim.name)
+        (evaluate [
+          onStore
+          (store { origin.generate = "alnum"; })
+          (
+            { config, ... }:
+            {
+              contracts.services.influxdb.secrets.copy.from = [
+                config.contracts.services.influxdb.secrets.origin.ref
+              ];
+            }
+          )
+        ]).contracts.claimSets.secrets.influxdb-copy.referenced;
+    expected = [ "influxdb-origin" ];
+  };
+
+  testReferenceWithoutANodeIdentityFailsItsCheck = {
+    expr = failures [
+      (store { origin.generate = "alnum"; })
+      (
+        { config, ... }:
+        {
+          contracts.services.influxdb.secrets.copy.from = [
+            config.contracts.services.influxdb.secrets.origin.ref
+          ];
+        }
+      )
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb-copy`: it references `:secrets.influxdb.origin`: it names no node, since the configuration holding the claim sets no `contracts.node`."
+    ];
+  };
 
   testReferenceToAnUnknownNodeFailsItsCheck = {
     expr =
       (nodesOf { store = [ (store { token.from = [ remoteToken ]; }) ]; })
       .store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references node `metrics`, which is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
     ];
   };
 
@@ -433,7 +485,7 @@ in
       { contracts.nodes.metrics.config = { }; }
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:telegraf-token`, whose node imports no nixos-contracts module."
+      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` imports no nixos-contracts module."
     ];
   };
 
@@ -447,13 +499,13 @@ in
         store = [
           (store {
             remote.from = [ remoteToken ];
-            local.from = [ "influxdb-missing" ];
+            local.from = [ (own "missing") ];
           })
         ];
       }).store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-local`: it references `influxdb-missing`, which is no secret claim of an enabled contract."
-      "nixos-contracts: secrets claim `influxdb-remote`: it references `metrics:telegraf-token`, which is no secret claim of an enabled contract."
+      "nixos-contracts: secrets claim `influxdb-local`: it references `store:secrets.influxdb.missing`: no enabled contract on `store` holds it."
+      "nixos-contracts: secrets claim `influxdb-remote`: it references `metrics:secrets.telegraf.token`: no enabled contract on `metrics` holds it."
     ];
   };
 
@@ -464,7 +516,9 @@ in
     expected = [
       {
         node = "metrics";
-        name = "telegraf-token";
+        kind = "secrets";
+        service = "telegraf";
+        id = "token";
         claim = null;
       }
     ];
@@ -472,32 +526,34 @@ in
 
   testEachRejectedReferenceFailsItsOwnCheck = {
     expr = failures [
+      onStore
       (store {
         hashes = {
           generate = "basic-auth";
           from = [
-            "influxdb-a"
-            "influxdb-b"
+            (own "a")
+            (own "b")
           ];
         };
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-hashes`: it references `influxdb-a`, which is no secret claim of an enabled contract."
-      "nixos-contracts: secrets claim `influxdb-hashes`: it references `influxdb-b`, which is no secret claim of an enabled contract."
+      "nixos-contracts: secrets claim `influxdb-hashes`: it references `store:secrets.influxdb.a`: no enabled contract on `store` holds it."
+      "nixos-contracts: secrets claim `influxdb-hashes`: it references `store:secrets.influxdb.b`: no enabled contract on `store` holds it."
     ];
   };
 
   testReferenceToASecretWithReferencesFailsItsCheck = {
     expr = failures [
+      onStore
       (store {
         origin.generate = "alnum";
-        copy.from = [ "influxdb-origin" ];
-        chained.from = [ "influxdb-copy" ];
+        copy.from = [ (own "origin") ];
+        chained.from = [ (own "copy") ];
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-chained`: it references `influxdb-copy`, which references secrets itself; reference a secret without `from`."
+      "nixos-contracts: secrets claim `influxdb-chained`: it references `store:secrets.influxdb.copy`, which references secrets itself; reference a secret without `from`."
     ];
   };
 
@@ -506,12 +562,7 @@ in
       nodes = nodesOf {
         metrics = [
           (service "telegraf" { static.user = "telegraf"; } {
-            token.from = [
-              {
-                node = "store";
-                name = "influxdb-token";
-              }
-            ];
+            token.from = [ (own "token") ];
           })
         ];
         store = [ (store { token.from = [ remoteToken ]; }) ];
@@ -521,10 +572,10 @@ in
       expr = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
       expected = {
         metrics = [
-          "nixos-contracts: secrets claim `telegraf-token`: it references `store:influxdb-token`, which references secrets itself; reference a secret without `from`."
+          "nixos-contracts: secrets claim `telegraf-token`: it references `store:secrets.influxdb.token`, which references secrets itself; reference a secret without `from`."
         ];
         store = [
-          "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:telegraf-token`, which references secrets itself; reference a secret without `from`."
+          "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`, which references secrets itself; reference a secret without `from`."
         ];
       };
     };

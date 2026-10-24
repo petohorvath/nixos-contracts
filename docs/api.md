@@ -11,7 +11,7 @@ This reference describes the public interface of nixos-contracts: its modules, o
 
 Both import the core and the three shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
 
-The [adapters](#adapters) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several adapters declares its options once.
+The [adapters](#adapters) and [`nixosModules.cross-config`](#nixosmodulescross-config) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several of them declares its options once.
 
 To import the modules by path without the flake, apply their directory to the `nix-libnet` library. `nixos` returns the NixOS modules by export name, and `modules` the generic module:
 
@@ -20,14 +20,20 @@ To import the modules by path without the flake, apply their directory to the `n
 import "${nixos-contracts}/modules" { libnet = nix-libnet.lib; }
 ```
 
+### `nixosModules.cross-config`
+
+Defaults [`contracts.node`](#contractsnode) to `crossConfig.name` and [`contracts.nodes`](#contractsnodes) to `crossConfig.nodeConfigurations`, so a configuration that takes part in [nixos-cross-config](https://github.com/petohorvath/nixos-cross-config) states its node identity and node collection once. It reads only options that nixos-cross-config's own NixOS module declares, which it requires beside it, and pulls in no flake input. It has no settings and adds no checks.
+
 ## Options
 
 ```text
 contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
-contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name read-only
+contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name, ref read-only
 contracts.claimSets.<kind>.<service>-<id>    read-only
+contracts.node                               this configuration's node identity
 contracts.nodes.<node>                       the node collection
+contracts.lookup, contracts.resolve          read-only, functions of a reference
 contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
@@ -57,9 +63,21 @@ Several modules may define one contract, and the module system merges their clai
 
 A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
 
+### `contracts.node`
+
+This configuration's node identity, its name in the node collection (string or null, default `null`). Every claim's `ref` names it, and while it is null a `ref` names a null node, which no lookup resolves, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. [`nixosModules.cross-config`](#nixosmodulescross-config) defaults it to `crossConfig.name`.
+
 ### `contracts.nodes`
 
-The node collection: the nodes a [reference](#secrets) may name, keyed by node name, each with its evaluated `config`, such as nixos-cross-config's node collection (default `{ }`). The core resolves and checks references against it ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)), reading only each node's `contracts.claimSets`, and a backend adapter reads what else it needs of a node from the same entry. A reference without a node names this configuration, so the collection need not contain it.
+The node collection: the nodes a [reference](#references) may name, keyed by node identity, each with its evaluated `config`, such as nixos-cross-config's node collection (default `{ }`). The core resolves references against it ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)), reading only each node's `contracts.claimSets`, and a backend adapter reads what else it needs of a node from the same entry. A reference that names `contracts.node` resolves in this configuration itself.
+
+### `contracts.lookup` and `contracts.resolve`
+
+Read-only functions of a [reference](#references) that find the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). `contracts.lookup reference` returns `{ claim; reason; }`: the claim-set entry and a null reason, or a null claim and why the reference names none. `contracts.resolve reference` returns the entry, or fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``. A reference names no claim when its node is null, is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
+
+```nix
+port = (config.contracts.resolve backend.bind).port;
+```
 
 ### `contracts.kinds.<kind>`
 
@@ -75,13 +93,25 @@ A read-only list of the messages of the failed checks in `contracts.assertions`,
 
 ## Claim kinds
 
-Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries three read-only fields:
+Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries four read-only fields:
 
 - `service`: the name of its service.
 - `id`: its id within the contract.
-- `name`: its claim name, `<service>-<id>`.
+- `name`: its claim name, `<service>-<id>`, the key of its claim set and of its backend's entry.
+- `ref`: its [reference](#references), `{ node; kind; service; id; }`, with `contracts.node` as its node.
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
+
+### References
+
+A reference names one claim by its node, kind, service and id, `{ node; kind; service; id; }`, and always names its node, so it means the same claim on every node that reads it ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). A claim's `ref` is its reference, built from `contracts.node` alone, so a module that hands its own claim to another node, such as through a nixos-cross-config contribution, passes the `ref` rather than writing it out:
+
+```nix
+crossConfig.contributions.store.example.influxdb.writers.${config.contracts.node} =
+  config.contracts.services.telegraf.secrets.token.ref;
+```
+
+A field that takes references of one kind, such as a secret's `from`, has the type [`lib.types.referenceTo`](#libtypesreferenceto) of that kind, so a reference written by hand omits `kind`, and one of another kind fails as a type error at its definition.
 
 ### Binds
 
@@ -133,22 +163,25 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A node turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
 
-`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)). A reference is a claim name, for a secret of this node, or `{ node; name; }`, for one a node of [`contracts.nodes`](#contractsnodes) holds, of the type [`lib.types.reference`](#libtypesreference):
+`from` references the secrets the value comes from ([ADR 0007](adr/0007-reference-another-secret-by-node-and-claim-name.md)), each a [reference](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }`:
 
 ```nix
 # A copy of a token the `metrics` node generates
-secrets.writer-token.from = [ { node = "metrics"; name = "telegraf-token"; } ];
+secrets.writer-token.from = [ { node = "metrics"; service = "telegraf"; id = "token"; } ];
 
 # An htpasswd file the generator makes from two clients' passwords
 secrets.htpasswd = {
   generate = "basic-auth";
-  from = [ { node = "grafana"; name = "grafana-loki-password"; } "alloy-loki-password" ];
+  from = [
+    { node = "grafana"; service = "grafana"; id = "loki-password"; }
+    config.contracts.services.alloy.secrets.loki-password.ref
+  ];
 };
 ```
 
 Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A check fails for a claim that references several secrets without a `generate`.
 
-The core resolves each reference into `referenced`, in the order of `from`, as `{ node; name; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). A backend adapter reads `referenced` rather than resolving references itself. A check fails, once per reference, for a reference to a node missing from `contracts.nodes`, to a node that imports no nixos-contracts module, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
+The core resolves each reference into `referenced`, in the order of `from`, as `{ node; kind; service; id; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). A backend adapter reads `referenced` rather than resolving references itself, and finds a resolved claim's backend entry by the claim's `name`. A check fails, once per reference, for each reason [`contracts.lookup`](#contractslookup-and-contractsresolve) returns, and for a reference to a secret with `from` of its own, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
 `path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
@@ -257,7 +290,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id and `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id` and `name` on every claim, so a claim type cannot declare options with these names.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id and `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `name` and `ref` on every claim, so a claim type cannot declare options with these names.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
@@ -288,11 +321,15 @@ mkClaimKind {
 
 ### `lib.types.reference`
 
-The option type of a [reference](#secrets), the type of the entries of a secret's `from`: `{ node ? null; name; }`, where a plain claim name coerces to a reference with a null node. A service module whose own settings carry a reference into `from`, such as one a nixos-cross-config contribution delivers, types the setting with it, so the value it receives is already a reference:
+The option type of a [reference](#references) of any kind, `{ node; kind; service; id; }`, all required: `node` a node identity, or null for the `ref` of a claim whose configuration has none, and the others strings. A claim's `ref` has this shape.
+
+### `lib.types.referenceTo`
+
+`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. A secret's `from` takes `referenceTo "secrets"`. A service module whose own settings carry a reference, such as one a nixos-cross-config contribution delivers, types the setting with it, so the value it receives is already a reference of the kind it uses:
 
 ```nix
 options.example.influxdb.writers = lib.mkOption {
-  type = lib.types.attrsOf contractsLib.types.reference;
+  type = lib.types.attrsOf (contractsLib.types.referenceTo "secrets");
   default = { };
 };
 

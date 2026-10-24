@@ -8,7 +8,7 @@ A **contract** describes one service through its **identity** and its **claims**
 
 The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 
-A contract only knows its own configuration. It names no network or firewall policy, and names another node only where a secret references a secret that node holds. Fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
+A contract only knows its own configuration. It names no network or firewall policy, and names another node only in a reference to a claim that node holds. Fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
 
 **Adapters** are opt-in NixOS modules that map one claim set onto one backend: preservation for mounts, agenix-rekey for secrets, and systemd credentials for delivering the secrets of a dynamic identity into its unit.
 
@@ -36,8 +36,9 @@ The flake exports:
 
 - `nixosModules.default`: the contracts for a NixOS configuration, with their failed checks forwarded to `assertions`.
 - `nixosModules.preservation`, `nixosModules.agenix-rekey` and `nixosModules.systemd-credentials`: one adapter each, also importing `nixosModules.default`. Importing an adapter turns it on; its backend's own NixOS module must be imported too.
+- `nixosModules.cross-config`: takes the node identity and node collection from nixos-cross-config, also importing `nixosModules.default`.
 - `modules.generic.default`: the same contracts for any module class, with failed checks left in `contracts.failures`.
-- `lib.mkDefaultContract` and `lib.mkClaimKind`.
+- `lib.mkDefaultContract`, `lib.mkClaimKind`, `lib.types.reference` and `lib.types.referenceTo`.
 
 ## Usage
 

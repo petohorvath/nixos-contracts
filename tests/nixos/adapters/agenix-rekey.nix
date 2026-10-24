@@ -57,7 +57,14 @@ let
     };
   };
 
-  # Configurations by node name sharing one node collection, each with its
+  # The token the metrics node's telegraf generates.
+  metricsToken = {
+    node = "metrics";
+    service = "telegraf";
+    id = "token";
+  };
+
+  # Configurations by node identity sharing one node collection, each with its
   # own secrets directories under its name.
   nodesOf = import ../../fixtures/nodes.nix {
     evaluate = configuration;
@@ -243,7 +250,13 @@ in
     expr = secretOf "kea-copy" (configuration [
       services
       values
-      { contracts.services.kea.secrets.copy.from = [ "kea-token" ]; }
+      (
+        { config, ... }:
+        {
+          contracts.node = "dhcp";
+          contracts.services.kea.secrets.copy.from = [ config.contracts.services.kea.secrets.token.ref ];
+        }
+      )
     ]);
     expected = {
       owner = "root";
@@ -261,12 +274,7 @@ in
           metrics = [ telegraf ];
           store = [
             (influxdb {
-              telegraf-token.from = [
-                {
-                  node = "metrics";
-                  name = "telegraf-token";
-                }
-              ];
+              telegraf-token.from = [ metricsToken ];
             })
           ];
         }).store.config;
@@ -279,7 +287,7 @@ in
     };
   };
 
-  testCopyReferencingItsOwnNodeByNameReadsThisConfiguration =
+  testCopyReferencingItsOwnNodeReadsThisConfiguration =
     let
       inherit
         ((nodesOf {
@@ -289,7 +297,8 @@ in
               copy.from = [
                 {
                   node = "store";
-                  name = "influxdb-origin";
+                  service = "influxdb";
+                  id = "origin";
                 }
               ];
             })
@@ -322,11 +331,12 @@ in
               hashes = {
                 generate = "basic-auth";
                 from = [
+                  metricsToken
                   {
-                    node = "metrics";
-                    name = "telegraf-token";
+                    node = "store";
+                    service = "influxdb";
+                    id = "local";
                   }
-                  "influxdb-local"
                 ];
               };
             })
@@ -359,12 +369,7 @@ in
     expr =
       (configuration [
         (influxdb {
-          token.from = [
-            {
-              node = "metrics";
-              name = "telegraf-token";
-            }
-          ];
+          token.from = [ metricsToken ];
         })
         {
           # The metrics node holds its contracts, but no secret backend.
@@ -375,7 +380,7 @@ in
         }
       ]).contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb-token` references `metrics:telegraf-token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb-token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 
@@ -383,12 +388,7 @@ in
     expr =
       (configuration [
         (influxdb {
-          token.from = [
-            {
-              node = "metrics";
-              name = "telegraf-token";
-            }
-          ];
+          token.from = [ metricsToken ];
         })
         {
           # The metrics node sets no secrets directories, so its token has
@@ -397,7 +397,7 @@ in
         }
       ]).contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb-token` copies `metrics:telegraf-token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb-token.rekeyFile`."
+      "nixos-contracts: secret `influxdb-token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb-token.rekeyFile`."
     ];
   };
 
@@ -406,17 +406,12 @@ in
       (nodesOf {
         store = [
           (influxdb {
-            token.from = [
-              {
-                node = "metrics";
-                name = "telegraf-token";
-              }
-            ];
+            token.from = [ metricsToken ];
           })
         ];
       }).store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references node `metrics`, which is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
     ];
   };
 

@@ -1,38 +1,56 @@
 { contractsLib, lib }:
 let
-  referenceOf =
-    value:
+  valueOf =
+    type: value:
     (lib.evalModules {
       modules = [
         {
-          options.token = lib.mkOption { type = contractsLib.types.reference; };
+          options.token = lib.mkOption { inherit type; };
           config.token = value;
         }
       ];
     }).config.token;
+  referenceOf = valueOf contractsLib.types.reference;
+  secretReferenceOf = valueOf (contractsLib.types.referenceTo "secrets");
+
+  token = {
+    node = "metrics";
+    service = "telegraf";
+    id = "token";
+  };
 in
 {
-  testReferenceByClaimNameNamesThisConfiguration = {
+  testReferenceNamesANodeKindServiceAndId = {
+    expr = referenceOf (token // { kind = "secrets"; });
+    expected = token // {
+      kind = "secrets";
+    };
+  };
+
+  testReferenceNeedsAKind = {
+    expr = (referenceOf token).kind;
+    expectedError.msg = "token\\.kind' was accessed but has no value defined";
+  };
+
+  testReferenceTakesNoClaimName = {
     expr = referenceOf "telegraf-token";
-    expected = {
-      node = null;
-      name = "telegraf-token";
+    expectedError.msg = "token' is not of type `submodule'";
+  };
+
+  testReferenceToOneKindDefaultsItsKind = {
+    expr = secretReferenceOf token;
+    expected = token // {
+      kind = "secrets";
     };
   };
 
-  testReferenceNamesANodeOfTheCollection = {
-    expr = referenceOf {
-      node = "metrics";
-      name = "telegraf-token";
-    };
-    expected = {
-      node = "metrics";
-      name = "telegraf-token";
-    };
+  testReferenceToOneKindRejectsAnotherKind = {
+    expr = (secretReferenceOf (token // { kind = "binds"; })).kind;
+    expectedError.msg = "token\\.kind' is not of type `value \"secrets\"";
   };
 
-  testReferenceNeedsAClaimName = {
-    expr = (referenceOf { node = "metrics"; }).name;
-    expectedError.msg = "token\\.name' was accessed but has no value defined";
+  testReferenceNeedsANode = {
+    expr = (secretReferenceOf (removeAttrs token [ "node" ])).node;
+    expectedError.msg = "token\\.node' was accessed but has no value defined";
   };
 }

@@ -27,9 +27,10 @@
     top-level `config`. Inside the submodule, the module argument `name` is
     the claim's id and `claimName` its `<service>-<id>` claim name. A value
     that follows from the identity, such as a file owner, is an option
-    defaulting to it. The constructor declares three read-only options on
-    every claim, `service`, `id` and the claim name `name`, so a claim type
-    cannot declare options with these names.
+    defaulting to it. The constructor declares four read-only options on
+    every claim, `service`, `id`, the claim name `name` and the claim's
+    reference `ref`, so a claim type cannot declare options with these
+    names.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -235,6 +236,27 @@ else
                             default = claimName;
                             defaultText = lib.literalMD "`<service>-<id>`";
                             description = "The claim name, `<service>-<id>`.";
+                          };
+                          # Built from the node identity, kind, service
+                          # and id alone, so contributing it to another
+                          # node reads no claim set.
+                          ref = lib.mkOption {
+                            type = lib.types.raw;
+                            readOnly = true;
+                            default = {
+                              # Null while the configuration has no node
+                              # identity, which every lookup rejects.
+                              inherit (topConfig.contracts) node;
+                              kind = kindName;
+                              inherit service;
+                              id = name;
+                            };
+                            defaultText = lib.literalMD "`{ node; kind; service; id; }`";
+                            description = ''
+                              The reference to this claim, naming
+                              `contracts.node`, which no lookup resolves
+                              while that is null.
+                            '';
                           };
                         };
                       }
