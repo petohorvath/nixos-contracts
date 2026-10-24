@@ -280,6 +280,57 @@ in
     expected = [ "nixos-contracts: tokens claim `a-short`: it is too short." ];
   };
 
+  testCheckRuleReportsEachReasonAndReadsTheConfiguration = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        check =
+          { claim, config, ... }:
+          map (reserved: "it uses the reserved word `${reserved}`") (
+            lib.intersectLists config.reserved claim.words
+          );
+        claim =
+          _:
+          { lib, ... }:
+          {
+            options.words = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "The words of the token.";
+            };
+          };
+      })
+      (
+        { lib, ... }:
+        {
+          options.reserved = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            description = "Words no token may use.";
+          };
+        }
+      )
+      {
+        reserved = [
+          "admin"
+          "root"
+        ];
+        contracts.services.a = {
+          enable = true;
+          identity.static.user = "a";
+          tokens.main.words = [
+            "admin"
+            "plain"
+            "root"
+          ];
+        };
+      }
+    ];
+    expected = [
+      "nixos-contracts: tokens claim `a-main`: it uses the reserved word `admin`."
+      "nixos-contracts: tokens claim `a-main`: it uses the reserved word `root`."
+    ];
+  };
+
   testCheckRuleReportsFailingClaimsOfEnabledContracts = {
     expr = failures [
       (mkClaimKind {

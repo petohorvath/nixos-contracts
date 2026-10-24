@@ -25,8 +25,11 @@ in
     inherit lib;
     flake = self;
   };
-  lib.mkDefaultContract = import ./lib/mk-default-contract.nix {
-    inherit contracts contractsLib lib;
+  lib = {
+    mkDefaultContract = import ./lib/mk-default-contract.nix {
+      inherit contracts contractsLib lib;
+    };
+    types = import ./lib/types.nix { inherit contractsLib lib; };
   };
   modules = {
     default = import ./modules/default.nix {

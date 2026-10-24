@@ -17,6 +17,7 @@ in
     expected = [
       "mkClaimKind"
       "mkDefaultContract"
+      "types"
     ];
   };
 

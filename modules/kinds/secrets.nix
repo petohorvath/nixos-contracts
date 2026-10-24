@@ -2,24 +2,60 @@
 # runtime and must keep private.
 { lib }:
 let
-  # A claim name alone references a secret of this configuration.
-  referenceType = lib.types.coercedTo lib.types.str (name: { inherit name; }) (
-    lib.types.submodule {
-      options = {
-        node = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          description = ''
-            The node holding the secret, or null for this configuration.
-          '';
-        };
-        name = lib.mkOption {
-          type = lib.types.str;
-          description = "The secret's claim name, `<service>-<id>`.";
-        };
-      };
-    }
-  );
+  referenceType = (import ../../lib/types.nix { inherit lib; }).reference;
+
+  # The configuration a reference reads, or null for a node missing from
+  # the node collection.
+  nodeConfigOrNull =
+    config: reference:
+    if reference.node == null then config else config.contracts.nodes.${reference.node}.config or null;
+
+  hasContracts = nodeConfig: nodeConfig != null && nodeConfig ? contracts.claimSets.secrets;
+
+  # The claim a reference names, or null.
+  claimOrNull =
+    config: reference:
+    let
+      nodeConfig = nodeConfigOrNull config reference;
+    in
+    if hasContracts nodeConfig then
+      nodeConfig.contracts.claimSets.secrets.${reference.name} or null
+    else
+      null;
+
+  /*
+    The claim a reference resolves to, or null when a check rejects it. It
+    does not follow a claim with `from` of its own, so two copies
+    referencing each other fail their checks instead of recursing.
+  */
+  resolve =
+    config: reference:
+    let
+      claim = claimOrNull config reference;
+    in
+    if claim == null || claim.from != [ ] then null else claim;
+
+  labelOf =
+    reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
+
+  # Why a reference does not resolve, or null when it does.
+  referenceReason =
+    config: reference:
+    let
+      nodeConfig = nodeConfigOrNull config reference;
+      claim = claimOrNull config reference;
+      references = "it references `${labelOf reference}`";
+    in
+    if nodeConfig == null then
+      "it references node `${reference.node}`, which is not in `contracts.nodes`"
+    else if !hasContracts nodeConfig then
+      "${references}, whose node imports no nixos-contracts module"
+    else if claim == null then
+      "${references}, which is no secret claim of an enabled contract"
+    else if claim.from != [ ] then
+      "${references}, which references secrets itself; reference a secret without `from`"
+    else
+      null;
 
   # `types.unique` turns into `types.uniq`, losing its message, when the
   # module system substitutes the submodules of an option it wraps.
@@ -107,31 +143,38 @@ in
       identity,
       claim,
       settings,
+      config,
     }:
     let
       inherit (settings) backend;
+      # A dynamic identity's user exists only while its unit runs, so it
+      # reads a secret the backend installs only through its shared group.
+      claimReason =
+        if identity.unit != null && !claim.delivered && claim.group != identity.group then
+          "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
+        else if
+          claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
+        then
+          "the secret backend provides no generator `${claim.generate}`"
+          +
+            lib.optionalString (backend.generators != [ ])
+              "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
+        else if claim.generate == null && builtins.length claim.from > 1 then
+          "it references several secrets but has no `generate`; a copy references one"
+        else
+          null;
     in
-    # A dynamic identity's user exists only while its unit runs, so it reads
-    # a secret the backend installs only through its shared group.
-    if identity.unit != null && !claim.delivered && claim.group != identity.group then
-      "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
-    else if
-      claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
-    then
-      "the secret backend provides no generator `${claim.generate}`"
-      +
-        lib.optionalString (backend.generators != [ ])
-          "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
-    else if claim.generate == null && builtins.length claim.from > 1 then
-      "it references several secrets but has no `generate`; a copy references one"
-    else
-      null;
+    lib.filter (reason: reason != null) ([ claimReason ] ++ map (referenceReason config) claim.from);
 
   claim =
     { identity, config, ... }:
-    { claimName, ... }:
     let
-      inherit (config.contracts.kinds.secrets) backend delivery;
+      # Read before the claim's own `config` shadows the top-level one.
+      topConfig = config;
+    in
+    { claimName, config, ... }:
+    let
+      inherit (topConfig.contracts.kinds.secrets) backend delivery;
       inherit (identity) unit;
       delivered = unit != null && delivery != null;
     in
@@ -175,7 +218,8 @@ in
             `{ node; name; }` for a secret another node holds.
             Without `generate`, the secret is a copy of the one secret it
             references; with it, the generator makes the value from the
-            secrets it references. A backend adapter resolves them.
+            secrets it references. Each reference names a node in
+            `contracts.nodes`, and the core resolves it into `referenced`.
           '';
           example = [
             {
@@ -183,6 +227,18 @@ in
               name = "telegraf-token";
             }
           ];
+        };
+        referenced = lib.mkOption {
+          type = lib.types.listOf (lib.types.nullOr lib.types.raw);
+          readOnly = true;
+          default = map (resolve topConfig) config.from;
+          defaultText = lib.literalMD "the claim each reference in `from` resolves to, or null";
+          description = ''
+            For each reference in `from`, the claim-set entry of the secret
+            it names, read from the node collection, or null when a check
+            rejects the reference. A backend adapter reads the references
+            from it rather than resolving them itself.
+          '';
         };
         unit = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
