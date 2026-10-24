@@ -1,6 +1,6 @@
-# How a reference `{ node; kind; service; id; }` reads its node and claim,
-# shared by the core's `contracts.lookup`, the secrets kind and backend
-# adapters.
+# PROTOTYPE (claim-inboxes): claim sets are keyed by service and id, so a
+# reference reads `claimSets.<kind>.<service>.<id>` and no string join can
+# make two claims meet.
 rec {
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
@@ -14,9 +14,6 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
-  # The claim name a claim set keys a claim by, `<service>-<id>`.
-  claimNameOf = service: id: "${service}-${id}";
-
   # A reference as messages name it.
   labelOf =
     reference:
@@ -24,22 +21,22 @@ rec {
       if reference.node == null then "<no node>" else reference.node
     }:${reference.kind}.${reference.service}.${reference.id}";
 
+  # A claim's address as messages name it.
+  addressLabel = address: builtins.concatStringsSep "." address;
+
   # `{ claim; reason; }`: the claim-set entry a reference names, or a null
   # claim and why it does not resolve.
   lookup =
     config: reference:
     let
       nodeConfig = nodeConfigOrNull config reference;
-      claimName = claimNameOf reference.service reference.id;
       claimSets = nodeConfig.contracts.claimSets;
-      entry = claimSets.${reference.kind}.${claimName} or null;
+      entry = claimSets.${reference.kind}.${reference.service}.${reference.id} or null;
       fail = reason: {
         claim = null;
         inherit reason;
       };
     in
-    # A claim's `ref` names no node while its configuration has no node
-    # identity; it must not resolve as this configuration's claim.
     if reference.node == null then
       fail "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`"
     else if nodeConfig == null then
@@ -48,9 +45,7 @@ rec {
       fail "node `${reference.node}` imports no nixos-contracts module"
     else if !(claimSets ? ${reference.kind}) then
       fail "node `${reference.node}` has no claim kind `${reference.kind}`"
-    # The service and id guard against a claim name that another split of
-    # `<service>-<id>` produces.
-    else if entry == null || entry.service != reference.service || entry.id != reference.id then
+    else if entry == null then
       fail "no enabled contract on `${reference.node}` holds it"
     else
       {

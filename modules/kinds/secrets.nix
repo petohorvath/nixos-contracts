@@ -7,11 +7,36 @@ let
   # only its own rules.
   inherit (import ../references.nix) labelOf lookup;
 
-  # Only a claim without `from` of its own resolves, so two copies
-  # referencing each other fail their checks instead of recursing.
-  resolves = claim: claim != null && claim.from == [ ];
+  # PROTOTYPE: a secret's value is exactly one of these tags.
+  valueOf = claim: builtins.head (builtins.attrNames claim.value);
+  referencesOf =
+    value:
+    if value ? copy then
+      [ value.copy ]
+    else if value ? derive then
+      value.derive.from
+    else
+      [ ];
+  generatorOf =
+    value:
+    if value ? generate then
+      value.generate
+    else if value ? derive then
+      value.derive.generator
+    else
+      null;
 
-  # A `referenced` entry: a reference with the claim it resolves to, or a
+  # Only a provided or generated secret resolves as a source, so two copies
+  # referencing each other fail their checks instead of recursing.
+  resolves =
+    claim:
+    claim != null
+    && builtins.elem (valueOf claim) [
+      "provided"
+      "generate"
+    ];
+
+  # A `sources` entry: a reference with the claim it resolves to, or a
   # null claim when a check rejects it.
   toReferenced =
     config: reference:
@@ -38,7 +63,7 @@ let
     if result.reason != null then
       "${references}: ${result.reason}"
     else if !resolves result.claim then
-      "${references}, which references secrets itself; reference a secret without `from`"
+      "${references}, which is a copy or derived itself; reference a provided or generated secret"
     else
       null;
 
@@ -135,19 +160,18 @@ in
       claimReason =
         if identity.unit != null && !claim.delivered && claim.group != identity.group then
           "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
-        else if
-          claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
-        then
-          "the secret backend provides no generator `${claim.generate}`"
+        else if generator != null && backend != null && !builtins.elem generator backend.generators then
+          "the secret backend provides no generator `${generator}`"
           +
             lib.optionalString (backend.generators != [ ])
               "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
-        else if claim.generate == null && builtins.length claim.from > 1 then
-          "it references several secrets but has no `generate`; a copy references one"
         else
           null;
+      generator = generatorOf claim.value;
     in
-    lib.filter (reason: reason != null) ([ claimReason ] ++ map (referenceReason config) claim.from);
+    lib.filter (reason: reason != null) (
+      [ claimReason ] ++ map (referenceReason config) (referencesOf claim.value)
+    );
 
   claim =
     { identity, config, ... }:
@@ -155,7 +179,7 @@ in
       # Read before the claim's own `config` shadows the top-level one.
       topConfig = config;
     in
-    { claimName, config, ... }:
+    { address, config, ... }:
     let
       inherit (topConfig.contracts.kinds.secrets) backend delivery;
       inherit (identity) unit;
@@ -182,49 +206,50 @@ in
           defaultText = lib.literalMD "the identity's group, or `root` when it has none";
           description = "The group of the installed secret.";
         };
-        generate = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          description = ''
-            The generator that makes the secret's value, such as `alnum`,
-            when the service makes its own value; null when a person or
-            another party provides it. A backend adapter turns it into the
-            backend's generator.
-          '';
-          example = "alnum";
+        # PROTOTYPE: exactly one tag. `provided` when a person or another
+        # party supplies the value.
+        value = lib.mkOption {
+          type = lib.types.attrTag {
+            provided = lib.mkOption {
+              type = lib.types.submodule { };
+              description = "A person or another party provides the value.";
+            };
+            generate = lib.mkOption {
+              type = lib.types.str;
+              description = "The generator that makes the value, such as `alnum`.";
+            };
+            copy = lib.mkOption {
+              type = referenceType;
+              description = "The provided or generated secret this one copies.";
+            };
+            derive = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  generator = lib.mkOption {
+                    type = lib.types.str;
+                    description = "The generator that makes the value from `from`.";
+                  };
+                  from = lib.mkOption {
+                    type = lib.types.listOf referenceType;
+                    description = "The secrets the value is made from.";
+                  };
+                };
+              };
+              description = "A value a generator makes from other secrets.";
+            };
+          };
+          default.provided = { };
+          description = "Where the secret's value comes from: exactly one tag.";
         };
-        from = lib.mkOption {
-          type = lib.types.listOf referenceType;
-          default = [ ];
-          description = ''
-            The secrets the value comes from, each a reference
-            `{ node; service; id; }`, such as another secret's `ref`.
-            Without `generate`, the secret is a copy of the one secret it
-            references; with it, the generator makes the value from the
-            secrets it references. Each reference names `contracts.node` or
-            a node in `contracts.nodes`, and the core resolves it into
-            `referenced`.
-          '';
-          example = [
-            {
-              node = "metrics";
-              service = "telegraf";
-              id = "token";
-            }
-          ];
-        };
-        referenced = lib.mkOption {
+        sources = lib.mkOption {
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
-          default = map (toReferenced topConfig) config.from;
-          defaultText = lib.literalMD "each reference in `from` with the claim it resolves to";
+          default = map (toReferenced topConfig) (referencesOf config.value);
+          defaultText = lib.literalMD "each reference of `value` with the claim it resolves to";
           description = ''
-            Each reference in `from` as
-            `{ node; kind; service; id; claim; }`, where `claim` is the
-            claim-set entry of the secret it names, read from the node
-            collection, or null when a check rejects the reference.
-            A backend adapter reads the references from it rather than
-            resolving them itself.
+            Each reference of a copy or a derived value as
+            `{ node; kind; service; id; claim; }`, `claim` null when a check
+            rejects the reference.
           '';
         };
         unit = lib.mkOption {
@@ -253,13 +278,12 @@ in
           default =
             if delivered then
               delivery.path {
-                inherit unit;
-                name = claimName;
+                inherit unit address;
               }
             else if backend == null then
-              throw "nixos-contracts: secret `${claimName}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+              throw "nixos-contracts: secret `${lib.concatStringsSep "." address}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
             else
-              backend.location claimName;
+              backend.location address;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the delivered credential for

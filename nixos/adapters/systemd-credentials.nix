@@ -9,17 +9,21 @@
 let
   inherit (config.contracts.kinds.secrets) backend;
 
+  nameOf = address: lib.concatStringsSep "-" address;
+
   location =
-    name:
+    address:
     if backend == null then
-      throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+      throw "nixos-contracts: secret `${nameOf address}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
     else
-      backend.location name;
+      backend.location address;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
+  # PROTOTYPE: authored claims and received copies alike.
   delivered = lib.filter (secret: secret.delivered) (
-    lib.attrValues config.contracts.claimSets.secrets
+    lib.concatMap lib.attrValues (lib.attrValues config.contracts.claimSets.secrets)
+    ++ config.contracts.copies
   );
 
   units = lib.unique (map (secret: secret.unit) delivered);
@@ -45,12 +49,13 @@ let
 in
 {
   config = {
-    contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery.path =
+      { unit, address }: "/run/credentials/${unit}/${nameOf address}";
 
     systemd.services = lib.mkMerge (
       map (secret: {
         ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
-          "${secret.name}:${location secret.name}"
+          "${nameOf secret.address}:${location secret.address}"
         ];
       }) delivered
     );

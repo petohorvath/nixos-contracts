@@ -82,8 +82,7 @@ let
     "enable"
     "identity"
   ];
-  # A claim's claim name, which keys its claim set.
-  toClaimName = (import ./references.nix).claimNameOf;
+  inherit (import ./references.nix) addressLabel;
 
   /*
     Resolve a contract's identity to the account its files are owned by and
@@ -129,18 +128,6 @@ else
 
     entries = map (claimWithIdentity: claimWithIdentity.claim) claims;
 
-    nameAssertions = lib.pipe entries [
-      (lib.groupBy (entry: entry.name))
-      (lib.mapAttrsToList (
-        name: group: {
-          assertion = builtins.length group == 1;
-          message = "${kindName} claims ${
-            lib.concatMapStringsSep " and " (entry: "`${entry.id}` of `${entry.service}`") group
-          } share the claim name `${name}`, since a claim name joins its service and id with `-`; give all but one of them another id.";
-        }
-      ))
-    ];
-
     # Every unordered pair of entries, each pair once.
     pairs = lib.concatLists (
       lib.imap0 (
@@ -156,7 +143,7 @@ else
         in
         {
           assertion = reason == null;
-          message = "${kindName} claims `${pair.first.name}` and `${pair.second.name}` clash: ${toString reason}.";
+          message = "${kindName} claims `${addressLabel pair.first.address}` and `${addressLabel pair.second.address}` clash: ${toString reason}.";
         }
       ) pairs
     );
@@ -181,7 +168,7 @@ else
             toReasons
             (map (reason: {
               assertion = false;
-              message = "${kindName} claim `${arguments.claim.name}`: ${reason}.";
+              message = "${kindName} claim `${addressLabel arguments.claim.address}`: ${reason}.";
             }))
           ]
       ) claims
@@ -210,10 +197,13 @@ else
                     (lib.setDefaultModuleLocation ./mk-claim-kind.nix (
                       { name, ... }:
                       let
-                        claimName = toClaimName service name;
+                        address = [
+                          service
+                          name
+                        ];
                       in
                       {
-                        config._module.args = { inherit claimName; };
+                        config._module.args = { inherit address; };
 
                         options = {
                           service = lib.mkOption {
@@ -230,12 +220,14 @@ else
                             defaultText = lib.literalMD "the claim's attribute name";
                             description = "The claim's id within its contract.";
                           };
-                          name = lib.mkOption {
-                            type = lib.types.str;
+                          # PROTOTYPE: a list, not a joined name; a backend
+                          # adapter makes its own names from it.
+                          address = lib.mkOption {
+                            type = lib.types.listOf lib.types.str;
                             readOnly = true;
-                            default = claimName;
-                            defaultText = lib.literalMD "`<service>-<id>`";
-                            description = "The claim name, `<service>-<id>`.";
+                            default = address;
+                            defaultText = lib.literalMD "`[ <service> <id> ]`";
+                            description = "Where the claim sits: its service and id.";
                           };
                           # Built from the node identity, kind, service
                           # and id alone, so contributing it to another
@@ -258,6 +250,14 @@ else
                               while that is null.
                             '';
                           };
+                        }
+                        // lib.optionalAttrs (kindName != "inboxes") {
+                          # PROTOTYPE: the inboxes this claim is sent to.
+                          to = lib.mkOption {
+                            type = lib.types.listOf ((import ./types.nix { inherit lib; }).referenceTo "inboxes");
+                            default = [ ];
+                            description = "The inboxes this claim's reference is sent to, on any node.";
+                          };
                         };
                       }
                     ))
@@ -274,7 +274,11 @@ else
       claimSets.${kindName} = lib.mkOption {
         type = lib.types.lazyAttrsOf lib.types.raw;
         readOnly = true;
-        default = lib.listToAttrs (map (entry: lib.nameValuePair entry.name entry) entries);
+        # PROTOTYPE: keyed by service, then id. Holds authored claims only,
+        # so its keys never depend on another node.
+        default = lib.mapAttrs (_: contract: contract.${kindName}) (
+          lib.filterAttrs (_: contract: contract.enable) config.contracts.services
+        );
         defaultText = lib.literalMD "the ${kindName} claims of every enabled contract";
         description = ''
           The ${kindName} claims of every enabled contract, each as its
@@ -283,7 +287,44 @@ else
       };
 
       kinds.${kindName} = settings;
+
+      # PROTOTYPE: the kind's own claim module, so a received copy is built
+      # from the same type as an authored claim.
+      internal.claimModules.${kindName} = lib.mkOption {
+        type = lib.types.raw;
+        internal = true;
+        readOnly = true;
+        default =
+          { service }:
+          claim {
+            inherit service;
+            identity = resolveIdentity config.contracts.services.${service}.identity;
+            config = topConfig;
+          };
+        description = "The claim module of one ${kindName} claim of a service.";
+      };
+
+      # PROTOTYPE: the kind's check rule, so received copies are checked
+      # like authored claims.
+      internal.claimChecks.${kindName} = lib.mkOption {
+        type = lib.types.raw;
+        internal = true;
+        readOnly = true;
+        default =
+          { service, claim }:
+          toReasons (
+            if check == null then
+              null
+            else
+              check {
+                identity = resolveIdentity config.contracts.services.${service}.identity;
+                inherit claim config;
+                settings = config.contracts.kinds.${kindName};
+              }
+          );
+        description = "The reasons one ${kindName} claim of a service fails the kind's check.";
+      };
     };
 
-    config.contracts.assertions = nameAssertions ++ clashAssertions ++ checkAssertions;
+    config.contracts.assertions = clashAssertions ++ checkAssertions;
   }

@@ -4,7 +4,7 @@
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.preservation;
-  mounts = lib.attrValues config.contracts.claimSets.mounts;
+  mounts = lib.concatMap lib.attrValues (lib.attrValues config.contracts.claimSets.mounts);
 
   preserveEntry =
     mount:
