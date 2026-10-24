@@ -389,7 +389,7 @@ in
         ];
       };
       inherit (nodes.store.config.contracts.claimSets) secrets;
-      namesOf = secret: map (claim: claim.name) secret.referenced;
+      namesOf = secret: map (reference: reference.claim.name) secret.referenced;
     in
     {
       expr = {
@@ -422,7 +422,7 @@ in
     in
     {
       expr = map (
-        claim: claim.name
+        reference: reference.claim.name
       ) nodes.store.config.contracts.claimSets.secrets.influxdb-copy.referenced;
       expected = [ "influxdb-origin" ];
     };
@@ -467,11 +467,17 @@ in
     ];
   };
 
-  testRejectedReferenceResolvesToNull = {
+  testRejectedReferenceResolvesToANullClaim = {
     expr =
       (nodesOf { store = [ (store { token.from = [ remoteToken ]; }) ]; })
       .store.config.contracts.claimSets.secrets.influxdb-token.referenced;
-    expected = [ null ];
+    expected = [
+      {
+        node = "metrics";
+        name = "telegraf-token";
+        claim = null;
+      }
+    ];
   };
 
   testEachRejectedReferenceFailsItsOwnCheck = {

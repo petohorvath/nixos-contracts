@@ -119,17 +119,17 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 `contracts.services.<service>.secrets.<id>`: a runtime credential the service needs.
 
-| Field        | Type                                            | Default  |
-| ------------ | ----------------------------------------------- | -------- |
-| `mode`       | a mode string                                   | `"0440"` |
-| `owner`      | an account name                                 | `"root"` |
-| `group`      | a group name                                    | derived  |
-| `generate`   | a generator name, or null                       | `null`   |
-| `from`       | a list of references                            | `[ ]`    |
-| `referenced` | read-only, the claim each reference resolves to | derived  |
-| `unit`       | read-only, the dynamic identity's unit, or null | derived  |
-| `delivered`  | read-only, whether the secret is delivered      | derived  |
-| `path`       | read-only, where the daemon reads the secret    | derived  |
+| Field        | Type                                              | Default  |
+| ------------ | ------------------------------------------------- | -------- |
+| `mode`       | a mode string                                     | `"0440"` |
+| `owner`      | an account name                                   | `"root"` |
+| `group`      | a group name                                      | derived  |
+| `generate`   | a generator name, or null                         | `null`   |
+| `from`       | a list of references                              | `[ ]`    |
+| `referenced` | read-only, each reference with its resolved claim | derived  |
+| `unit`       | read-only, the dynamic identity's unit, or null   | derived  |
+| `delivered`  | read-only, whether the secret is delivered        | derived  |
+| `path`       | read-only, where the daemon reads the secret      | derived  |
 
 A secret holds no value. `generate` names the generator that makes it, such as `alnum`, when the service makes its own value, and is null when a person or another party provides it. A backend adapter turns the generator into the backend's own. Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). A node turns generation off with `generate = null`, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`.
 
@@ -148,7 +148,7 @@ secrets.htpasswd = {
 
 Without `generate`, the secret is a copy of the one secret it references: it reads the same value, owned, installed and delivered as its own claim says. With `generate`, the generator makes the value from the secrets it references. A check fails for a claim that references several secrets without a `generate`.
 
-The core resolves each reference into `referenced`, in the order of `from`: the claim-set entry of the secret it names, or null when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). A backend adapter reads `referenced` rather than resolving references itself. A check fails, once per reference, for a reference to a node missing from `contracts.nodes`, to a node that imports no nixos-contracts module, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
+The core resolves each reference into `referenced`, in the order of `from`, as `{ node; name; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). A backend adapter reads `referenced` rather than resolving references itself. A check fails, once per reference, for a reference to a node missing from `contracts.nodes`, to a node that imports no nixos-contracts module, to a name that is no secret claim of an enabled contract on that node, and to a secret with `from` of its own, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret that references secrets itself, so references across nodes, in either direction, evaluate without cycles. `from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
 `path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
@@ -205,7 +205,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim has a `generate`, `generator.script` set to it at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a generated secret, it sets `generator.dependencies` to the entries the secret references. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`, and a `generator.script` it sets wins over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; set the claim's `generate = null` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `location` to the installed `age.secrets.<name>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
-The adapter has no settings. It reads the claims a secret's references resolve to from its `referenced`, and each one's `age.secrets` entry from the referenced node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, so entries across nodes, in either direction, evaluate without cycles. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
+The adapter has no settings. It reads the claims a secret's references resolve to from its `referenced`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, so entries across nodes, in either direction, evaluate without cycles. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
 
 A generated secret with `from` defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
 

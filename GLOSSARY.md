@@ -55,7 +55,7 @@ _Avoid_: Host, machine, peer
 
 **Node collection**:
 The nodes a reference may name, each by its name, as one configuration is given them.
-_Avoid_: Fleet, nodes list, peers
+_Avoid_: Nodes list, peers
 
 **Generator**:
 A named way to make a secret's value, such as `alnum`, for a value the service makes on its own rather than one a person or another party provides. A backend adapter provides the generators a secret may name.

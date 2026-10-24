@@ -2,7 +2,7 @@
 # runtime and must keep private.
 { lib }:
 let
-  referenceType = (import ../../lib/types.nix { inherit lib; }).reference;
+  referenceType = (import ../types.nix { inherit lib; }).reference;
 
   # The configuration a reference reads, or null for a node missing from
   # the node collection.
@@ -23,17 +23,21 @@ let
     else
       null;
 
-  /*
-    The claim a reference resolves to, or null when a check rejects it. It
-    does not follow a claim with `from` of its own, so two copies
-    referencing each other fail their checks instead of recursing.
-  */
+  # Only a claim without `from` of its own resolves, so two copies
+  # referencing each other fail their checks instead of recursing.
+  resolves = claim: claim != null && claim.from == [ ];
+
+  # A reference with the claim it resolves to, or a null claim when a check
+  # rejects it.
   resolve =
     config: reference:
     let
       claim = claimOrNull config reference;
     in
-    if claim == null || claim.from != [ ] then null else claim;
+    {
+      inherit (reference) node name;
+      claim = if resolves claim then claim else null;
+    };
 
   labelOf =
     reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
@@ -52,7 +56,7 @@ let
       "${references}, whose node imports no nixos-contracts module"
     else if claim == null then
       "${references}, which is no secret claim of an enabled contract"
-    else if claim.from != [ ] then
+    else if !resolves claim then
       "${references}, which references secrets itself; reference a secret without `from`"
     else
       null;
@@ -229,15 +233,16 @@ in
           ];
         };
         referenced = lib.mkOption {
-          type = lib.types.listOf (lib.types.nullOr lib.types.raw);
+          type = lib.types.listOf lib.types.raw;
           readOnly = true;
           default = map (resolve topConfig) config.from;
-          defaultText = lib.literalMD "the claim each reference in `from` resolves to, or null";
+          defaultText = lib.literalMD "each reference in `from` with the claim it resolves to";
           description = ''
-            For each reference in `from`, the claim-set entry of the secret
-            it names, read from the node collection, or null when a check
-            rejects the reference. A backend adapter reads the references
-            from it rather than resolving them itself.
+            Each reference in `from` as `{ node; name; claim; }`, where
+            `claim` is the claim-set entry of the secret it names, read from
+            the node collection, or null when a check rejects the reference.
+            A backend adapter reads the references from it rather than
+            resolving them itself.
           '';
         };
         unit = lib.mkOption {

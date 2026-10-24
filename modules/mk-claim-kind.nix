@@ -167,22 +167,22 @@ else
     checkAssertions = lib.optionals (check != null) (
       lib.concatMap (
         arguments:
-        map
-          (reason: {
-            assertion = false;
-            message = "${kindName} claim `${arguments.claim.name}`: ${reason}.";
-          })
+        lib.pipe
           (
-            toReasons (
-              check (
-                arguments
-                // {
-                  settings = config.contracts.kinds.${kindName};
-                  inherit config;
-                }
-              )
-            )
+            arguments
+            // {
+              settings = config.contracts.kinds.${kindName};
+              inherit config;
+            }
           )
+          [
+            check
+            toReasons
+            (map (reason: {
+              assertion = false;
+              message = "${kindName} claim `${arguments.claim.name}`: ${reason}.";
+            }))
+          ]
       ) claims
     );
   in

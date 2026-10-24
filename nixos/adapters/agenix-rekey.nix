@@ -5,9 +5,9 @@
   a provided secret's encrypted file, is set on `age.secrets.<service>-<id>`
   itself, where a generator script overrides the claim's. The core resolves
   and checks a secret's references into its `referenced`; the adapter reads
-  each resolved claim's entry on its node. Requires the
-  agenix and agenix-rekey NixOS modules; `nixosModules.agenix-rekey` also
-  imports `nixosModules.default`.
+  each resolved claim's entry on its node. Requires the agenix and
+  agenix-rekey NixOS modules; `nixosModules.agenix-rekey` also imports
+  `nixosModules.default`.
 */
 { config, lib, ... }:
 let
@@ -18,31 +18,23 @@ let
   labelOf =
     reference: if reference.node == null then reference.name else "${reference.node}:${reference.name}";
 
-  # Each reference of a secret beside the claim the core resolved it to.
-  resolvedOf =
-    secret:
-    lib.zipListsWith (reference: claim: { inherit reference claim; }) secret.from secret.referenced;
-
-  /*
-    The backend entry a resolved reference names, or null when its node has
-    no `age.secrets` entry for it or a check of the secrets kind rejects
-    the reference.
-  */
+  # The backend entry a reference names, or null when the core rejected the
+  # reference or its node has no entry for it.
   entryOrNull =
-    { reference, claim }:
+    reference:
     let
       nodeConfig =
         if reference.node == null then config else config.contracts.nodes.${reference.node}.config;
     in
-    if claim == null then null else nodeConfig.age.secrets.${reference.name} or null;
+    if reference.claim == null then null else nodeConfig.age.secrets.${reference.name} or null;
 
   # The entry of the one secret a copy references, or null.
-  copiedEntryOrNull = secret: entryOrNull (lib.head (resolvedOf secret));
+  copiedEntryOrNull = secret: entryOrNull (lib.head secret.referenced);
 
   # A reference the core resolved, on a node without this adapter.
-  backendAssertion = secret: resolved: {
-    assertion = resolved.claim == null || entryOrNull resolved != null;
-    message = "secret `${secret.name}` references `${labelOf resolved.reference}`, whose node has no `nixosModules.agenix-rekey`.";
+  backendAssertion = secret: reference: {
+    assertion = reference.claim == null || entryOrNull reference != null;
+    message = "secret `${secret.name}` references `${labelOf reference}`, whose node has no `nixosModules.agenix-rekey`.";
   };
 in
 {
@@ -58,7 +50,7 @@ in
       generator = lib.mkIf (secret.generate != null) {
         script = lib.mkDefault secret.generate;
         dependencies = lib.mkIf (secret.from != [ ]) (
-          lib.filter (entry: entry != null) (map entryOrNull (resolvedOf secret))
+          lib.filter (entry: entry != null) (map entryOrNull secret.referenced)
         );
       };
       # A copy reads the encrypted file of the one secret it references.
@@ -92,7 +84,7 @@ in
               "secret `${name}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
         }) (lib.filterAttrs (_: secret: !(isCopy secret) || copiedEntryOrNull secret != null) secrets)
         ++ lib.concatLists (
-          lib.mapAttrsToList (_: secret: map (backendAssertion secret) (resolvedOf secret)) secrets
+          lib.mapAttrsToList (_: secret: map (backendAssertion secret) secret.referenced) secrets
         );
     };
   };

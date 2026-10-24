@@ -9,5 +9,5 @@
 {
   mkClaimKind = import ../modules/mk-claim-kind.nix;
   mkDefaultContract = import ./mk-default-contract.nix { inherit lib; };
-  types = import ./types.nix { inherit lib; };
+  types = import ../modules/types.nix { inherit lib; };
 }
