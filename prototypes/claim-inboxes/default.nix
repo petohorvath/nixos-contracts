@@ -189,6 +189,30 @@ let
         }
       ];
     };
+    # Two tags at the same priority still fail.
+    tagConflict = mkNodes {
+      beta-loki = [
+        {
+          contracts.services.loki.secrets.both.value = lib.mkMerge [
+            { generate = "alnum"; }
+            {
+              copy = {
+                node = "beta-grafana";
+                service = "telegraf";
+                id = "metrics-token";
+              };
+            }
+          ];
+        }
+      ];
+    };
+
+    # A node switches telegraf's default-priority static identity to a
+    # dynamic one at normal priority.
+    identitySwitch = mkNodes {
+      beta-loki = [ { contracts.services.telegraf.identity.dynamic.unit = "telegraf.service"; } ];
+    };
+
     tagOverrideWhole = mkNodes {
       beta-loki = [
         {

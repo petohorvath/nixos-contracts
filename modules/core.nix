@@ -3,7 +3,8 @@
 { config, lib, ... }:
 let
   references = import ./references.nix;
-  identityType = lib.types.attrTag {
+  # PROTOTYPE: a tag settled by priority, so a node can switch it.
+  identityType = import ./tag.nix { inherit lib; } {
     static = lib.mkOption {
       type = lib.types.submodule {
         options = {

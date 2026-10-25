@@ -209,7 +209,7 @@ in
         # PROTOTYPE: exactly one tag. `provided` when a person or another
         # party supplies the value.
         value = lib.mkOption {
-          type = lib.types.attrTag {
+          type = import ../tag.nix { inherit lib; } {
             provided = lib.mkOption {
               type = lib.types.submodule { };
               description = "A person or another party provides the value.";
