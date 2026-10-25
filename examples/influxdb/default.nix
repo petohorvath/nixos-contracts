@@ -54,7 +54,7 @@ in
         ;
     }) config.preservation.preserveAt."/persist/state".directories;
     secrets = lib.mapAttrs (_: secretOf) (
-      lib.getAttrs [ "influxdb-admin-password" "influxdb-admin-token" ] config.age.secrets
+      lib.getAttrs [ "influxdb_admin-password" "influxdb_admin-token" ] config.age.secrets
     );
     inherit (config.contracts) failures;
   };

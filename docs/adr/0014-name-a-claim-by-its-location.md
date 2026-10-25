@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Name a claim by its location

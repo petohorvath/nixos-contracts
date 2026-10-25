@@ -27,8 +27,22 @@ let
     };
   };
   backend.contracts.kinds.secrets.backend = {
-    location = name: "/run/agenix/${name}";
+    path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
     generators = [ ];
+  };
+
+  # Configurations by node identity with the adapter and the backend,
+  # sharing one node collection.
+  nodesOf = import ../../fixtures/nodes.nix {
+    evaluate =
+      modules:
+      evaluate (
+        [
+          adapter
+          backend
+        ]
+        ++ modules
+      );
   };
 in
 {
@@ -40,8 +54,48 @@ in
         chrony
         backend
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
-    expected = [ "alloy-password:/run/agenix/alloy-password" ];
+    expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
+
+  # Chrony on the `time` node sends its key to alloy's `keys` inbox on the
+  # `edge` node, which holds a copy of it.
+  testDynamicIdentityCopyIsDeliveredIntoItsUnit =
+    let
+      nodes = nodesOf {
+        time = [
+          chrony
+          {
+            contracts.services.chrony.secrets.key.sendTo = [
+              {
+                node = "edge";
+                service = "alloy";
+                id = "keys";
+              }
+            ];
+          }
+        ];
+        edge = [
+          alloy
+          { contracts.services.alloy.inboxes.keys.copy = { }; }
+        ];
+      };
+      inherit (nodes.edge) config;
+    in
+    {
+      expr = {
+        inherit (config.systemd.services.alloy.serviceConfig) LoadCredential;
+        inherit (config.contracts.services.alloy.inboxes.keys.received.time.chrony.key.copy) path;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        LoadCredential = [
+          "alloy_keys_time_chrony_key:/run/agenix/alloy_keys_time_chrony_key"
+          "alloy_password:/run/agenix/alloy_password"
+        ];
+        path = "/run/credentials/alloy.service/alloy_keys_time_chrony_key";
+        failures = [ ];
+      };
+    };
 
   testDynamicIdentityClaimReadsTheCredential = {
     expr =
@@ -50,10 +104,10 @@ in
         alloy
         backend
       ]).contracts.services.alloy.secrets.password.path;
-    expected = "/run/credentials/alloy.service/alloy-password";
+    expected = "/run/credentials/alloy.service/alloy_password";
   };
 
-  testStaticIdentityKeepsTheBackendLocation = {
+  testStaticIdentityKeepsTheBackendPath = {
     expr =
       let
         configuration = evaluate [
@@ -67,18 +121,34 @@ in
         loaded = configuration.systemd.services ? chrony;
       };
     expected = {
-      path = "/run/agenix/chrony-key";
+      path = "/run/agenix/chrony_key";
       loaded = false;
     };
   };
 
-  testDeliveryNeedsABackendLocation = {
+  testDeliveryNeedsABackendPath = {
     expr =
       (evaluate [
         adapter
         alloy
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
-    expectedError.msg = "nixos-contracts: secret `alloy-password` has no location: import a secret backend adapter";
+    expectedError.msg = "nixos-contracts: secret `alloy\\.password` has no path: import a secret backend adapter";
+  };
+
+  testDeliveryPathNamesTheCredentialByTheLocation = {
+    expr =
+      (evaluate [
+        adapter
+        backend
+      ]).contracts.kinds.secrets.delivery.path
+        {
+          unit = "alloy.service";
+          location = [
+            "alloy"
+            "loki-password"
+          ];
+        };
+    expected = "/run/credentials/alloy.service/alloy_loki-password";
   };
 
   testMistypedUnitIsRejected = {
@@ -116,6 +186,6 @@ in
           { age.rekey.secretsDir = ./.; }
         ]
       )).systemd.services.alloy.serviceConfig.LoadCredential;
-    expected = [ "alloy-password:/run/agenix/alloy-password" ];
+    expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
 }

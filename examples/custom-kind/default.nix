@@ -41,9 +41,14 @@ let
 in
 {
   result = {
-    claimSet = lib.mapAttrs (_: entry: {
-      inherit (entry) database owner;
-    }) valid.contracts.claimSets.databases;
+    claimSet = lib.mapAttrs (
+      _:
+      lib.mapAttrs (
+        _: entry: {
+          inherit (entry) database owner;
+        }
+      )
+    ) valid.contracts.claimSets.databases;
     validFailures = valid.contracts.failures;
     clashingFailures = clashing.contracts.failures;
   };

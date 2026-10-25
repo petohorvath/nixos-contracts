@@ -18,11 +18,16 @@ let
 in
 {
   testBindDefaultsToTcpOnEveryIpv4Address = {
-    expr = (evaluate [ (service "web" { http.port = 80; }) ]).contracts.claimSets.binds.web-http;
+    expr = (evaluate [ (service "web" { http.port = 80; }) ]).contracts.claimSets.binds.web.http;
     expected = {
       service = "web";
       id = "http";
-      name = "web-http";
+      location = [
+        "web"
+        "http"
+      ];
+      name = null;
+      sendTo = [ ];
       ref = {
         node = null;
         kind = "binds";
@@ -87,7 +92,7 @@ in
       addresses = "10.0.0.1";
     };
     expected = [
-      "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on tcp port 80, at `0.0.0.0` and `10.0.0.1`."
+      "nixos-contracts: binds claims `first.listen` and `second.listen` clash: both listen on tcp port 80, at `0.0.0.0` and `10.0.0.1`."
     ];
   };
 
@@ -97,7 +102,7 @@ in
       addresses = "::";
     };
     expected = [
-      "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on tcp port 80, at `0.0.0.0` and `::`."
+      "nixos-contracts: binds claims `first.listen` and `second.listen` clash: both listen on tcp port 80, at `0.0.0.0` and `::`."
     ];
   };
 
@@ -175,14 +180,14 @@ in
           protocols = "udp";
         };
     expected = [
-      "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on udp port 53, at `0.0.0.0` and `0.0.0.0`."
+      "nixos-contracts: binds claims `first.listen` and `second.listen` clash: both listen on udp port 53, at `0.0.0.0` and `0.0.0.0`."
     ];
   };
 
   testOverlappingPortRangesClash = {
     expr = clashes { port = "5000-5100"; } { port = 5050; };
     expected = [
-      "nixos-contracts: binds claims `first-listen` and `second-listen` clash: both listen on tcp ports 5000-5100 and 5050, at `0.0.0.0` and `0.0.0.0`."
+      "nixos-contracts: binds claims `first.listen` and `second.listen` clash: both listen on tcp ports 5000-5100 and 5050, at `0.0.0.0` and `0.0.0.0`."
     ];
   };
 

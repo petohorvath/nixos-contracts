@@ -44,11 +44,16 @@ in
             class = "state";
           };
         })
-      ]).contracts.claimSets.mounts.influxdb-data;
+      ]).contracts.claimSets.mounts.influxdb.data;
     expected = {
       service = "influxdb";
       id = "data";
-      name = "influxdb-data";
+      location = [
+        "influxdb"
+        "data"
+      ];
+      name = null;
+      sendTo = [ ];
       ref = {
         node = null;
         kind = "mounts";
@@ -159,7 +164,7 @@ in
       })
     ];
     expected = [
-      "nixos-contracts: mounts claims `first-data` and `second-data` clash: both persist `/var/lib/shared`."
+      "nixos-contracts: mounts claims `first.data` and `second.data` clash: both persist `/var/lib/shared`."
     ];
   };
 

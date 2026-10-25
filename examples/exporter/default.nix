@@ -30,7 +30,7 @@ in
   inherit node;
 
   result = {
-    binds = lib.mapAttrs (_: bind: bind.bindpoints) config.contracts.claimSets.binds;
+    binds = lib.mapAttrs (_: lib.mapAttrs (_: bind: bind.bindpoints)) config.contracts.claimSets.binds;
     identities = lib.mapAttrs (_: contract: contract.identity) config.contracts.services;
     exporterListen = "${exporter.listenAddress}:${toString exporter.port}";
     inherit (config.contracts) failures;

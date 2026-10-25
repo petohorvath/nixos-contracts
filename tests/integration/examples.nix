@@ -5,8 +5,8 @@
     expected = {
       bindAddress = "127.0.0.1:8086";
       initialSetup = {
-        passwordFile = "/run/agenix/influxdb-admin-password";
-        tokenFile = "/run/agenix/influxdb-admin-token";
+        passwordFile = "/run/agenix/influxdb_admin-password";
+        tokenFile = "/run/agenix/influxdb_admin-token";
       };
       preserved = [
         {
@@ -17,18 +17,18 @@
         }
       ];
       secrets = {
-        influxdb-admin-password = {
+        influxdb_admin-password = {
           owner = "root";
           group = "influxdb2";
           mode = "0440";
-          rekeyFile = "influxdb-admin-password.age";
+          rekeyFile = "influxdb_admin-password.age";
           generator = "alnum";
         };
-        influxdb-admin-token = {
+        influxdb_admin-token = {
           owner = "root";
           group = "influxdb2";
           mode = "0440";
-          rekeyFile = "influxdb-admin-token.age";
+          rekeyFile = "influxdb_admin-token.age";
           generator = null;
         };
       };
@@ -40,32 +40,35 @@
     expr = examples.alloy.result;
     expected = {
       listenFlags = [ "--server.http.listen-addr=127.0.0.1:12345" ];
-      passwordFile = "/run/credentials/alloy.service/alloy-loki-main-password";
-      loadCredential = [ "alloy-loki-main-password:/run/agenix/alloy-loki-main-password" ];
+      passwordFile = "/run/credentials/alloy.service/alloy_loki-main-password";
+      loadCredential = [ "alloy_loki-main-password:/run/agenix/alloy_loki-main-password" ];
       installed = {
         owner = "root";
         group = "root";
         mode = "0440";
-        path = "/run/agenix/alloy-loki-main-password";
+        path = "/run/agenix/alloy_loki-main-password";
         generator = "alnum";
       };
       failures = [ ];
     };
   };
 
-  testSharedTokenExampleCopiesAnotherNodesSecret = {
+  testSharedTokenExampleSendsTelegrafsTokenToAnInfluxdbInbox = {
     expr = examples.sharedToken.result;
     expected = {
       copy = {
-        owner = "root";
+        owner = "influxdb2";
         group = "influxdb2";
-        mode = "0440";
-        rekeyFile = "metrics/telegraf-token.age";
+        mode = "0400";
+        rekeyFile = "metrics/telegraf_token.age";
         generator = null;
       };
-      original = "metrics/telegraf-token.age";
-      storesOwn = "store/telegraf-token.age";
-      auths.telegraf-metrics = "/run/agenix/influxdb-writer-telegraf-metrics";
+      original = "metrics/telegraf_token.age";
+      copiesOwn = "store/telegraf_token.age";
+      auths = {
+        metrics_telegraf_token = "/run/agenix/influxdb_writers_metrics_telegraf_token";
+        store_telegraf_token = "/run/agenix/influxdb_writers_store_telegraf_token";
+      };
       failures = {
         metrics = [ ];
         store = [ ];
@@ -77,8 +80,8 @@
     expr = examples.exporter.result;
     expected = {
       binds = {
-        chrony-ntp = [ "0.0.0.0:123" ];
-        chrony-exporter-metrics = [ "127.0.0.1:9123" ];
+        chrony.ntp = [ "0.0.0.0:123" ];
+        chrony-exporter.metrics = [ "127.0.0.1:9123" ];
       };
       identities = {
         chrony.static = {
@@ -99,22 +102,24 @@
     expr = examples.customKind.result;
     expected = {
       claimSet = {
-        grafana-main = {
+        grafana.main = {
           database = "grafana";
           owner = "grafana";
         };
-        vaultwarden-main = {
-          database = "vaultwarden";
-          owner = "vaultwarden";
-        };
-        vaultwarden-attachments = {
-          database = "vaultwarden_attachments";
-          owner = "vaultwarden";
+        vaultwarden = {
+          main = {
+            database = "vaultwarden";
+            owner = "vaultwarden";
+          };
+          attachments = {
+            database = "vaultwarden_attachments";
+            owner = "vaultwarden";
+          };
         };
       };
       validFailures = [ ];
       clashingFailures = [
-        "nixos-contracts: databases claims `grafana-main` and `vaultwarden-attachments` clash: both own `grafana`."
+        "nixos-contracts: databases claims `grafana.main` and `vaultwarden.attachments` clash: both own `grafana`."
       ];
     };
   };

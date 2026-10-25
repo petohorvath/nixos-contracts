@@ -267,6 +267,79 @@ in
     expected = [ ];
   };
 
+  testNodeIdentityMayUseOnlyLowercaseLettersDigitsAndHyphens = {
+    expr = (evaluate [ { contracts.node = "beta-2"; } ]).contracts.node;
+    expected = "beta-2";
+  };
+
+  testNodeIdentityWithAnUnderscoreFails = {
+    expr = (evaluate [ { contracts.node = "beta_influxdb"; } ]).contracts.node;
+    expectedError.msg = "node identity `beta_influxdb` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testNodeIdentityWithAnUppercaseLetterFails = {
+    expr = failures [
+      web
+      { contracts.node = "Beta"; }
+    ];
+    expectedError.msg = "node identity `Beta` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testServiceNameWithAnUnderscoreFails = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.web_proxy = {
+            enable = true;
+            identity.static.user = "web";
+            binds.http.port = 8080;
+          };
+        }
+      ]).contracts.claimSets.binds;
+    expectedError.msg = "service name `web_proxy` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testServiceNameWithAnUppercaseLetterFails = {
+    expr = failures [
+      {
+        contracts.services.Web = {
+          enable = true;
+          identity.static.user = "web";
+        };
+      }
+    ];
+    expectedError.msg = "service name `Web` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testEmptyServiceNameFails = {
+    expr =
+      (evaluate [
+        {
+          contracts.services."" = {
+            identity.static.user = "web";
+            binds.http.port = 8080;
+          };
+        }
+      ]).contracts.services."".binds.http.location;
+    expectedError.msg = "service name `` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testResolveIndexesTheNestedClaimSet = {
+    expr =
+      let
+        config = evaluate [
+          web
+          {
+            contracts.node = "here";
+            contracts.services.web.binds.http-alt.port = 8081;
+          }
+        ];
+      in
+      config.contracts.resolve config.contracts.services.web.binds.http-alt.ref
+      == config.contracts.claimSets.binds.web.http-alt;
+    expected = true;
+  };
+
   testResolveFindsAClaimOfThisConfiguration = {
     expr =
       let
@@ -302,11 +375,15 @@ in
         result = (nodesOf { backend = [ web ]; }).backend.config.contracts.lookup (webHttp "backend");
       in
       {
-        inherit (result.claim) name;
+        inherit (result.claim) location name;
         inherit (result) reason;
       };
     expected = {
-      name = "web-http";
+      location = [
+        "web"
+        "http"
+      ];
+      name = "backend_web_http";
       reason = null;
     };
   };
@@ -324,8 +401,8 @@ in
                 binds.http.port = 9090;
               };
               # `chrony-exporter` + `metrics` and `chrony` +
-              # `exporter-metrics` share the claim name
-              # `chrony-exporter-metrics`.
+              # `exporter-metrics` join into one name with `-`; the
+              # lookup tells them apart.
               chrony-exporter = {
                 enable = true;
                 identity.static.user = "chrony";

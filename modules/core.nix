@@ -3,6 +3,16 @@
 { config, lib, ... }:
 let
   references = import ./references.nix;
+  # A string that fails, naming itself, when it is not a name, so a claim
+  # name joins the node identity with `_`.
+  nodeIdentityType = lib.mkOptionType {
+    name = "nodeIdentity";
+    description = "string of lowercase letters, digits and hyphens";
+    descriptionClass = "noun";
+    check = builtins.isString;
+    merge =
+      loc: defs: references.checkName (node: "node identity `${node}`") (lib.mergeEqualOption loc defs);
+  };
   contractTypes = import ./types.nix { inherit lib; };
   identityType = contractTypes.tag {
     static = lib.mkOption {
@@ -74,7 +84,7 @@ in
     };
 
     node = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
+      type = lib.types.nullOr nodeIdentityType;
       default = null;
       description = ''
         This configuration's node identity, its name in the node

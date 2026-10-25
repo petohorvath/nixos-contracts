@@ -1,7 +1,20 @@
-# How a reference `{ node; kind; service; id; }` reads its node and claim,
-# shared by the core's `contracts.lookup`, the secrets kind and backend
-# adapters.
+# How a claim is named and placed, how a configuration's claims and
+# copies are listed, and how a reference `{ node; kind; service; id; }`
+# reads its node and claim, shared by the core's `contracts.lookup`, the
+# claim kinds and the adapters.
 rec {
+  /*
+    `name` when it is a name, as service names, claim ids and node
+    identities must be: non-empty, of lowercase letters, digits and hyphens
+    only. Otherwise it fails, naming it as `describe name` does.
+  */
+  checkName =
+    describe: name:
+    if builtins.match "[a-z0-9-]+" name != null then
+      name
+    else
+      throw "nixos-contracts: ${describe name} may contain only lowercase letters, digits and hyphens.";
+
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
   # null for a node missing from it or a reference that names no node.
@@ -14,8 +27,45 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
-  # The claim name a claim set keys a claim by, `<service>-<id>`.
-  claimNameOf = service: id: "${service}-${id}";
+  # A claim's location as messages name it, such as `influxdb.admin-token`.
+  locationLabelOf = builtins.concatStringsSep ".";
+
+  # The name a backend adapter gives its entry for a claim, such as
+  # `influxdb_admin-token`. No name of a location contains `_`, so no two
+  # locations make one name.
+  backendNameOf = builtins.concatStringsSep "_";
+
+  # Where the secret backend `backend` installs the secret at `location`,
+  # failing, naming the secret, while no backend adapter sets it.
+  backendPathOf =
+    backend: location:
+    if backend == null then
+      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+    else
+      backend.path location;
+
+  # The claims of a claim set, by service and then id, in a list.
+  claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
+
+  # The entries of an inbox's `received`, by node, service and then id, in
+  # a list.
+  receivedOf = inbox: builtins.concatMap claimsOf (builtins.attrValues inbox.received);
+
+  # The copies a configuration's inboxes hold, found through the inboxes of
+  # enabled contracts in its claim set. Each is a secret claim of its
+  # receiving service, placed by its `location`, so a backend installs it
+  # like an authored secret.
+  copiesOf =
+    config:
+    builtins.filter (copy: copy != null) (
+      map (entry: entry.copy) (
+        builtins.concatMap receivedOf (claimsOf config.contracts.claimSets.inboxes)
+      )
+    );
+
+  # The secrets a secret adapter installs alike: the claims of the
+  # configuration's secret claim set and the copies its inboxes hold.
+  secretsOf = config: claimsOf config.contracts.claimSets.secrets ++ copiesOf config;
 
   # A reference as messages name it.
   labelOf =
@@ -30,9 +80,8 @@ rec {
     config: reference:
     let
       nodeConfig = nodeConfigOrNull config reference;
-      claimName = claimNameOf reference.service reference.id;
       claimSets = nodeConfig.contracts.claimSets;
-      entry = claimSets.${reference.kind}.${claimName} or null;
+      entry = claimSets.${reference.kind}.${reference.service}.${reference.id} or null;
       fail = reason: {
         claim = null;
         inherit reason;
@@ -48,9 +97,7 @@ rec {
       fail "node `${reference.node}` imports no nixos-contracts module"
     else if !(claimSets ? ${reference.kind}) then
       fail "node `${reference.node}` has no claim kind `${reference.kind}`"
-    # The service and id guard against a claim name that another split of
-    # `<service>-<id>` produces.
-    else if entry == null || entry.service != reference.service || entry.id != reference.id then
+    else if entry == null then
       fail "no enabled contract on `${reference.node}` holds it"
     else
       {

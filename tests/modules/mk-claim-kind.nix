@@ -23,17 +23,20 @@ let
         identity,
         config,
       }:
+      let
+        topConfig = config;
+      in
       {
+        config,
         lib,
         name,
-        claimName,
         ...
       }:
       {
         options = {
           engine = lib.mkOption {
-            type = lib.types.enum config.contracts.kinds.databases.engines;
-            default = builtins.head config.contracts.kinds.databases.engines;
+            type = lib.types.enum topConfig.contracts.kinds.databases.engines;
+            default = builtins.head topConfig.contracts.kinds.databases.engines;
             description = "The database engine.";
           };
           database = lib.mkOption {
@@ -47,11 +50,11 @@ let
             default = identity.unit;
             description = "The unit of the owning service's identity.";
           };
-          claimName = lib.mkOption {
+          label = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
-            default = claimName;
-            description = "The claim's name, read from the claim.";
+            default = lib.concatStringsSep "/" config.location;
+            description = "The claim's location, read from the claim.";
           };
         };
       };
@@ -77,21 +80,26 @@ let
   };
 in
 {
-  testCustomKindFoldsEnabledClaims = {
+  testCustomKindNestsEnabledClaimsByServiceAndId = {
     expr =
       (evaluate [
         databases
         services
       ]).contracts.claimSets.databases;
     expected = {
-      grafana-main = {
+      grafana.main = {
         service = "grafana";
         id = "main";
-        name = "grafana-main";
+        location = [
+          "grafana"
+          "main"
+        ];
+        name = null;
         engine = "postgresql";
         database = "grafana_main";
         unit = null;
-        claimName = "grafana-main";
+        label = "grafana/main";
+        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -99,14 +107,19 @@ in
           id = "main";
         };
       };
-      vaultwarden-main = {
+      vaultwarden.main = {
         service = "vaultwarden";
         id = "main";
-        name = "vaultwarden-main";
+        location = [
+          "vaultwarden"
+          "main"
+        ];
+        name = null;
         engine = "postgresql";
         database = "vault";
         unit = "vaultwarden.service";
-        claimName = "vaultwarden-main";
+        label = "vaultwarden/main";
+        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -115,6 +128,32 @@ in
         };
       };
     };
+  };
+
+  testClaimNameJoinsNodeServiceAndIdWithUnderscores = {
+    expr =
+      (evaluate [
+        databases
+        services
+        { contracts.node = "beta-db"; }
+      ]).contracts.claimSets.databases.grafana.main.name;
+    expected = "beta-db_grafana_main";
+  };
+
+  testClaimSetLeavesOutServicesWithoutClaimsOfTheKind = {
+    expr =
+      (evaluate [
+        databases
+        services
+        {
+          contracts.services.chrony = {
+            enable = true;
+            identity.static.user = "chrony";
+          };
+        }
+      ]).contracts.claimSets.databases
+        ? chrony;
+    expected = false;
   };
 
   testClaimSetEntryIsTheClaim = {
@@ -126,11 +165,11 @@ in
         ];
       in
       lib.mapAttrs (
-        _: entry: entry == config.contracts.services.${entry.service}.databases.${entry.id}
+        service: lib.mapAttrs (id: entry: entry == config.contracts.services.${service}.databases.${id})
       ) config.contracts.claimSets.databases;
     expected = {
-      grafana-main = true;
-      vaultwarden-main = true;
+      grafana.main = true;
+      vaultwarden.main = true;
     };
   };
 
@@ -177,11 +216,11 @@ in
     expectedError.msg = "contracts\\.services\\.grafana\\.databases\\.main\\.engine' is not of type";
   };
 
-  testCustomKindClaimTypeReadsIdentityAndClaimName = {
+  testCustomKindClaimTypeReadsIdentityAndLocation = {
     expr =
       lib.mapAttrs
         (_: contract: {
-          inherit (contract.databases.main) unit claimName;
+          inherit (contract.databases.main) unit label;
         })
         (evaluate [
           databases
@@ -190,17 +229,45 @@ in
     expected = {
       grafana = {
         unit = null;
-        claimName = "grafana-main";
+        label = "grafana/main";
       };
       vaultwarden = {
         unit = "vaultwarden.service";
-        claimName = "vaultwarden-main";
+        label = "vaultwarden/main";
       };
       unused = {
         unit = null;
-        claimName = "unused-main";
+        label = "unused/main";
       };
     };
+  };
+
+  testClaimTypeTakesNoClaimNameArgument = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, claimName, ... }:
+            {
+              options.label = lib.mkOption {
+                type = lib.types.str;
+                default = claimName;
+                description = "The claim name.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.services.a.tokens.t.label;
+    expectedError.msg = "claimName";
   };
 
   testCustomKindReportsItsClashes = {
@@ -210,7 +277,7 @@ in
       { contracts.services.grafana.databases.main.database = "vault"; }
     ];
     expected = [
-      "nixos-contracts: databases claims `grafana-main` and `vaultwarden-main` clash: both own `vault`."
+      "nixos-contracts: databases claims `grafana.main` and `vaultwarden.main` clash: both own `vault`."
     ];
   };
 
@@ -223,63 +290,51 @@ in
     expected = [ ];
   };
 
-  testClaimsSharingANameClash = {
-    expr = failures [
-      (mkClaimKind {
-        name = "tokens";
-        description = "Tokens.";
-        claim = _: { };
-      })
+  testClaimsWhoseHyphenJoinsMeetDoNotClash = {
+    expr =
+      let
+        config = evaluate [
+          (mkClaimKind {
+            name = "tokens";
+            description = "Tokens.";
+            claim = _: { };
+          })
+          {
+            contracts.services = {
+              a = {
+                enable = true;
+                identity.static.user = "a";
+                tokens.b-c = { };
+              };
+              a-b = {
+                enable = true;
+                identity.static.user = "ab";
+                tokens.c = { };
+              };
+            };
+          }
+        ];
+      in
       {
-        contracts.services = {
-          a = {
-            enable = true;
-            identity.static.user = "a";
-            tokens.b-c = { };
-          };
-          a-b = {
-            enable = true;
-            identity.static.user = "ab";
-            tokens.c = { };
-          };
-        };
-      }
-    ];
-    expected = [
-      "nixos-contracts: tokens claims `b-c` of `a` and `c` of `a-b` share the claim name `a-b-c`, since a claim name joins its service and id with `-`; give all but one of them another id."
-    ];
-  };
-
-  testThreeClaimsSharingANameFailOneCheck = {
-    expr = failures [
-      (mkClaimKind {
-        name = "tokens";
-        description = "Tokens.";
-        claim = _: { };
-      })
-      {
-        contracts.services = {
-          a = {
-            enable = true;
-            identity.static.user = "a";
-            tokens.b-c-d = { };
-          };
-          a-b = {
-            enable = true;
-            identity.static.user = "ab";
-            tokens.c-d = { };
-          };
-          a-b-c = {
-            enable = true;
-            identity.static.user = "abc";
-            tokens.d = { };
-          };
-        };
-      }
-    ];
-    expected = [
-      "nixos-contracts: tokens claims `b-c-d` of `a` and `c-d` of `a-b` and `d` of `a-b-c` share the claim name `a-b-c-d`, since a claim name joins its service and id with `-`; give all but one of them another id."
-    ];
+        inherit (config.contracts) failures;
+        locations = [
+          config.contracts.claimSets.tokens.a.b-c.location
+          config.contracts.claimSets.tokens.a-b.c.location
+        ];
+      };
+    expected = {
+      failures = [ ];
+      locations = [
+        [
+          "a"
+          "b-c"
+        ]
+        [
+          "a-b"
+          "c"
+        ]
+      ];
+    };
   };
 
   testCheckRuleReadsTheKindSettings = {
@@ -317,7 +372,7 @@ in
         };
       }
     ];
-    expected = [ "nixos-contracts: tokens claim `a-short`: it is too short." ];
+    expected = [ "nixos-contracts: tokens claim `a.short`: it is too short." ];
   };
 
   testCheckRuleReportsEachReason = {
@@ -356,8 +411,8 @@ in
       }
     ];
     expected = [
-      "nixos-contracts: tokens claim `a-main`: it uses the reserved word `admin`."
-      "nixos-contracts: tokens claim `a-main`: it uses the reserved word `root`."
+      "nixos-contracts: tokens claim `a.main`: it uses the reserved word `admin`."
+      "nixos-contracts: tokens claim `a.main`: it uses the reserved word `root`."
     ];
   };
 
@@ -400,7 +455,7 @@ in
         };
       }
     ];
-    expected = [ "nixos-contracts: tokens claim `a-admin`: it uses a reserved word." ];
+    expected = [ "nixos-contracts: tokens claim `a.admin`: it uses a reserved word." ];
   };
 
   testCheckRuleReportsFailingClaimsOfEnabledContracts = {
@@ -448,7 +503,7 @@ in
       }
     ];
     expected = [
-      "nixos-contracts: tokens claim `a-short`: a dynamic identity needs at least 32 characters."
+      "nixos-contracts: tokens claim `a.short`: a dynamic identity needs at least 32 characters."
     ];
   };
 
@@ -476,7 +531,7 @@ in
             tokens.t = { };
           };
         }
-      ]).contracts.claimSets.tokens.a-t.name;
+      ]).contracts.claimSets.tokens.a.t.name;
     expectedError.msg = "tokens\\.t\\.name' .* already declared in .*mk-claim-kind\\.nix";
   };
 
@@ -504,8 +559,206 @@ in
             tokens.t = { };
           };
         }
-      ]).contracts.claimSets.tokens.a-t.ref;
+      ]).contracts.claimSets.tokens.a.t.ref;
     expectedError.msg = "tokens\\.t\\.ref' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimTypeCannotDeclareTheLocation = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.location = lib.mkOption {
+                type = lib.types.str;
+                default = "mine";
+                description = "A location of the kind's own.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens.a.t.location;
+    expectedError.msg = "tokens\\.t\\.location' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimTypeCannotDeclareTheSendTo = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.sendTo = lib.mkOption {
+                type = lib.types.str;
+                default = "mine";
+                description = "A sendTo of the kind's own.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens.a.t.sendTo;
+    expectedError.msg = "tokens\\.t\\.sendTo' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimOfANewKindIsSentToAnInbox = {
+    expr =
+      builtins.attrNames
+        (evaluate [
+          databases
+          services
+          {
+            contracts = {
+              node = "db";
+              services.grafana.databases.main.sendTo = [
+                {
+                  node = "db";
+                  service = "backup";
+                  id = "databases";
+                }
+              ];
+              services.backup = {
+                enable = true;
+                identity.static.user = "backup";
+                inboxes.databases.kind = "databases";
+              };
+            };
+          }
+        ]).contracts.services.backup.inboxes.databases.received.db.grafana;
+    expected = [ "main" ];
+  };
+
+  testClaimOfAKindThatIsNotSendableIsSentNowhere = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          sendable = false;
+          claim = _: { };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t.sendTo = [ ];
+          };
+        }
+      ]).contracts.claimSets.tokens.a.t.id;
+    expectedError.msg = "tokens\\.t\\.sendTo' does not exist";
+  };
+
+  testInboxTakingAKindThatIsNotSendableFailsACheck = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        sendable = false;
+        claim = _: { };
+      })
+      {
+        contracts.services.backup = {
+          enable = true;
+          identity.static.user = "backup";
+          inboxes.tokens.kind = "tokens";
+        };
+      }
+    ];
+    expected = [
+      "nixos-contracts: inboxes claim `backup.tokens`: it takes `tokens`, which no claim can be sent as."
+    ];
+  };
+
+  testLocationIsReadOnly = {
+    expr =
+      (evaluate [
+        databases
+        services
+        { contracts.services.grafana.databases.main.location = [ "elsewhere" ]; }
+      ]).contracts.services.grafana.databases.main.location;
+    expectedError.msg = "databases\\.main\\.location' is read-only";
+  };
+
+  testClaimIdsMayUseOnlyLowercaseLettersDigitsAndHyphens =
+    let
+      idOf =
+        id:
+        (evaluate [
+          databases
+          {
+            contracts.services.grafana = {
+              enable = true;
+              identity.static.user = "grafana";
+              databases.${id} = { };
+            };
+          }
+        ]).contracts.claimSets.databases.grafana.${id}.engine;
+    in
+    {
+      expr = idOf "main-2";
+      expected = "postgresql";
+    };
+
+  testClaimIdWithAnUnderscoreFails = {
+    expr =
+      (evaluate [
+        databases
+        {
+          contracts.services.grafana = {
+            enable = true;
+            identity.static.user = "grafana";
+            databases.main_db = { };
+          };
+        }
+      ]).contracts.claimSets.databases.grafana.main_db.engine;
+    expectedError.msg = "databases claim id `main_db` of service `grafana` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testClaimIdWithAnUppercaseLetterFails = {
+    expr =
+      (evaluate [
+        databases
+        {
+          contracts.services.grafana = {
+            enable = true;
+            identity.static.user = "grafana";
+            databases.Main = { };
+          };
+        }
+      ]).contracts.claimSets.databases;
+    expectedError.msg = "databases claim id `Main` of service `grafana` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testInvalidClaimIdFailsTheChecks = {
+    expr = failures [
+      databases
+      {
+        contracts.services.grafana = {
+          enable = true;
+          identity.static.user = "grafana";
+          databases."main.db" = { };
+        };
+      }
+    ];
+    expectedError.msg = "databases claim id `main\\.db` of service `grafana` may contain only lowercase letters, digits and hyphens";
   };
 
   testKindMayTakeANameOfTheContractsRoot = {
@@ -532,11 +785,11 @@ in
         ];
       in
       {
-        claimNames = builtins.attrNames config.contracts.claimSets.services;
+        ids = builtins.attrNames config.contracts.claimSets.services.a;
         inherit (config.contracts.kinds.services) limit;
       };
     expected = {
-      claimNames = [ "a-b" ];
+      ids = [ "b" ];
       limit = 3;
     };
   };
@@ -584,7 +837,7 @@ in
           };
         }
         { contracts.services.a.backups.state.target.remote.host = "backup.example"; }
-      ]).contracts.claimSets.backups.a-state.target;
+      ]).contracts.claimSets.backups.a.state.target;
     expected.remote.host = "backup.example";
   };
 

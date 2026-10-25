@@ -29,15 +29,15 @@ let
       };
     };
   };
-  # The backend's directories, and a value set on agenix-rekey under its
-  # claim name.
+  # The backend's directories, and a value set on agenix-rekey under the
+  # name of its claim's location.
   values = {
     age = {
       rekey = {
         secretsDir = ./.;
         generatedSecretsDir = ./generated;
       };
-      secrets.alloy-password.rekeyFile = ./agenix-rekey.nix;
+      secrets.alloy_password.rekeyFile = ./agenix-rekey.nix;
     };
   };
   configuration = modules: evaluate (backends ++ [ adapter ] ++ modules);
@@ -90,6 +90,69 @@ let
       inherit secrets;
     };
   };
+
+  # Influxdb's `writers` inbox on the store node, holding a copy of each
+  # token it receives, and telegraf sending its token there.
+  writers = {
+    node = "store";
+    service = "influxdb";
+    id = "writers";
+  };
+  influxdbWriters = {
+    imports = [ (influxdb { }) ];
+    contracts.services.influxdb.inboxes.writers.copy = { };
+  };
+  writingTelegraf = {
+    imports = [ telegraf ];
+    contracts.services.telegraf.secrets.token.sendTo = [ writers ];
+  };
+  # The store node's configuration, sharing one node collection with a
+  # metrics node that `evaluateMetrics` evaluates, neither with secrets
+  # directories.
+  storeWithMetrics =
+    evaluateMetrics:
+    let
+      nodeOf = node: {
+        contracts = { inherit node nodes; };
+      };
+      nodes = {
+        metrics.config = evaluateMetrics [
+          (nodeOf "metrics")
+          writingTelegraf
+        ];
+        store.config = configuration [
+          (nodeOf "store")
+          influxdbWriters
+        ];
+      };
+    in
+    nodes.store.config;
+  # The telegraf token, sent to the clients inbox of nginx on the `proxy`
+  # node, and nginx deriving an htpasswd from what the inbox received.
+  sendingTelegraf = {
+    imports = [ telegraf ];
+    contracts.services.telegraf.secrets.token.sendTo = [
+      {
+        node = "proxy";
+        service = "nginx";
+        id = "clients";
+      }
+    ];
+  };
+  nginx =
+    { config, ... }:
+    {
+      age.generators.basic-auth = _: "true";
+      contracts.services.nginx = {
+        enable = true;
+        identity.static.user = "nginx";
+        inboxes.clients = { };
+        secrets.htpasswd.value.derived = {
+          generator = "basic-auth";
+          from = config.contracts.services.nginx.inboxes.clients.refs;
+        };
+      };
+    };
 in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
@@ -97,8 +160,8 @@ in
       (configuration [
         services
         values
-        { age.secrets.kea-ddns.generator.script = "hex"; }
-      ]).age.secrets.kea-ddns.generator.script;
+        { age.secrets.kea_ddns.generator.script = "hex"; }
+      ]).age.secrets.kea_ddns.generator.script;
     expected = "hex";
   };
 
@@ -126,8 +189,8 @@ in
       (configuration [
         services
         values
-        { age.secrets.kea-ddns.generator.dependencies = [ ]; }
-      ]).age.secrets.kea-ddns.generator.script;
+        { age.secrets.kea_ddns.generator.dependencies = [ ]; }
+      ]).age.secrets.kea_ddns.generator.script;
     expected = "base64";
   };
 
@@ -140,13 +203,13 @@ in
           (
             { config, ... }:
             {
-              age.secrets.kea-ddns.generator.dependencies = {
-                inherit (config.age.secrets) kea-token;
+              age.secrets.kea_ddns.generator.dependencies = {
+                inherit (config.age.secrets) kea_token;
               };
             }
           )
-        ]).age.secrets.kea-ddns.generator.dependencies;
-    expected = [ "kea-token" ];
+        ]).age.secrets.kea_ddns.generator.dependencies;
+    expected = [ "kea_token" ];
   };
 
   testNodeWritesProvidedOverADefaultGenerated = {
@@ -161,14 +224,14 @@ in
           };
         }
         { contracts.services.kea.secrets.ddns.value.provided = { }; }
-      ]).age.secrets.kea-ddns.generator;
+      ]).age.secrets.kea_ddns.generator;
     expected = null;
   };
 
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck = {
     expr =
       map
-        (lib.hasPrefix "nixos-contracts: secrets claim `kea-ddns`: the secret backend provides no generator `alnm`; name one of ")
+        (lib.hasPrefix "nixos-contracts: secrets claim `kea.ddns`: the secret backend provides no generator `alnm`; name one of ")
         (failures [
           keaWithoutValues
           values
@@ -178,7 +241,7 @@ in
   };
 
   testSecretTakesItsGeneratorFromTheClaim = {
-    expr = secretOf "kea-ddns" (configuration [
+    expr = secretOf "kea_ddns" (configuration [
       services
       values
     ]);
@@ -186,13 +249,13 @@ in
       owner = "root";
       group = "dhcp";
       mode = "0440";
-      rekeyFile = ./generated/kea-ddns.age;
+      rekeyFile = ./generated/kea_ddns.age;
       generator = "base64";
     };
   };
 
   testSecretWithoutAGeneratorFollowsTheBackendsSecretsDir = {
-    expr = secretOf "kea-token" (configuration [
+    expr = secretOf "kea_token" (configuration [
       services
       values
     ]);
@@ -200,7 +263,7 @@ in
       owner = "root";
       group = "dhcp";
       mode = "0440";
-      rekeyFile = ./kea-token.age;
+      rekeyFile = ./kea_token.age;
       generator = null;
     };
   };
@@ -210,7 +273,7 @@ in
       (configuration [
         services
         values
-      ]).age.secrets.alloy-password.rekeyFile;
+      ]).age.secrets.alloy_password.rekeyFile;
     expected = ./agenix-rekey.nix;
   };
 
@@ -220,8 +283,8 @@ in
       { contracts.services.kea.secrets.ddns.value.generated = "base64"; }
     ];
     expected = [
-      "nixos-contracts: secret `kea-ddns` has no encrypted file: set its `age.secrets.kea-ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
-      "nixos-contracts: secret `kea-token` has no encrypted file: set its `age.secrets.kea-token.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
+      "nixos-contracts: secret `kea.ddns` has no encrypted file: set its `age.secrets.kea_ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
+      "nixos-contracts: secret `kea.token` has no encrypted file: set its `age.secrets.kea_token.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
     ];
   };
 
@@ -232,7 +295,7 @@ in
         # Another adapter's setting, so `contracts.adapters` exists.
         ({ lib, ... }: { options.contracts.adapters.other = lib.mkOption { default = null; }; })
         { contracts.adapters.agenixRekey.secretsDir = ./.; }
-      ]).age.secrets.kea-token.rekeyFile;
+      ]).age.secrets.kea_token.rekeyFile;
     expectedError.msg = "contracts\\.adapters\\.agenixRekey' does not exist";
   };
 
@@ -242,12 +305,12 @@ in
       values
     ];
     expected = [
-      "nixos-contracts: secrets claim `alloy-password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
+      "nixos-contracts: secrets claim `alloy.password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
     ];
   };
 
   testCopyTakesTheEncryptedFileOfTheSecretItReferences = {
-    expr = secretOf "kea-copy" (configuration [
+    expr = secretOf "kea_copy" (configuration [
       services
       values
       (
@@ -262,14 +325,14 @@ in
       owner = "root";
       group = "dhcp";
       mode = "0440";
-      rekeyFile = ./kea-token.age;
+      rekeyFile = ./kea_token.age;
       generator = null;
     };
   };
 
   testCopyTakesTheEncryptedFileOfAnotherNodesSecret = {
     expr =
-      secretOf "influxdb-telegraf-token"
+      secretOf "influxdb_telegraf-token"
         (nodesOf {
           metrics = [ telegraf ];
           store = [
@@ -282,7 +345,7 @@ in
       owner = "root";
       group = "influxdb2";
       mode = "0440";
-      rekeyFile = ./generated/metrics/telegraf-token.age;
+      rekeyFile = ./generated/metrics/telegraf_token.age;
       generator = null;
     };
   };
@@ -308,12 +371,194 @@ in
     in
     {
       expr = {
-        inherit (config.age.secrets.influxdb-copy) rekeyFile;
+        inherit (config.age.secrets.influxdb_copy) rekeyFile;
         inherit (config.contracts) failures;
       };
       expected = {
-        rekeyFile = ./generated/store/influxdb-origin.age;
+        rekeyFile = ./generated/store/influxdb_origin.age;
         failures = [ ];
+      };
+    };
+
+  testInboxCopyTakesTheEncryptedFileOfTheSecretSentFromAnotherNode = {
+    expr =
+      secretOf "influxdb_writers_metrics_telegraf_token"
+        (nodesOf {
+          metrics = [ writingTelegraf ];
+          store = [ influxdbWriters ];
+        }).store.config;
+    expected = {
+      owner = "root";
+      group = "influxdb2";
+      mode = "0440";
+      rekeyFile = ./generated/metrics/telegraf_token.age;
+      generator = null;
+    };
+  };
+
+  testInboxCopyOfASecretSentFromItsOwnNodeReadsThisConfiguration =
+    let
+      inherit
+        ((nodesOf {
+          store = [
+            writingTelegraf
+            influxdbWriters
+          ];
+        }).store
+        )
+        config
+        ;
+    in
+    {
+      expr = {
+        inherit (config.age.secrets.influxdb_writers_store_telegraf_token) rekeyFile;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        rekeyFile = ./generated/store/telegraf_token.age;
+        failures = [ ];
+      };
+    };
+
+  testFileSetOnTheBackendWinsOverAnInboxCopys = {
+    expr =
+      (nodesOf {
+        metrics = [ writingTelegraf ];
+        store = [
+          influxdbWriters
+          { age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile = ./agenix-rekey.nix; }
+        ];
+      }).store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
+    expected = ./agenix-rekey.nix;
+  };
+
+  testDisabledReceivingContractInstallsNoCopies = {
+    expr =
+      builtins.attrNames
+        (nodesOf {
+          metrics = [ writingTelegraf ];
+          store = [
+            influxdbWriters
+            { contracts.services.influxdb.enable = lib.mkForce false; }
+          ];
+        }).store.config.age.secrets;
+    expected = [ ];
+  };
+
+  # The metrics node sets no secrets directories, so its token has no
+  # encrypted file.
+  testInboxCopyOfASecretWithoutAFileNamesTheSentSecret = {
+    expr = (storeWithMetrics configuration).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile`."
+    ];
+  };
+
+  # The metrics node holds its contracts, but no secret backend.
+  testInboxCopyFromANodeWithoutTheAdapterFailsItsCheck = {
+    expr = (storeWithMetrics (modules: nixos.evaluate ([ contracts ] ++ modules))).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+    ];
+  };
+
+  # Each node holds a copy of the token the other sends it.
+  testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
+    let
+      nodes = nodesOf {
+        metrics = [
+          writingTelegraf
+          { contracts.services.telegraf.inboxes.outputs.copy = { }; }
+        ];
+        store = [
+          influxdbWriters
+          {
+            contracts.services.influxdb.secrets.token = {
+              value.generated = "alnum";
+              sendTo = [
+                {
+                  node = "metrics";
+                  service = "telegraf";
+                  id = "outputs";
+                }
+              ];
+            };
+          }
+        ];
+      };
+    in
+    {
+      expr = {
+        outputs = nodes.metrics.config.age.secrets.telegraf_outputs_store_influxdb_token.rekeyFile;
+        writers = nodes.store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
+        failures = map (node: node.config.contracts.failures) [
+          nodes.metrics
+          nodes.store
+        ];
+      };
+      expected = {
+        outputs = ./generated/store/influxdb_token.age;
+        writers = ./generated/metrics/telegraf_token.age;
+        failures = [
+          [ ]
+          [ ]
+        ];
+      };
+    };
+
+  # Telegraf on two nodes sends its token to influxdb's copying writers, one
+  # of them from influxdb's own node, and a third telegraf sends its token
+  # to nginx's clients, whose htpasswd derives from their refs.
+  testSendCheckChangesNoEntryAndNoCopyWithoutADependence =
+    let
+      # The values of a set of sets, in a list.
+      valuesOf = set: lib.concatMap builtins.attrValues (builtins.attrValues set);
+      copyPathsOf =
+        config:
+        lib.pipe config.contracts.claimSets.inboxes [
+          valuesOf
+          (lib.concatMap (inbox: lib.concatMap valuesOf (builtins.attrValues inbox.received)))
+          (map (entry: entry.copy))
+          (lib.filter (copy: copy != null))
+          (map (copy: copy.path))
+        ];
+      observe =
+        checkSends:
+        builtins.mapAttrs
+          (_: node: {
+            entries = builtins.mapAttrs (name: _: secretOf name node.config) node.config.age.secrets;
+            dependencies = map (dependency: {
+              inherit (dependency) id rekeyFile;
+            }) (node.config.age.secrets.nginx_htpasswd.generator.dependencies or [ ]);
+            copyPaths = copyPathsOf node.config;
+            inherit (node.config.contracts) failures;
+          })
+          (
+            nodesOf (
+              builtins.mapAttrs (_: modules: [ { contracts = { inherit checkSends; }; } ] ++ modules) {
+                metrics = [ writingTelegraf ];
+                store = [
+                  influxdbWriters
+                  writingTelegraf
+                ];
+                alpha = [ sendingTelegraf ];
+                proxy = [ nginx ];
+              }
+            )
+          );
+      observed = observe true;
+    in
+    {
+      expr = {
+        inherit observed;
+        storeCopyPaths = observed.store.copyPaths;
+      };
+      expected = {
+        observed = observe false;
+        storeCopyPaths = [
+          "/run/agenix/influxdb_writers_metrics_telegraf_token"
+          "/run/agenix/influxdb_writers_store_telegraf_token"
+        ];
       };
     };
 
@@ -343,23 +588,63 @@ in
         inherit (nodes.store) config;
       in
       {
-        inherit (config.age.secrets.influxdb-hashes.generator) script;
+        inherit (config.age.secrets.influxdb_hashes.generator) script;
         dependencies = map (dependency: {
           inherit (dependency) id rekeyFile;
-        }) config.age.secrets.influxdb-hashes.generator.dependencies;
+        }) config.age.secrets.influxdb_hashes.generator.dependencies;
       };
     expected = {
       script = "basic-auth";
       dependencies = [
         {
-          id = "telegraf-token";
-          rekeyFile = ./generated/metrics/telegraf-token.age;
+          id = "telegraf_token";
+          rekeyFile = ./generated/metrics/telegraf_token.age;
         }
         {
-          id = "influxdb-local";
-          rekeyFile = ./generated/store/influxdb-local.age;
+          id = "influxdb_local";
+          rekeyFile = ./generated/store/influxdb_local.age;
         }
       ];
+    };
+  };
+
+  # Each dependency is the sender's entry, read from its own node, which the
+  # proxy does not install.
+  testDerivedValueTakesTheEntriesOfAnInboxsRefsOnTheirNodes = {
+    expr =
+      let
+        inherit
+          ((nodesOf {
+            alpha = [ sendingTelegraf ];
+            beta = [ sendingTelegraf ];
+            proxy = [ nginx ];
+          }).proxy
+          )
+          config
+          ;
+      in
+      {
+        inherit (config.age.secrets.nginx_htpasswd.generator) script;
+        dependencies = map (dependency: {
+          inherit (dependency) id rekeyFile;
+        }) config.age.secrets.nginx_htpasswd.generator.dependencies;
+        entries = builtins.attrNames config.age.secrets;
+        inherit (config.contracts) failures;
+      };
+    expected = {
+      script = "basic-auth";
+      dependencies = [
+        {
+          id = "telegraf_token";
+          rekeyFile = ./generated/alpha/telegraf_token.age;
+        }
+        {
+          id = "telegraf_token";
+          rekeyFile = ./generated/beta/telegraf_token.age;
+        }
+      ];
+      entries = [ "nginx_htpasswd" ];
+      failures = [ ];
     };
   };
 
@@ -378,7 +663,7 @@ in
           ;
       in
       {
-        inherit (config.age.secrets.influxdb-hashes.generator) script dependencies;
+        inherit (config.age.secrets.influxdb_hashes.generator) script dependencies;
         inherit (config.contracts) failures;
       };
     expected = {
@@ -405,8 +690,8 @@ in
               })
               {
                 age.secrets = {
-                  influxdb-copy.rekeyFile = ./agenix-rekey.nix;
-                  influxdb-hashes.generator.script = "hex";
+                  influxdb_copy.rekeyFile = ./agenix-rekey.nix;
+                  influxdb_hashes.generator.script = "hex";
                 };
               }
             ];
@@ -416,8 +701,8 @@ in
           ;
       in
       {
-        inherit (config.age.secrets.influxdb-copy) rekeyFile;
-        inherit (config.age.secrets.influxdb-hashes.generator) script;
+        inherit (config.age.secrets.influxdb_copy) rekeyFile;
+        inherit (config.age.secrets.influxdb_hashes.generator) script;
       };
     expected = {
       rekeyFile = ./agenix-rekey.nix;
@@ -440,7 +725,30 @@ in
         }
       ]).contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb-token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+    ];
+  };
+
+  testSecretSentFromANodeWithoutTheAdapterFailsACheck = {
+    expr =
+      (nodesOf {
+        metrics = [ sendingTelegraf ];
+        proxy = [
+          nginx
+          {
+            # The metrics node holds its contracts, but no secret backend.
+            contracts.nodes.metrics = lib.mkForce {
+              config = nixos.evaluate [
+                contracts
+                { contracts.node = "metrics"; }
+                sendingTelegraf
+              ];
+            };
+          }
+        ];
+      }).proxy.config.contracts.failures;
+    expected = [
+      "nixos-contracts: secret `nginx.htpasswd` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 
@@ -457,7 +765,7 @@ in
         }
       ]).contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb-token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb-token.rekeyFile`."
+      "nixos-contracts: secret `influxdb.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb_token.rekeyFile`."
     ];
   };
 
@@ -471,7 +779,52 @@ in
         ];
       }).store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
+    ];
+  };
+
+  testBackendPathNamesTheEntryByTheLocation = {
+    expr =
+      (configuration [
+        services
+        values
+      ]).contracts.kinds.secrets.backend.path
+        [
+          "influxdb"
+          "admin-token"
+        ];
+    expected = "/run/agenix/influxdb_admin-token";
+  };
+
+  testBackendPathFollowsAnEntrysOwnPath = {
+    expr =
+      (configuration [
+        services
+        values
+        { age.secrets.kea_token.path = "/run/keys/kea"; }
+      ]).contracts.services.kea.secrets.token.path;
+    expected = "/run/keys/kea";
+  };
+
+  testEntriesAreNamedByTheLocationJoinedWithUnderscores = {
+    expr =
+      builtins.attrNames
+        (configuration [
+          services
+          values
+          {
+            contracts.services.kea-dhcp6 = {
+              enable = true;
+              identity.static.user = "kea";
+              secrets.admin-token = { };
+            };
+          }
+        ]).age.secrets;
+    expected = [
+      "alloy_password"
+      "kea-dhcp6_admin-token"
+      "kea_ddns"
+      "kea_token"
     ];
   };
 
@@ -481,6 +834,6 @@ in
         services
         values
       ]).contracts.services.kea.secrets.token.path;
-    expected = "/run/agenix/kea-token";
+    expected = "/run/agenix/kea_token";
   };
 }
