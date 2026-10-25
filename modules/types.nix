@@ -60,33 +60,42 @@ let
     none wraps it. A leaf under a false `lib.mkIf` has none, so a
     definition with no leaf left is weaker than any other.
   */
-  strength =
+  definitionPriority =
     let
-      go =
-        inherited: value:
+      # The priority of `value`, given the priority of the innermost
+      # override around it.
+      priorityWithin =
+        enclosing: value:
         if value._type or null == "override" then
-          go value.priority value.content
+          priorityWithin value.priority value.content
         else if value._type or null == "if" then
-          if value.condition then go inherited value.content else null
+          if value.condition then priorityWithin enclosing value.content else null
         else if value._type or null == "merge" then
-          if value.contents == [ ] then inherited else strongestOf (map (go inherited) value.contents)
+          if value.contents == [ ] then
+            enclosing
+          else
+            strongestOf (map (priorityWithin enclosing) value.contents)
         else if lib.isAttrs value && value != { } && !(lib.isDerivation value) then
-          strongestOf (map (go inherited) (lib.attrValues value))
+          strongestOf (map (priorityWithin enclosing) (lib.attrValues value))
         else
-          inherited;
+          enclosing;
     in
-    go lib.modules.defaultOverridePriority;
+    priorityWithin lib.modules.defaultOverridePriority;
 
   # The definitions of every tag whose strongest definition is the strongest
   # of all, so a conflict at that priority still reaches `attrTag`.
   strongestTagDefinitions =
     defs:
     let
-      byTag = lib.groupBy (def: builtins.head (builtins.attrNames def.value)) defs;
-      priorityOf = group: strongestOf (map (def: strength def.value) group);
-      best = strongestOf (map priorityOf (lib.attrValues byTag));
+      definitionsByTag = lib.groupBy (def: builtins.head (builtins.attrNames def.value)) defs;
+      tagPriority = tagDefs: strongestOf (map (def: definitionPriority def.value) tagDefs);
+      strongestPriority = strongestOf (map tagPriority (lib.attrValues definitionsByTag));
     in
-    lib.concatLists (lib.attrValues (lib.filterAttrs (_: group: priorityOf group == best) byTag));
+    lib.concatLists (
+      lib.attrValues (
+        lib.filterAttrs (_: tagDefs: tagPriority tagDefs == strongestPriority) definitionsByTag
+      )
+    );
 
   /**
     A tag: an option that holds exactly one of several cases, like
