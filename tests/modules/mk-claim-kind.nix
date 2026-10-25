@@ -646,6 +646,47 @@ in
     expected = [ "main" ];
   };
 
+  testClaimOfAKindThatIsNotSendableIsSentNowhere = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          sendable = false;
+          claim = _: { };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t.sendTo = [ ];
+          };
+        }
+      ]).contracts.claimSets.tokens.a.t.id;
+    expectedError.msg = "tokens\\.t\\.sendTo' does not exist";
+  };
+
+  testInboxTakingAKindThatIsNotSendableFailsACheck = {
+    expr = failures [
+      (mkClaimKind {
+        name = "tokens";
+        description = "Tokens.";
+        sendable = false;
+        claim = _: { };
+      })
+      {
+        contracts.services.backup = {
+          enable = true;
+          identity.static.user = "backup";
+          inboxes.tokens.kind = "tokens";
+        };
+      }
+    ];
+    expected = [
+      "nixos-contracts: inboxes claim `backup.tokens`: it takes `tokens`, which no claim can be sent as."
+    ];
+  };
+
   testLocationIsReadOnly = {
     expr =
       (evaluate [

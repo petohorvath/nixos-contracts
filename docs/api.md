@@ -112,7 +112,7 @@ Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
 
-A claim of every kind but inboxes also has a writable `sendTo` (list of [`lib.types.referenceTo "inboxes"`](#libtypesreferenceto), default `[ ]`): the [inboxes](#inboxes) it is sent to.
+A claim of every [sendable](#libmkclaimkind) kind, every shipped kind but inboxes, also has a writable `sendTo` (list of [`lib.types.referenceTo "inboxes"`](#libtypesreferenceto), default `[ ]`): the [inboxes](#inboxes) it is sent to.
 
 ### Locations and names
 
@@ -437,7 +437,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
+`mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; sendable ? true; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set and the settings root. The contract's own fields `enable` and `identity` are reserved.
@@ -446,7 +446,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `location`, `name` and `ref` on every claim, and `sendTo` on every claim of a kind other than inboxes, so a claim type cannot declare options with these names, and reads a claim's own `location` from `config.location`.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `location`, `name` and `ref` on every claim, and `sendTo` on every claim of a sendable kind, so a claim type cannot declare options with these names, and reads a claim's own `location` from `config.location`.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when no two claims of the kind can clash.
@@ -456,6 +456,9 @@ To use it without the flake, import the library directory with a caller-owned li
 
 `settings`
 : Option declarations placed under `contracts.kinds.<name>`.
+
+`sendable`
+: Whether a claim of the kind can be sent to an [inbox](#inboxes), true by default. Claims of a kind that is not sendable have no `sendTo`, and an inbox taking the kind fails its check. The shipped inboxes kind is not sendable.
 
 ```nix
 mkClaimKind {

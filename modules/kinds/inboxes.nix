@@ -29,12 +29,15 @@ in
     `sendTo`.
   '';
 
+  # An inbox is where claims arrive, so it is sent nowhere.
+  sendable = false;
+
   check =
     { claim, config, ... }:
-    if claim.kind == "inboxes" then
-      "it takes `inboxes`, which no claim can be sent as"
-    else if !(config.contracts.claimSets ? ${claim.kind}) then
+    if !(config.contracts.claimSets ? ${claim.kind}) then
       "it takes `${claim.kind}`, which is no claim kind of this node"
+    else if !config.contracts.internal.kinds.${claim.kind}.sendable then
+      "it takes `${claim.kind}`, which no claim can be sent as"
     else if claim.copy != null && !builtins.elem claim.kind copyKinds then
       "it sets `copy`, but `${claim.kind}` claims have no copies; set `copy = null` and read `received`"
     else

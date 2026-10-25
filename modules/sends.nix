@@ -16,19 +16,21 @@ let
 
   # The sends of a configuration's contracts, `{ ref; location; to; }` per
   # claim and inbox it names, read from its claim sets alone: those of
-  # enabled contracts, of every kind but inboxes, which are sent nowhere.
+  # enabled contracts, of every sendable kind.
   sendsOf =
     contracts:
-    lib.concatMap (
-      kind:
-      lib.concatMap (
-        claim:
-        map (to: {
-          inherit (claim) ref location;
-          inherit to;
-        }) claim.sendTo
-      ) (references.claimsOf contracts.claimSets.${kind})
-    ) (lib.remove "inboxes" (lib.attrNames contracts.claimSets));
+    lib.concatMap
+      (
+        kind:
+        lib.concatMap (
+          claim:
+          map (to: {
+            inherit (claim) ref location;
+            inherit to;
+          }) claim.sendTo
+        ) (references.claimsOf contracts.claimSets.${kind})
+      )
+      (lib.filter (kind: contracts.internal.kinds.${kind}.sendable) (lib.attrNames contracts.claimSets));
 
   sends = sendsOf config.contracts;
 

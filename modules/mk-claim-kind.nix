@@ -29,10 +29,10 @@
     owner, is an option defaulting to it. The constructor declares five
     read-only options on every claim, `service`, `id`, its `location`
     `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
-    and on every kind but inboxes the writable `sendTo`, the inboxes the
-    claim is sent to, so a claim type cannot declare options with these
-    names. A claim id, like a service name, may contain only lowercase
-    letters, digits and hyphens.
+    and on every claim of a sendable kind the writable `sendTo`, the
+    inboxes the claim is sent to, so a claim type cannot declare options
+    with these names. A claim id, like a service name, may contain only
+    lowercase letters, digits and hyphens.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -51,6 +51,11 @@
 
   `settings`
   : Optional. Option declarations placed under `contracts.kinds.<name>`.
+
+  `sendable`
+  : Optional, true by default. Whether a claim of the kind can be sent to
+    an inbox. Claims of a kind that is not sendable have no `sendTo`, and
+    an inbox taking the kind fails its check. Inboxes are not sendable.
 
   # Output
 
@@ -75,6 +80,7 @@
   clash ? null,
   check ? null,
   settings ? { },
+  sendable ? true,
 }:
 let
   kindName = name;
@@ -293,9 +299,7 @@ else
                             '';
                           };
                         }
-                        # An inbox is where claims arrive, so it is sent
-                        # nowhere.
-                        // lib.optionalAttrs (kindName != "inboxes") {
+                        // lib.optionalAttrs sendable {
                           sendTo = lib.mkOption {
                             type = lib.types.listOf (contractTypes.referenceTo "inboxes");
                             default = [ ];
@@ -332,12 +336,14 @@ else
       kinds.${kindName} = settings;
 
       # The kind's claim type and check rule, for a claim a service holds
-      # outside the claim set, such as an inbox's copy.
+      # outside the claim set, such as an inbox's copy, and whether its
+      # claims can be sent.
       internal.kinds.${kindName} = lib.mkOption {
         type = lib.types.raw;
         internal = true;
         readOnly = true;
         default = {
+          inherit sendable;
           claim =
             service:
             claim {
@@ -352,11 +358,12 @@ else
               inherit claim;
             };
         };
-        defaultText = lib.literalMD "the kind's claim type and check rule";
+        defaultText = lib.literalMD "the kind's claim type, check rule and sendability";
         description = ''
           `claim service`, the submodule of one ${kindName} claim of a
-          service, and `assertions service claim`, the failed checks of
-          such a claim.
+          service, `assertions service claim`, the failed checks of such a
+          claim, and `sendable`, whether a ${kindName} claim can be sent to
+          an inbox.
         '';
       };
     };
