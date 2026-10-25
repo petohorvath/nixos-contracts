@@ -2,18 +2,29 @@
 # runtime and must keep private.
 { lib }:
 let
-  referenceType = (import ../types.nix { inherit lib; }).referenceTo "secrets";
-  # References resolve through the lookup every kind shares; `from` adds
-  # only its own rules.
+  contractTypes = import ../types.nix { inherit lib; };
+  referenceType = contractTypes.referenceTo "secrets";
+  # References resolve through the lookup every kind shares; a secret's
+  # value adds only its own rules.
   inherit (import ../references.nix) labelOf lookup;
 
-  # Only a claim without `from` of its own resolves, so two copies
-  # referencing each other fail their checks instead of recursing.
-  resolves = claim: claim != null && claim.from == [ ];
+  # The references of a `copied` or `derived` value, in order, or none.
+  referencesOf =
+    value:
+    if value ? copied then
+      [ value.copied ]
+    else if value ? derived then
+      value.derived.from
+    else
+      [ ];
 
-  # A `referenced` entry: a reference with the claim it resolves to, or a
-  # null claim when a check rejects it.
-  toReferenced =
+  # Only a provided or generated secret resolves, so two copies referencing
+  # each other fail their checks instead of recursing.
+  resolves = claim: claim != null && (claim.value ? provided || claim.value ? generated);
+
+  # A `sources` entry: a reference with the claim it resolves to, or a null
+  # claim when a check rejects it.
+  toSource =
     config: reference:
     let
       inherit (lookup config reference) claim;
@@ -38,7 +49,7 @@ let
     if result.reason != null then
       "${references}: ${result.reason}"
     else if !resolves result.claim then
-      "${references}, which references secrets itself; reference a secret without `from`"
+      "${references}, which is copied or derived itself; reference a provided or generated secret"
     else
       null;
 
@@ -81,8 +92,8 @@ in
         The secret backend: where it installs a secret and which
         generators it provides. Set by a backend adapter, such as
         `nixosModules.agenix-rekey`; null when none is imported, which
-        leaves `generate` unchecked and fails reading a secret's location.
-        A node does not set it.
+        leaves a value's generator unchecked and fails reading a secret's
+        location. A node does not set it.
       '';
       options = {
         location = lib.mkOption {
@@ -96,7 +107,10 @@ in
         };
         generators = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          description = "The generators a secret's `generate` may name, such as `alnum`.";
+          description = ''
+            The generators a secret's `generated` or `derived` value may
+            name, such as `alnum`.
+          '';
           example = [
             "alnum"
             "hex"
@@ -130,24 +144,23 @@ in
     }:
     let
       inherit (settings) backend;
+      generator = claim.value.generated or claim.value.derived.generator or null;
       # A dynamic identity's user exists only while its unit runs, so it
       # reads a secret the backend installs only through its shared group.
       claimReason =
         if identity.unit != null && !claim.delivered && claim.group != identity.group then
           "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
-        else if
-          claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
-        then
-          "the secret backend provides no generator `${claim.generate}`"
+        else if generator != null && backend != null && !builtins.elem generator backend.generators then
+          "the secret backend provides no generator `${generator}`"
           +
             lib.optionalString (backend.generators != [ ])
-              "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
-        else if claim.generate == null && builtins.length claim.from > 1 then
-          "it references several secrets but has no `generate`; a copy references one"
+              "; name one of ${lib.concatMapStringsSep ", " (name: "`${name}`") backend.generators}"
         else
           null;
     in
-    lib.filter (reason: reason != null) ([ claimReason ] ++ map (referenceReason config) claim.from);
+    lib.filter (reason: reason != null) (
+      [ claimReason ] ++ map (referenceReason config) (referencesOf claim.value)
+    );
 
   claim =
     { identity, config, ... }:
@@ -182,49 +195,89 @@ in
           defaultText = lib.literalMD "the identity's group, or `root` when it has none";
           description = "The group of the installed secret.";
         };
-        generate = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
+        value = lib.mkOption {
+          type = contractTypes.tag {
+            provided = lib.mkOption {
+              type = lib.types.submodule { };
+              description = ''
+                A value a person or another party provides, set on the
+                backend.
+              '';
+            };
+            generated = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The generator that makes the value, such as `alnum`, when
+                the service makes its own value. A backend adapter turns it
+                into the backend's generator.
+              '';
+              example = "alnum";
+            };
+            copied = lib.mkOption {
+              type = referenceType;
+              description = ''
+                The one secret this secret is a copy of, as a reference
+                `{ node; service; id; }`, such as another secret's `ref`.
+              '';
+            };
+            derived = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  generator = lib.mkOption {
+                    type = lib.types.str;
+                    description = ''
+                      The generator that makes the value from the secrets
+                      in `from`, such as `basic-auth`.
+                    '';
+                    example = "basic-auth";
+                  };
+                  from = lib.mkOption {
+                    type = lib.types.listOf referenceType;
+                    default = [ ];
+                    description = ''
+                      The secrets the generator makes the value from, in
+                      order, each a reference `{ node; service; id; }`, such
+                      as another secret's `ref`.
+                    '';
+                  };
+                };
+              };
+              description = ''
+                A value a generator makes from the secrets it references.
+              '';
+            };
+          };
+          default.provided = { };
           description = ''
-            The generator that makes the secret's value, such as `alnum`,
-            when the service makes its own value; null when a person or
-            another party provides it. A backend adapter turns it into the
-            backend's generator.
+            Where the secret's value comes from: `provided = { }`, the
+            default, when a person or another party provides it,
+            `generated = "<generator>"` when the service makes it,
+            `copied = <reference>` for a copy of one other secret, or
+            `derived = { generator; from; }` when a generator makes it from
+            the secrets `from` references. A reference names
+            `contracts.node` or a node in `contracts.nodes`, and the core
+            resolves it into `sources`. A node switches a module's
+            default-priority tag by writing another at normal priority.
           '';
-          example = "alnum";
+          example.copied = {
+            node = "metrics";
+            service = "telegraf";
+            id = "token";
+          };
         };
-        from = lib.mkOption {
-          type = lib.types.listOf referenceType;
-          default = [ ];
-          description = ''
-            The secrets the value comes from, each a reference
-            `{ node; service; id; }`, such as another secret's `ref`.
-            Without `generate`, the secret is a copy of the one secret it
-            references; with it, the generator makes the value from the
-            secrets it references. Each reference names `contracts.node` or
-            a node in `contracts.nodes`, and the core resolves it into
-            `referenced`.
-          '';
-          example = [
-            {
-              node = "metrics";
-              service = "telegraf";
-              id = "token";
-            }
-          ];
-        };
-        referenced = lib.mkOption {
+        sources = lib.mkOption {
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
-          default = map (toReferenced topConfig) config.from;
-          defaultText = lib.literalMD "each reference in `from` with the claim it resolves to";
+          default = map (toSource topConfig) (referencesOf config.value);
+          defaultText = lib.literalMD "the references of a `copied` or `derived` value, each with the claim it resolves to";
           description = ''
-            Each reference in `from` as
+            The references of a `copied` value, or those of a `derived`
+            value's `from` in order, each as
             `{ node; kind; service; id; claim; }`, where `claim` is the
             claim-set entry of the secret it names, read from the node
-            collection, or null when a check rejects the reference.
-            A backend adapter reads the references from it rather than
-            resolving them itself.
+            collection, or null when a check rejects the reference. Empty
+            for a `provided` or `generated` value. A backend adapter reads
+            the references from it rather than resolving them itself.
           '';
         };
         unit = lib.mkOption {

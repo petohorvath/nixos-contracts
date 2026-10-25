@@ -16,7 +16,7 @@ in
       class = "state";
     };
     secrets = {
-      admin-password.generate = "alnum";
+      admin-password.value.generated = "alnum";
       admin-token = { };
     };
   };

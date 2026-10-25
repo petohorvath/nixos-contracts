@@ -1,4 +1,4 @@
-{ contracts }:
+{ contracts, lib }:
 let
   inherit (contracts) evaluate failures nodesOf;
 
@@ -17,6 +17,7 @@ let
     id = "http";
   };
   reasonOf = config: reference: (config.contracts.lookup reference).reason;
+  identityOf = modules: (evaluate modules).contracts.services.chrony.identity;
 in
 {
   testContractsAreDisabledByDefault = {
@@ -63,6 +64,154 @@ in
         }
       ]).contracts.services.chrony.identity;
     expectedError.msg = "contracts\\.services\\.chrony\\.identity";
+  };
+
+  testNodeSwitchesADefaultStaticIdentityToADynamicOne = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = lib.mkDefault "chrony"; }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testNodeSwitchesADefaultDynamicIdentityToAStaticOne = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.dynamic.unit = lib.mkDefault "chronyd.service"; }
+      { contracts.services.chrony.identity.static.user = "chrony"; }
+    ];
+    expected.static = {
+      user = "chrony";
+      group = null;
+    };
+  };
+
+  testTwoTagsOfOnePriorityFail = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = "chrony"; }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expectedError.msg = "contracts\\.services\\.chrony\\.identity` is defined both as `dynamic` and `static`";
+  };
+
+  testOverrideOnAWholeTagWins = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = "chrony"; }
+      {
+        contracts.services.chrony.identity = lib.mkOverride 90 { dynamic.unit = "chronyd.service"; };
+      }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testLeafInsideADefaultCountsAtDefaultPriority = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static = lib.mkDefault { user = "chrony"; }; }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testLeafCountsAtItsInnermostOverride = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static = lib.mkDefault { user = lib.mkForce "chrony"; }; }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.static = {
+      user = "chrony";
+      group = null;
+    };
+  };
+
+  testConditionalTagCountsAtItsContents = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static = lib.mkIf true { user = lib.mkDefault "chrony"; }; }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testMergeOfDefaultContentsGivesWayToANormalTag = {
+    expr = identityOf [
+      {
+        contracts.services.chrony.identity.static = lib.mkMerge [
+          { user = lib.mkDefault "chrony"; }
+          (lib.mkDefault { group = "time"; })
+        ];
+      }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testMergeInsideADefaultCountsAtDefaultPriority = {
+    expr = identityOf [
+      {
+        contracts.services.chrony.identity.static = lib.mkDefault (
+          lib.mkMerge [
+            { user = "chrony"; }
+            { group = "time"; }
+          ]
+        );
+      }
+      { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+    ];
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testTagUnderAFalseConditionKeepsTheOtherTag = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = lib.mkDefault "chrony"; }
+      { contracts.services.chrony.identity.dynamic = lib.mkIf false { unit = "chronyd.service"; }; }
+    ];
+    expected.static = {
+      user = "chrony";
+      group = null;
+    };
+  };
+
+  testLeafUnderAFalseConditionDoesNotSwitchTheTag = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = lib.mkDefault "chrony"; }
+      { contracts.services.chrony.identity.dynamic.unit = lib.mkIf false "chronyd.service"; }
+    ];
+    expected.static = {
+      user = "chrony";
+      group = null;
+    };
+  };
+
+  testFalseConditionInAMergeCountsAtTheTrueOnesPriority = {
+    expr = identityOf [
+      { contracts.services.chrony.identity.static.user = "chrony"; }
+      {
+        contracts.services.chrony.identity.dynamic = lib.mkMerge [
+          (lib.mkIf false { unit = lib.mkForce "chronyd.service"; })
+          (lib.mkIf true { unit = lib.mkDefault "chronyd.service"; })
+        ];
+      }
+    ];
+    expected.static = {
+      user = "chrony";
+      group = null;
+    };
   };
 
   testNoContractsMeanNoAssertions = {

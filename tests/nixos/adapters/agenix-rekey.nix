@@ -18,7 +18,7 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns.generate = "base64";
+          ddns.value.generated = "base64";
           token = { };
         };
       };
@@ -81,7 +81,7 @@ let
   telegraf.contracts.services.telegraf = {
     enable = true;
     identity.static.user = "telegraf";
-    secrets.token.generate = "alnum";
+    secrets.token.value.generated = "alnum";
   };
   influxdb = secrets: {
     contracts.services.influxdb = {
@@ -149,7 +149,7 @@ in
     expected = [ "kea-token" ];
   };
 
-  testNodeRemovesTheGeneratorOfADefaultClaim = {
+  testNodeWritesProvidedOverADefaultGenerated = {
     expr =
       (configuration [
         values
@@ -157,10 +157,10 @@ in
           contracts.services.kea = contractsLib.mkDefaultContract {
             enable = true;
             identity.static.user = "kea";
-            secrets.ddns.generate = "alnum";
+            secrets.ddns.value.generated = "alnum";
           };
         }
-        { contracts.services.kea.secrets.ddns.generate = null; }
+        { contracts.services.kea.secrets.ddns.value.provided = { }; }
       ]).age.secrets.kea-ddns.generator;
     expected = null;
   };
@@ -172,7 +172,7 @@ in
         (failures [
           keaWithoutValues
           values
-          { contracts.services.kea.secrets.ddns.generate = "alnm"; }
+          { contracts.services.kea.secrets.ddns.value.generated = "alnm"; }
         ]);
     expected = [ true ];
   };
@@ -217,7 +217,7 @@ in
   testSecretWithoutAFileFailsItsCheck = {
     expr = failures [
       keaWithoutValues
-      { contracts.services.kea.secrets.ddns.generate = "base64"; }
+      { contracts.services.kea.secrets.ddns.value.generated = "base64"; }
     ];
     expected = [
       "nixos-contracts: secret `kea-ddns` has no encrypted file: set its `age.secrets.kea-ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
@@ -254,7 +254,7 @@ in
         { config, ... }:
         {
           contracts.node = "dhcp";
-          contracts.services.kea.secrets.copy.from = [ config.contracts.services.kea.secrets.token.ref ];
+          contracts.services.kea.secrets.copy.value.copied = config.contracts.services.kea.secrets.token.ref;
         }
       )
     ]);
@@ -274,7 +274,7 @@ in
           metrics = [ telegraf ];
           store = [
             (influxdb {
-              telegraf-token.from = [ metricsToken ];
+              telegraf-token.value.copied = metricsToken;
             })
           ];
         }).store.config;
@@ -293,14 +293,12 @@ in
         ((nodesOf {
           store = [
             (influxdb {
-              origin.generate = "alnum";
-              copy.from = [
-                {
-                  node = "store";
-                  service = "influxdb";
-                  id = "origin";
-                }
-              ];
+              origin.value.generated = "alnum";
+              copy.value.copied = {
+                node = "store";
+                service = "influxdb";
+                id = "origin";
+              };
             })
           ];
         }).store
@@ -327,9 +325,9 @@ in
           store = [
             { age.generators.basic-auth = _: "true"; }
             (influxdb {
-              local.generate = "alnum";
-              hashes = {
-                generate = "basic-auth";
+              local.value.generated = "alnum";
+              hashes.value.derived = {
+                generator = "basic-auth";
                 from = [
                   metricsToken
                   {
@@ -365,11 +363,73 @@ in
     };
   };
 
+  testDerivedValueWithoutSourcesTakesItsGeneratorAlone = {
+    expr =
+      let
+        inherit
+          ((nodesOf {
+            store = [
+              { age.generators.basic-auth = _: "true"; }
+              (influxdb { hashes.value.derived.generator = "basic-auth"; })
+            ];
+          }).store
+          )
+          config
+          ;
+      in
+      {
+        inherit (config.age.secrets.influxdb-hashes.generator) script dependencies;
+        inherit (config.contracts) failures;
+      };
+    expected = {
+      script = "basic-auth";
+      dependencies = [ ];
+      failures = [ ];
+    };
+  };
+
+  testFileAndGeneratorSetOnTheBackendWinOverACopyOrDerivedValue = {
+    expr =
+      let
+        inherit
+          ((nodesOf {
+            metrics = [ telegraf ];
+            store = [
+              { age.generators.basic-auth = _: "true"; }
+              (influxdb {
+                copy.value.copied = metricsToken;
+                hashes.value.derived = {
+                  generator = "basic-auth";
+                  from = [ metricsToken ];
+                };
+              })
+              {
+                age.secrets = {
+                  influxdb-copy.rekeyFile = ./agenix-rekey.nix;
+                  influxdb-hashes.generator.script = "hex";
+                };
+              }
+            ];
+          }).store
+          )
+          config
+          ;
+      in
+      {
+        inherit (config.age.secrets.influxdb-copy) rekeyFile;
+        inherit (config.age.secrets.influxdb-hashes.generator) script;
+      };
+    expected = {
+      rekeyFile = ./agenix-rekey.nix;
+      script = "hex";
+    };
+  };
+
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
     expr =
       (configuration [
         (influxdb {
-          token.from = [ metricsToken ];
+          token.value.copied = metricsToken;
         })
         {
           # The metrics node holds its contracts, but no secret backend.
@@ -388,7 +448,7 @@ in
     expr =
       (configuration [
         (influxdb {
-          token.from = [ metricsToken ];
+          token.value.copied = metricsToken;
         })
         {
           # The metrics node sets no secrets directories, so its token has
@@ -406,7 +466,7 @@ in
       (nodesOf {
         store = [
           (influxdb {
-            token.from = [ metricsToken ];
+            token.value.copied = metricsToken;
           })
         ];
       }).store.config.contracts.failures;
