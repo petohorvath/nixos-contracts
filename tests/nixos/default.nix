@@ -25,7 +25,7 @@ in
             ]).assertions;
       in
       builtins.elem
-        "nixos-contracts: binds claims `first-http` and `second-http` clash: both listen on tcp port 80, at `0.0.0.0` and `0.0.0.0`."
+        "nixos-contracts: binds claims `first.http` and `second.http` clash: both listen on tcp port 80, at `0.0.0.0` and `0.0.0.0`."
         (map (check: check.message) failedAssertions);
     expected = true;
   };
@@ -54,7 +54,7 @@ in
         module
         module
         (web "first")
-      ]).contracts.claimSets.binds.first-http.port;
+      ]).contracts.claimSets.binds.first.http.port;
     expected = 80;
   };
 }

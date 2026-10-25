@@ -38,7 +38,7 @@ let
 
   nodes = {
     metrics = mkNode "metrics" [ ./telegraf.nix ];
-    # The store runs telegraf too, so it holds a `telegraf-token` of its own.
+    # The store runs telegraf too, so it holds a `telegraf.token` of its own.
     store = mkNode "store" [
       ./telegraf.nix
       ./influxdb.nix
@@ -53,7 +53,7 @@ let
   };
 
   inherit (nodes.store) config;
-  secret = config.age.secrets.influxdb-writer-telegraf-metrics;
+  secret = config.age.secrets.influxdb_writer-telegraf-metrics;
   relative = path: lib.removePrefix "${toString ./secrets}/" (toString path);
 in
 {
@@ -65,8 +65,8 @@ in
       rekeyFile = relative secret.rekeyFile;
       generator = secret.generator.script or null;
     };
-    original = relative nodes.metrics.config.age.secrets.telegraf-token.rekeyFile;
-    storesOwn = relative config.age.secrets.telegraf-token.rekeyFile;
+    original = relative nodes.metrics.config.age.secrets.telegraf_token.rekeyFile;
+    storesOwn = relative config.age.secrets.telegraf_token.rekeyFile;
     auths = lib.mapAttrs (
       _: auth: auth.tokenFile
     ) config.services.influxdb2.provision.organizations.main.auths;

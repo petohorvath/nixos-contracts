@@ -29,8 +29,8 @@ Defaults [`contracts.node`](#contractsnode) to `crossConfig.name` and [`contract
 ```text
 contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
-contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name, ref read-only
-contracts.claimSets.<kind>.<service>-<id>    read-only
+contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, location, name, ref read-only
+contracts.claimSets.<kind>.<service>.<id>    read-only
 contracts.node                               this configuration's node identity
 contracts.nodes.<node>                       the node collection
 contracts.lookup, contracts.resolve          read-only, functions of a reference
@@ -42,7 +42,7 @@ contracts.failures                           read-only, messages of failed check
 
 ### `contracts.services.<service>`
 
-One contract per service, keyed by the service's name.
+One contract per service, keyed by the service's name, which is a [name](#locations-and-names).
 
 `enable` (bool, default `false`)
 : Whether the contract counts. Only enabled contracts enter claim sets and clash checks. A service module usually ties it to the daemon's own enable.
@@ -61,11 +61,11 @@ Several modules may define one contract, and the module system merges their clai
 
 ### `contracts.claimSets.<kind>`
 
-A read-only attribute set of every enabled contract's claims of one kind, keyed by `<service>-<id>`. Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree.
+A read-only attribute set of every enabled contract's claims of one kind, nested by service and id, as `contracts.claimSets.<kind>.<service>.<id>` ([ADR 0014](adr/0014-name-a-claim-by-its-location.md)). Each entry is the claim as its contract holds it, with the same final values, such as the [owner and group](#ownership), so an adapter reading the claim set and a service module reading its contract agree. A service without claims of the kind has no entry. An adapter that needs a list flattens the claim set, by service and then id.
 
 ### `contracts.node`
 
-This configuration's node identity, its name in the node collection (string or null, default `null`). Every claim's `ref` names it, and while it is null a `ref` names a null node, which no lookup resolves, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. [`nixosModules.cross-config`](#nixosmodulescross-config) defaults it to `crossConfig.name`.
+This configuration's node identity, its name in the node collection (a [name](#locations-and-names) or null, default `null`). Every claim's `ref` and `name` include it. While it is null, a `ref` names a null node, which no lookup resolves, and a claim's `name` is null, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. [`nixosModules.cross-config`](#nixosmodulescross-config) defaults it to `crossConfig.name`.
 
 ### `contracts.nodes`
 
@@ -73,7 +73,7 @@ The node collection: the nodes a [reference](#references) may name, keyed by nod
 
 ### `contracts.lookup` and `contracts.resolve`
 
-Read-only functions of a [reference](#references) that find the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). `contracts.lookup reference` returns `{ claim; reason; }`: the claim-set entry and a null reason, or a null claim and why the reference names none. `contracts.resolve reference` returns the entry, or fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``. A reference names no claim when its node is null, is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
+Read-only functions of a [reference](#references) that find the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). `contracts.lookup reference` returns `{ claim; reason; }`: the claim-set entry and a null reason, or a null claim and why the reference names none. `contracts.resolve reference` returns the entry, or fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``. Both read the entry at `claimSets.<kind>.<service>.<id>` of the node the reference names. A reference names no claim when its node is null, is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
 
 ```nix
 port = (config.contracts.resolve backend.bind).port;
@@ -85,7 +85,7 @@ The settings of one claim kind, such as `contracts.kinds.mounts.classes`, as the
 
 ### `contracts.assertions`
 
-A list of checks, each `{ assertion; message; }`, with the message written without the library's prefix. The option follows the name and shape of NixOS `assertions`. Each claim kind adds one check per `<service>-<id>` name, failing when several claims share it, one per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. Adapters add their own.
+A list of checks, each `{ assertion; message; }`, with the message written without the library's prefix. The option follows the name and shape of NixOS `assertions`. Each claim kind adds one check per pair of claims, failing when its clash rule rejects them, and one per claim of a kind with a check rule, failing when the rule rejects it. Two claims never clash by their names alone, since no two locations make one name. Adapters add their own.
 
 ### `contracts.failures`
 
@@ -93,14 +93,31 @@ A read-only list of the messages of the failed checks in `contracts.assertions`,
 
 ## Claim kinds
 
-Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries four read-only fields:
+Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<id>` carries five read-only fields:
 
 - `service`: the name of its service.
 - `id`: its id within the contract.
-- `name`: its claim name, `<service>-<id>`, the key of its claim set and of its backend's entry.
+- `location`: the names that place it within its node, `[ <service> <id> ]`.
+- `name`: its claim name, `<node>_<service>_<id>`, or null while `contracts.node` is null.
 - `ref`: its [reference](#references), `{ node; kind; service; id; }`, with `contracts.node` as its node.
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
+
+### Locations and names
+
+A claim's `location` places it within its node, and its `name` names it across the node collection ([ADR 0014](adr/0014-name-a-claim-by-its-location.md)):
+
+```nix
+# The claim contracts.services.influxdb.secrets.admin-token, on the node beta-influxdb
+location = [ "influxdb" "admin-token" ];
+name = "beta-influxdb_influxdb_admin-token";
+```
+
+Service names, claim ids and node identities are names: non-empty, and made of lowercase letters, digits and hyphens only. Any other, such as `ssh_host_ed25519_key` or `Influxdb`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `ssh_host_ed25519_key` of service `openssh` may contain only lowercase letters, digits and hyphens.`` No name contains `_`, so joining a location with `_` makes a name no other location makes:
+
+- A backend adapter names its entry for a claim by joining the location with `_`, such as `age.secrets.influxdb_admin-token`.
+- A claim's `name` joins its node identity, service and id with `_`, so a value built from several nodes' claims, such as an htpasswd user name, takes `name` and never collides.
+- Check messages name a claim by its location joined with `.`, such as ``nixos-contracts: secrets claim `influxdb.admin-token`: …``.
 
 ### References
 
@@ -183,38 +200,38 @@ secrets.htpasswd.value.derived = {
 };
 ```
 
-Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the `<service>-<id>` claim name ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). `value` settles by priority, so a node switches a module's tag by writing another at normal priority, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`: `value.provided = { };` makes a module's generated secret provided, and `value.copied = <reference>;` makes it a copy. Two tags written at one priority fail, naming the option, and a misspelt tag, such as `value.generate`, fails as a type error that lists the accepted tags.
+Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the name the adapter makes from the claim's [location](#locations-and-names) ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). `value` settles by priority, so a node switches a module's tag by writing another at normal priority, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`: `value.provided = { };` makes a module's generated secret provided, and `value.copied = <reference>;` makes it a copy. Two tags written at one priority fail, naming the option, and a misspelt tag, such as `value.generate`, fails as a type error that lists the accepted tags.
 
 The references of `copied` and `derived.from` are [references](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }` ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)), so a reference of another kind fails as a type error at its definition. Each names `contracts.node` or a node in `contracts.nodes`. A value takes either one reference or a generator, so a copy of several secrets cannot be written.
 
-The core resolves the references into `sources`, the one of `copied` or those of `derived.from` in order, each as `{ node; kind; service; id; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). `sources` is empty for a `provided` or `generated` value. A backend adapter reads `sources` rather than resolving references itself, and finds a resolved claim's backend entry by the claim's `name`. A check fails, once per reference, for each reason [`contracts.lookup`](#contractslookup-and-contractsresolve) returns, and for a reference to a secret that is copied or derived itself, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret's own references, so references across nodes, in either direction, evaluate without cycles. `derived.from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
+The core resolves the references into `sources`, the one of `copied` or those of `derived.from` in order, each as `{ node; kind; service; id; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). `sources` is empty for a `provided` or `generated` value. A backend adapter reads `sources` rather than resolving references itself, and finds a resolved claim's backend entry by the claim's `location`. A check fails, once per reference, for each reason [`contracts.lookup`](#contractslookup-and-contractsresolve) returns, and for a reference to a secret that is copied or derived itself, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret's own references, so references across nodes, in either direction, evaluate without cycles. `derived.from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
 
 `path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
 ```nix
 # Set by a backend adapter, such as nixosModules.agenix-rekey
 contracts.kinds.secrets.backend = {
-  location = name: "/run/agenix/${name}";
+  path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
   generators = [ "alnum" "hex" ];
 };
 
 # Set by a delivery adapter, such as nixosModules.systemd-credentials
 contracts.kinds.secrets.delivery = {
-  path = { unit, name }: "/run/credentials/${unit}/${name}";
+  path = { unit, location }: "/run/credentials/${unit}/${lib.concatStringsSep "_" location}";
 };
 ```
 
-- `backend.location` (function of the `<service>-<id>` name): where the secret backend installs a secret. It must answer for any claim name, including claims of disabled contracts, which the backend does not install, since a service module may read `path` regardless.
+- `backend.path` (function of a [location](#locations-and-names)): where the secret backend installs a secret. It must answer for any location, including those of claims of disabled contracts, which the backend does not install, since a service module may read a claim's `path` regardless.
 - `backend.generators` (list of strings): the generators a `generated` or `derived` value may name. A check fails for a claim whose generator is not in it, and lists the ones the backend provides. While `backend` is null, the generator is not checked.
-- `delivery.path` (function of `{ unit, name }`): where a dynamic identity's unit reads a delivered secret.
+- `delivery.path` (function of `{ unit, location }`): where a dynamic identity's unit reads a delivered secret, given the secret's unit and location.
 
-A configuration imports at most one backend adapter and one delivery adapter: a second definition of `backend` or `delivery` fails once the slot is read, naming both, unless the definitions differ in priority. A slot takes its adapter's data as one definition, so a module that replaces part of it, such as the backend's location, replaces the whole slot with `lib.mkForce`, generators included.
+A configuration imports at most one backend adapter and one delivery adapter: a second definition of `backend` or `delivery` fails once the slot is read, naming both, unless the definitions differ in priority. A slot takes its adapter's data as one definition, so a module that replaces part of it, such as the backend's `path`, replaces the whole slot with `lib.mkForce`, generators included.
 
-A secret is `delivered` when its identity is dynamic and `delivery` is set. `path` is then the delivered location; otherwise it is the backend's location. A secret has no path while `backend` is null, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs a backend adapter imported.
+A secret is `delivered` when its identity is dynamic and `delivery` is set. Its `path` is then what `delivery.path` answers for its unit and location; otherwise it is what `backend.path` answers for its location. A secret has no path while `backend` is null, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs a backend adapter imported.
 
 A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
-Secrets clash only by sharing a name.
+Secrets have no clash rule.
 
 ## Ownership
 
@@ -242,7 +259,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets.<service>-<id>` per secret claim with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `location` to the installed `age.secrets.<name>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets` entry per secret claim, named by its location joined with `_`, such as `age.secrets.influxdb_admin-token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<name>.path` of the name a location makes, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, so entries across nodes, in either direction, evaluate without cycles. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
 
@@ -250,7 +267,7 @@ A derived secret with references defines its entry's `generator.dependencies` as
 
 ### `nixosModules.systemd-credentials`
 
-For every secret of a dynamic-identity service, adds `<service>-<id>:<location>` to the unit's `LoadCredential=`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>-<id>`. It loads from the location in `contracts.kinds.secrets.backend`, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every secret of a dynamic-identity service, adds `<name>:<backend path>` to the unit's `LoadCredential=`, where the credential's name joins the secret's location with `_`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<name>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
 Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
@@ -308,13 +325,13 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id and `claimName` its claim name, `<service>-<id>`. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `name` and `ref` on every claim, so a claim type cannot declare options with these names.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `location`, `name` and `ref` on every claim, so a claim type cannot declare options with these names, and reads a claim's own `location` from `config.location`.
 
 `clash`
-: The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when sharing a name is the only clash.
+: The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when no two claims of the kind can clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim, settings, config }`, with the same resolved `identity`, a claim-set entry, the kind's settings at `contracts.kinds.<name>` and the top-level configuration, returning null, a reason string or a list of them. Only claims of enabled contracts are checked, and each reason reads ``nixos-contracts: <kind> claim `<service>-<id>`: <reason>.`` in `contracts.failures`.
+: The kind's check rule: a function of `{ identity, claim, settings, config }`, with the same resolved `identity`, a claim-set entry, the kind's settings at `contracts.kinds.<name>` and the top-level configuration, returning null, a reason string or a list of them. Only claims of enabled contracts are checked, and each reason reads ``nixos-contracts: <kind> claim `<service>.<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.kinds.<name>`.

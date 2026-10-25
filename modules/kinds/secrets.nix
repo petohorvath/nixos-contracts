@@ -6,7 +6,7 @@ let
   referenceType = contractTypes.referenceTo "secrets";
   # References resolve through the lookup every kind shares; a secret's
   # value adds only its own rules.
-  inherit (import ../references.nix) labelOf lookup;
+  inherit (import ../references.nix) labelOf locationLabelOf lookup;
 
   # The references of a `copied` or `derived` value, in order, or none.
   referencesOf =
@@ -64,7 +64,7 @@ let
 
   # A slot holds the data of one adapter, or null when none is imported. A
   # second adapter's definition fails, naming both, rather than merging with
-  # the first, so one backend sets both its location and generators.
+  # the first, so one backend sets both its path and generators.
   mkAdapterSlot =
     {
       message,
@@ -93,16 +93,16 @@ in
         generators it provides. Set by a backend adapter, such as
         `nixosModules.agenix-rekey`; null when none is imported, which
         leaves a value's generator unchecked and fails reading a secret's
-        location. A node does not set it.
+        `path`. A node does not set it.
       '';
       options = {
-        location = lib.mkOption {
+        path = lib.mkOption {
           type = lib.types.functionTo lib.types.str;
           description = ''
             Where the backend installs a secret, as a function of its
-            `<service>-<id>` name. It must answer for any claim name,
-            including claims of disabled contracts, which the backend does
-            not install.
+            `location`, such as `[ "influxdb" "admin-token" ]`. It must
+            answer for any location, including those of claims of disabled
+            contracts, which the backend does not install.
           '';
         };
         generators = lib.mkOption {
@@ -129,7 +129,7 @@ in
         type = lib.types.functionTo lib.types.str;
         description = ''
           Where a unit reads a delivered secret, as a function of
-          `{ unit, name }`.
+          `{ unit, location }`, where `location` is the secret's.
         '';
       };
     };
@@ -168,7 +168,7 @@ in
       # Read before the claim's own `config` shadows the top-level one.
       topConfig = config;
     in
-    { claimName, config, ... }:
+    { config, ... }:
     let
       inherit (topConfig.contracts.kinds.secrets) backend delivery;
       inherit (identity) unit;
@@ -307,17 +307,19 @@ in
             if delivered then
               delivery.path {
                 inherit unit;
-                name = claimName;
+                inherit (config) location;
               }
             else if backend == null then
-              throw "nixos-contracts: secret `${claimName}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+              throw "nixos-contracts: secret `${locationLabelOf config.location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
             else
-              backend.location claimName;
+              backend.path config.location;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the delivered credential for
-            a dynamic identity when a delivery adapter is imported, else the
-            backend's location. Reading it without a backend adapter fails.
+            a dynamic identity when a delivery adapter is imported, else
+            where the backend installs it, each as its slot's `path` answers
+            for the secret's location. Reading it without a backend adapter
+            fails.
           '';
         };
       };

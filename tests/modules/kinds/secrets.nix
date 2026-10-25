@@ -23,7 +23,7 @@ let
     );
   secretOf =
     modules: identity: secret:
-    (configWithSecret modules identity secret).contracts.claimSets.secrets.svc-key;
+    (configWithSecret modules identity secret).contracts.claimSets.secrets.svc.key;
   ownerOf =
     identity: secret:
     let
@@ -32,13 +32,17 @@ let
     {
       inherit (claim) owner group;
     };
+  # A backend and a delivery naming a secret by its location joined with
+  # `_`, as the shipped adapters do.
+  nameOf = builtins.concatStringsSep "_";
   backend.contracts.kinds.secrets.backend = {
-    location = name: "/run/agenix/${name}";
+    path = location: "/run/agenix/${nameOf location}";
     generators = [ ];
   };
   rules = {
     imports = [ backend ];
-    contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery.path =
+      { unit, location }: "/run/credentials/${unit}/${nameOf location}";
   };
 
   # A telegraf service generating its token, and a store service copying
@@ -66,11 +70,15 @@ in
       (evaluate [
         backend
         (service "chrony" { static.user = "chrony"; } oneSecret)
-      ]).contracts.claimSets.secrets.chrony-key;
+      ]).contracts.claimSets.secrets.chrony.key;
     expected = {
       service = "chrony";
       id = "key";
-      name = "chrony-key";
+      location = [
+        "chrony"
+        "key"
+      ];
+      name = null;
       mode = "0440";
       owner = "root";
       group = "chrony";
@@ -84,7 +92,7 @@ in
       sources = [ ];
       unit = null;
       delivered = false;
-      path = "/run/agenix/chrony-key";
+      path = "/run/agenix/chrony_key";
     };
   };
 
@@ -157,7 +165,7 @@ in
           };
         }
         { contracts.services.svc.secrets.key.value.provided = { }; }
-      ]).contracts.claimSets.secrets.svc-key.value;
+      ]).contracts.claimSets.secrets.svc.key.value;
     expected.provided = { };
   };
 
@@ -172,7 +180,7 @@ in
           };
         }
         { contracts.services.svc.secrets.key.value.copied = remoteToken; }
-      ]).contracts.claimSets.secrets.svc-key.value;
+      ]).contracts.claimSets.secrets.svc.key.value;
     expected.copied = remoteToken // {
       kind = "secrets";
     };
@@ -199,7 +207,7 @@ in
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck =
     let
       alnumAndHex.contracts.kinds.secrets.backend = {
-        location = name: "/run/agenix/${name}";
+        path = location: "/run/agenix/${nameOf location}";
         generators = [
           "alnum"
           "hex"
@@ -229,15 +237,15 @@ in
       };
       expected = {
         unknown = [
-          "nixos-contracts: secrets claim `svc-key`: the secret backend provides no generator `alnm`; name one of `alnum`, `hex`."
+          "nixos-contracts: secrets claim `svc.key`: the secret backend provides no generator `alnm`; name one of `alnum`, `hex`."
         ];
         provided = [ ];
         noneProvided = [
-          "nixos-contracts: secrets claim `svc-key`: the secret backend provides no generator `alnum`."
+          "nixos-contracts: secrets claim `svc.key`: the secret backend provides no generator `alnum`."
         ];
         withoutABackend = [ ];
         derived = [
-          "nixos-contracts: secrets claim `svc-key`: the secret backend provides no generator `basic-auth`; name one of `alnum`, `hex`."
+          "nixos-contracts: secrets claim `svc.key`: the secret backend provides no generator `basic-auth`; name one of `alnum`, `hex`."
         ];
       };
     };
@@ -290,7 +298,7 @@ in
     expr = failures [
       {
         contracts.kinds.secrets.backend = {
-          location = name: "/run/agenix/${name}";
+          path = location: "/run/agenix/${nameOf location}";
           generators = [ "basic-auth" ];
         };
       }
@@ -306,12 +314,12 @@ in
 
   testSecretPathWithoutABackendFails = {
     expr = (secretOf [ ] { static.user = "svc"; } { }).path;
-    expectedError.msg = "nixos-contracts: secret `svc-key` has no location: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.backend`";
+    expectedError.msg = "nixos-contracts: secret `svc\\.key` has no path: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.backend`";
   };
 
-  testStaticIdentityReadsTheBackendLocation = {
+  testStaticIdentityReadsTheBackendPath = {
     expr = (secretOf [ rules ] { static.user = "svc"; } { }).path;
-    expected = "/run/agenix/svc-key";
+    expected = "/run/agenix/svc_key";
   };
 
   testDynamicIdentitySecretNamesItsUnit = {
@@ -321,12 +329,12 @@ in
 
   testDynamicIdentityReadsTheDeliveredCredential = {
     expr = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).path;
-    expected = "/run/credentials/svc.service/svc-key";
+    expected = "/run/credentials/svc.service/svc_key";
   };
 
-  testDynamicIdentityWithoutDeliveryReadsTheBackendLocation = {
+  testDynamicIdentityWithoutDeliveryReadsTheBackendPath = {
     expr = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).path;
-    expected = "/run/agenix/svc-key";
+    expected = "/run/agenix/svc_key";
   };
 
   testOnlyADynamicIdentityWithADeliveryAdapterIsDelivered = {
@@ -344,7 +352,7 @@ in
 
   testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup =
     let
-      message = "nixos-contracts: secrets claim `svc-key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group.";
+      message = "nixos-contracts: secrets claim `svc.key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group.";
       undelivered = service "svc" { dynamic.unit = "svc.service"; } oneSecret;
     in
     {
@@ -394,7 +402,7 @@ in
         backend
         {
           contracts.kinds.secrets.backend = {
-            location = name: "/run/secrets/${name}";
+            path = location: "/run/secrets/${nameOf location}";
             generators = [ "hex" ];
           };
         }
@@ -406,7 +414,9 @@ in
     expr =
       (secretOf [
         rules
-        { contracts.kinds.secrets.delivery.path = { unit, name }: "/run/keys/${unit}/${name}"; }
+        {
+          contracts.kinds.secrets.delivery.path = { unit, location }: "/run/keys/${unit}/${nameOf location}";
+        }
       ] { dynamic.unit = "svc.service"; } { }).path;
     expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery'[^\n]*\nA configuration imports one delivery adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
   };
@@ -419,23 +429,23 @@ in
           { lib, ... }:
           {
             contracts.kinds.secrets.backend = lib.mkForce {
-              location = name: "/run/secrets/${name}";
+              path = location: "/run/secrets/${nameOf location}";
               generators = [ ];
             };
           }
         )
       ] { static.user = "svc"; } { }).path;
-    expected = "/run/secrets/svc-key";
+    expected = "/run/secrets/svc_key";
   };
 
-  testNodeCannotForceOnlyTheBackendLocation = {
+  testNodeCannotForceOnlyTheBackendPath = {
     expr =
       (secretOf [
         backend
         (
           { lib, ... }:
           {
-            contracts.kinds.secrets.backend.location = lib.mkForce (name: "/run/secrets/${name}");
+            contracts.kinds.secrets.backend.path = lib.mkForce (location: "/run/secrets/${nameOf location}");
           }
         )
       ] { static.user = "svc"; } { }).path;
@@ -475,17 +485,17 @@ in
     in
     {
       expr = {
-        remote = namesOf secrets.influxdb-remote;
-        local = namesOf secrets.influxdb-local;
-        derived = namesOf secrets.influxdb-derived;
+        remote = namesOf secrets.influxdb.remote;
+        local = namesOf secrets.influxdb.local;
+        derived = namesOf secrets.influxdb.derived;
         inherit (nodes.store.config.contracts) failures;
       };
       expected = {
-        remote = [ "telegraf-token" ];
-        local = [ "influxdb-origin" ];
+        remote = [ "metrics_telegraf_token" ];
+        local = [ "store_influxdb_origin" ];
         derived = [
-          "influxdb-origin"
-          "telegraf-token"
+          "store_influxdb_origin"
+          "metrics_telegraf_token"
         ];
         failures = [ ];
       };
@@ -515,8 +525,8 @@ in
                 config.contracts.services.influxdb.secrets.origin.ref;
             }
           )
-        ]).contracts.claimSets.secrets.influxdb-copy.sources;
-    expected = [ "influxdb-origin" ];
+        ]).contracts.claimSets.secrets.influxdb.copy.sources;
+    expected = [ "store_influxdb_origin" ];
   };
 
   testReferenceWithoutANodeIdentityFailsItsCheck = {
@@ -531,7 +541,7 @@ in
       )
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
+      "nixos-contracts: secrets claim `influxdb.copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
     ];
   };
 
@@ -546,7 +556,7 @@ in
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
+      "nixos-contracts: secrets claim `influxdb.copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
     ];
   };
 
@@ -555,7 +565,7 @@ in
       (nodesOf { store = [ (store { token.value.copied = remoteToken; }) ]; })
       .store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`."
     ];
   };
 
@@ -566,7 +576,7 @@ in
       { contracts.nodes.metrics.config = { }; }
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`: node `metrics` imports no nixos-contracts module."
+      "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`: node `metrics` imports no nixos-contracts module."
     ];
   };
 
@@ -585,15 +595,15 @@ in
         ];
       }).store.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb-local`: it references `store:secrets.influxdb.missing`: no enabled contract on `store` holds it."
-      "nixos-contracts: secrets claim `influxdb-remote`: it references `metrics:secrets.telegraf.token`: no enabled contract on `metrics` holds it."
+      "nixos-contracts: secrets claim `influxdb.local`: it references `store:secrets.influxdb.missing`: no enabled contract on `store` holds it."
+      "nixos-contracts: secrets claim `influxdb.remote`: it references `metrics:secrets.telegraf.token`: no enabled contract on `metrics` holds it."
     ];
   };
 
   testRejectedReferenceResolvesToANullClaim = {
     expr =
       (nodesOf { store = [ (store { token.value.copied = remoteToken; }) ]; })
-      .store.config.contracts.claimSets.secrets.influxdb-token.sources;
+      .store.config.contracts.claimSets.secrets.influxdb.token.sources;
     expected = [
       {
         node = "metrics";
@@ -619,8 +629,8 @@ in
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-hashes`: it references `store:secrets.influxdb.a`: no enabled contract on `store` holds it."
-      "nixos-contracts: secrets claim `influxdb-hashes`: it references `store:secrets.influxdb.b`: no enabled contract on `store` holds it."
+      "nixos-contracts: secrets claim `influxdb.hashes`: it references `store:secrets.influxdb.a`: no enabled contract on `store` holds it."
+      "nixos-contracts: secrets claim `influxdb.hashes`: it references `store:secrets.influxdb.b`: no enabled contract on `store` holds it."
     ];
   };
 
@@ -645,8 +655,8 @@ in
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb-chained`: it references `store:secrets.influxdb.copy`, which is copied or derived itself; reference a provided or generated secret."
-      "nixos-contracts: secrets claim `influxdb-rehashed`: it references `store:secrets.influxdb.hashes`, which is copied or derived itself; reference a provided or generated secret."
+      "nixos-contracts: secrets claim `influxdb.chained`: it references `store:secrets.influxdb.copy`, which is copied or derived itself; reference a provided or generated secret."
+      "nixos-contracts: secrets claim `influxdb.rehashed`: it references `store:secrets.influxdb.hashes`, which is copied or derived itself; reference a provided or generated secret."
     ];
   };
 
@@ -665,10 +675,10 @@ in
       expr = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
       expected = {
         metrics = [
-          "nixos-contracts: secrets claim `telegraf-token`: it references `store:secrets.influxdb.token`, which is copied or derived itself; reference a provided or generated secret."
+          "nixos-contracts: secrets claim `telegraf.token`: it references `store:secrets.influxdb.token`, which is copied or derived itself; reference a provided or generated secret."
         ];
         store = [
-          "nixos-contracts: secrets claim `influxdb-token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret."
+          "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret."
         ];
       };
     };

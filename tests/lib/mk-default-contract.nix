@@ -45,7 +45,11 @@ in
     expected = {
       service = "chrony";
       id = "ntp";
-      name = "chrony-ntp";
+      location = [
+        "chrony"
+        "ntp"
+      ];
+      name = null;
       ref = {
         node = null;
         kind = "binds";

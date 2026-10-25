@@ -27,7 +27,7 @@ let
     };
   };
   backend.contracts.kinds.secrets.backend = {
-    location = name: "/run/agenix/${name}";
+    path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
     generators = [ ];
   };
 in
@@ -40,7 +40,7 @@ in
         chrony
         backend
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
-    expected = [ "alloy-password:/run/agenix/alloy-password" ];
+    expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
 
   testDynamicIdentityClaimReadsTheCredential = {
@@ -50,10 +50,10 @@ in
         alloy
         backend
       ]).contracts.services.alloy.secrets.password.path;
-    expected = "/run/credentials/alloy.service/alloy-password";
+    expected = "/run/credentials/alloy.service/alloy_password";
   };
 
-  testStaticIdentityKeepsTheBackendLocation = {
+  testStaticIdentityKeepsTheBackendPath = {
     expr =
       let
         configuration = evaluate [
@@ -67,18 +67,34 @@ in
         loaded = configuration.systemd.services ? chrony;
       };
     expected = {
-      path = "/run/agenix/chrony-key";
+      path = "/run/agenix/chrony_key";
       loaded = false;
     };
   };
 
-  testDeliveryNeedsABackendLocation = {
+  testDeliveryNeedsABackendPath = {
     expr =
       (evaluate [
         adapter
         alloy
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
-    expectedError.msg = "nixos-contracts: secret `alloy-password` has no location: import a secret backend adapter";
+    expectedError.msg = "nixos-contracts: secret `alloy\\.password` has no path: import a secret backend adapter";
+  };
+
+  testDeliveryPathNamesTheCredentialByTheLocation = {
+    expr =
+      (evaluate [
+        adapter
+        backend
+      ]).contracts.kinds.secrets.delivery.path
+        {
+          unit = "alloy.service";
+          location = [
+            "alloy"
+            "loki-password"
+          ];
+        };
+    expected = "/run/credentials/alloy.service/alloy_loki-password";
   };
 
   testMistypedUnitIsRejected = {
@@ -116,6 +132,6 @@ in
           { age.rekey.secretsDir = ./.; }
         ]
       )).systemd.services.alloy.serviceConfig.LoadCredential;
-    expected = [ "alloy-password:/run/agenix/alloy-password" ];
+    expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
 }

@@ -32,7 +32,7 @@ let
     ];
   };
   inherit (node) config;
-  secret = config.age.secrets.alloy-loki-main-password;
+  secret = config.age.secrets.alloy_loki-main-password;
 in
 {
   inherit node;

@@ -4,7 +4,7 @@ nixos-contracts is a Nix library that gives the services of one NixOS configurat
 
 ## Overview
 
-A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) or a **secret** (a credential it reads, whose value a backend supplies). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, keyed by claim name, and reports clashes, such as two services listening on the same port, as failed checks. [GLOSSARY.md](GLOSSARY.md) defines these terms.
+A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) or a **secret** (a credential it reads, whose value a backend supplies). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, nested by service and id, and reports clashes, such as two services listening on the same port, as failed checks. [GLOSSARY.md](GLOSSARY.md) defines these terms.
 
 The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 

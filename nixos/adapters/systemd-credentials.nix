@@ -1,26 +1,26 @@
 /*
   Deliver every secret of a dynamic-identity service into its unit with
   `LoadCredential=`, so the dynamic user reads it under
-  `/run/credentials/<unit>/<service>-<id>`. Loads from the location a secret
-  backend adapter sets in `contracts.kinds.secrets.backend`, so import one
-  beside it.
+  `/run/credentials/<unit>/<name>`, where the name joins the secret's
+  location with `_`, such as `alloy_loki-password`. Loads from the path a
+  secret backend adapter sets in `contracts.kinds.secrets.backend`, so
+  import one beside it.
 */
 { config, lib, ... }:
 let
   inherit (config.contracts.kinds.secrets) backend;
+  inherit (import ../../modules/references.nix) backendNameOf claimsOf locationLabelOf;
 
-  location =
-    name:
+  backendPath =
+    location:
     if backend == null then
-      throw "nixos-contracts: secret `${name}` has no location: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
     else
-      backend.location name;
+      backend.path location;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
-  delivered = lib.filter (secret: secret.delivered) (
-    lib.attrValues config.contracts.claimSets.secrets
-  );
+  delivered = lib.filter (secret: secret.delivered) (claimsOf config.contracts.claimSets.secrets);
 
   units = lib.unique (map (secret: secret.unit) delivered);
 
@@ -45,12 +45,13 @@ let
 in
 {
   config = {
-    contracts.kinds.secrets.delivery.path = { unit, name }: "/run/credentials/${unit}/${name}";
+    contracts.kinds.secrets.delivery.path =
+      { unit, location }: "/run/credentials/${unit}/${backendNameOf location}";
 
     systemd.services = lib.mkMerge (
       map (secret: {
         ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
-          "${secret.name}:${location secret.name}"
+          "${backendNameOf secret.location}:${backendPath secret.location}"
         ];
       }) delivered
     );

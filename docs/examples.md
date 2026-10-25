@@ -19,8 +19,8 @@ The [example](../examples/influxdb/default.nix) imports both adapters with their
 
 - `bindAddress`: `127.0.0.1:8086`, the node's address with the service module's port.
 - `preserved`: `/var/lib/influxdb2`, owned by `influxdb2:influxdb2` with mode `0700`, under `/persist/state`.
-- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim, `influxdb-admin-password.age` in the generated secrets directory and `influxdb-admin-token.age` in the secrets directory.
-- `initialSetup`: the daemon reads both from `/run/agenix/<service>-<id>`.
+- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim's location, `influxdb_admin-password.age` in the generated secrets directory and `influxdb_admin-token.age` in the secrets directory.
+- `initialSetup`: the daemon reads both from `/run/agenix/<service>_<id>`.
 - `failures`: none.
 
 The encrypted files are not part of the example, since an evaluation only refers to them.
@@ -33,9 +33,9 @@ A [Loki module](../examples/alloy/loki.nix) ships alloy's logs to the Loki insta
 
 The [example](../examples/alloy/default.nix) names one instance, `main`, and imports the agenix-rekey and systemd-credentials adapters. Its result shows:
 
-- `installed`: agenix-rekey installs the secret root-owned at `/run/agenix/alloy-loki-main-password`, since a dynamic user has no account to own it.
-- `loadCredential`: the unit loads it as `alloy-loki-main-password`.
-- `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy-loki-main-password`.
+- `installed`: agenix-rekey installs the secret root-owned at `/run/agenix/alloy_loki-main-password`, since a dynamic user has no account to own it.
+- `loadCredential`: the unit loads it as `alloy_loki-main-password`.
+- `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy_loki-main-password`.
 - `failures`: none, since the unit exists and sets `DynamicUser`.
 
 ## exporter: a helper daemon as a service of its own
@@ -46,7 +46,7 @@ The [exporter module](../examples/exporter/exporter.nix) wraps nixpkgs' chrony e
 
 The [example](../examples/exporter/default.nix) enables both with only `nixosModules.default`, since neither holds a mount or a secret. Its result shows:
 
-- `binds`: `chrony-ntp` at `0.0.0.0:123`, and the exporter's own claim, `chrony-exporter-metrics`, at `127.0.0.1:9123`.
+- `binds`: `chrony.ntp` at `0.0.0.0:123`, and the exporter's own claim, `chrony-exporter.metrics`, at `127.0.0.1:9123`.
 - `identities`: both contracts run as `chrony`, each stating it.
 - `exporterListen`: `127.0.0.1:9123`, from the exporter's bind.
 - `failures`: none.
@@ -55,12 +55,12 @@ The [example](../examples/exporter/default.nix) enables both with only `nixosMod
 
 A [telegraf module](../examples/shared-token/telegraf.nix) generates the token its node writes metrics with. An [influxdb module](../examples/shared-token/influxdb.nix) provisions one write authorization per writer, and declares each writer's token as a copy of the secret a reference names, typed `lib.types.referenceTo "secrets"`. It reads the copy at its own `path` and writes no backend option.
 
-The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given its node identity at `contracts.node` and both nodes as its node collection at `contracts.nodes`, as `nixosModules.cross-config` would set them. Both run telegraf, so each holds a `telegraf-token`. The store node names the writer `telegraf-metrics` with the metrics token's `ref`, the reference that nixos-cross-config would carry in a fleet. Its result shows:
+The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given its node identity at `contracts.node` and both nodes as its node collection at `contracts.nodes`, as `nixosModules.cross-config` would set them. Both run telegraf, so each holds a `telegraf.token`. The store node names the writer `telegraf-metrics` with the metrics token's `ref`, the reference that nixos-cross-config would carry in a fleet. Its result shows:
 
-- `copy`: the store installs the token root-owned with its own group `influxdb2` and mode `0440`, from the metrics node's encrypted file, `metrics/telegraf-token.age`, without a generator of its own.
+- `copy`: the store installs the token root-owned with its own group `influxdb2` and mode `0440`, from the metrics node's encrypted file, `metrics/telegraf_token.age`, without a generator of its own.
 - `original`: the metrics node's file is the same one.
-- `storesOwn`: the store's own token, `store/telegraf-token.age`, is not the one it copies, since the reference names its node.
-- `auths`: the authorization reads `/run/agenix/influxdb-writer-telegraf-metrics`.
+- `storesOwn`: the store's own token, `store/telegraf_token.age`, is not the one it copies, since the reference names its node.
+- `auths`: the authorization reads `/run/agenix/influxdb_writer-telegraf-metrics`.
 - `failures`: none on either node.
 
 ## custom-kind: a claim kind of a project's own
@@ -69,6 +69,6 @@ The [databases kind](../examples/custom-kind/databases.nix) is built with `lib.m
 
 The [example](../examples/custom-kind/default.nix) evaluates the generic module with a bare `lib.evalModules`, so it needs only `lib` and `exports`. Grafana claims one database and Vaultwarden two. Its result shows:
 
-- `claimSet`: `grafana-main` owned by `grafana`, and `vaultwarden-main` and `vaultwarden-attachments` owned by `vaultwarden`.
+- `claimSet`: `grafana.main` owned by `grafana`, and `vaultwarden.main` and `vaultwarden.attachments` owned by `vaultwarden`.
 - `validFailures`: none.
-- `clashingFailures`: after Vaultwarden's attachments database is renamed to `grafana`, one failed check reports that `grafana-main` and `vaultwarden-attachments` both own `grafana`.
+- `clashingFailures`: after Vaultwarden's attachments database is renamed to `grafana`, one failed check reports that `grafana.main` and `vaultwarden.attachments` both own `grafana`.

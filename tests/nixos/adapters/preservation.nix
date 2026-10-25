@@ -87,6 +87,32 @@ in
     };
   };
 
+  testMountsOfEveryServiceArePreserved = {
+    expr =
+      map (entry: entry.directory)
+        (evaluate [
+          backend
+          adapter
+          influxdb
+          roots
+          {
+            contracts.services.grafana = {
+              enable = true;
+              identity.static.user = "influxdb";
+              mounts.data = {
+                path = "/var/lib/grafana";
+                class = "state";
+              };
+            };
+          }
+        ]).preservation.preserveAt."/persist/state".directories;
+    # In the order the claim-name-keyed claim sets gave.
+    expected = [
+      "/var/lib/influxdb2"
+      "/var/lib/grafana"
+    ];
+  };
+
   testDisabledContractsPersistNothing = {
     expr =
       (evaluate [
