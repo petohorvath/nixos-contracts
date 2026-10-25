@@ -254,7 +254,7 @@ in
         { config, ... }:
         {
           contracts.node = "dhcp";
-          contracts.services.kea.secrets.copy.from = [ config.contracts.services.kea.secrets.token.ref ];
+          contracts.services.kea.secrets.copy.value.copied = config.contracts.services.kea.secrets.token.ref;
         }
       )
     ]);
@@ -274,7 +274,7 @@ in
           metrics = [ telegraf ];
           store = [
             (influxdb {
-              telegraf-token.from = [ metricsToken ];
+              telegraf-token.value.copied = metricsToken;
             })
           ];
         }).store.config;
@@ -294,13 +294,11 @@ in
           store = [
             (influxdb {
               origin.value.generated = "alnum";
-              copy.from = [
-                {
-                  node = "store";
-                  service = "influxdb";
-                  id = "origin";
-                }
-              ];
+              copy.value.copied = {
+                node = "store";
+                service = "influxdb";
+                id = "origin";
+              };
             })
           ];
         }).store
@@ -328,8 +326,8 @@ in
             { age.generators.basic-auth = _: "true"; }
             (influxdb {
               local.value.generated = "alnum";
-              hashes = {
-                value.generated = "basic-auth";
+              hashes.value.derived = {
+                generator = "basic-auth";
                 from = [
                   metricsToken
                   {
@@ -365,11 +363,73 @@ in
     };
   };
 
+  testDerivedValueWithoutSourcesTakesItsGeneratorAlone = {
+    expr =
+      let
+        inherit
+          ((nodesOf {
+            store = [
+              { age.generators.basic-auth = _: "true"; }
+              (influxdb { hashes.value.derived.generator = "basic-auth"; })
+            ];
+          }).store
+          )
+          config
+          ;
+      in
+      {
+        inherit (config.age.secrets.influxdb-hashes.generator) script dependencies;
+        inherit (config.contracts) failures;
+      };
+    expected = {
+      script = "basic-auth";
+      dependencies = [ ];
+      failures = [ ];
+    };
+  };
+
+  testFileAndGeneratorSetOnTheBackendWinOverACopyOrDerivedValue = {
+    expr =
+      let
+        inherit
+          ((nodesOf {
+            metrics = [ telegraf ];
+            store = [
+              { age.generators.basic-auth = _: "true"; }
+              (influxdb {
+                copy.value.copied = metricsToken;
+                hashes.value.derived = {
+                  generator = "basic-auth";
+                  from = [ metricsToken ];
+                };
+              })
+              {
+                age.secrets = {
+                  influxdb-copy.rekeyFile = ./agenix-rekey.nix;
+                  influxdb-hashes.generator.script = "hex";
+                };
+              }
+            ];
+          }).store
+          )
+          config
+          ;
+      in
+      {
+        inherit (config.age.secrets.influxdb-copy) rekeyFile;
+        inherit (config.age.secrets.influxdb-hashes.generator) script;
+      };
+    expected = {
+      rekeyFile = ./agenix-rekey.nix;
+      script = "hex";
+    };
+  };
+
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
     expr =
       (configuration [
         (influxdb {
-          token.from = [ metricsToken ];
+          token.value.copied = metricsToken;
         })
         {
           # The metrics node holds its contracts, but no secret backend.
@@ -388,7 +448,7 @@ in
     expr =
       (configuration [
         (influxdb {
-          token.from = [ metricsToken ];
+          token.value.copied = metricsToken;
         })
         {
           # The metrics node sets no secrets directories, so its token has
@@ -406,7 +466,7 @@ in
       (nodesOf {
         store = [
           (influxdb {
-            token.from = [ metricsToken ];
+            token.value.copied = metricsToken;
           })
         ];
       }).store.config.contracts.failures;

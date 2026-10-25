@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0012
+status: superseded in part by ADR-0012 and ADR-0013
 ---
 
 # Resolve a reference in the core from the node collection

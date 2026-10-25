@@ -1,7 +1,7 @@
 /**
   Option types of the contract vocabulary, for service modules whose own
   settings carry a value into a claim, such as a reference into a secret's
-  `from`, and for claim kinds whose fields hold one of several cases.
+  `value.copied`, and for claim kinds whose fields hold one of several cases.
 */
 { lib }:
 let

@@ -34,7 +34,7 @@ in
         admin-token.value.generated = "alnum";
       }
       // lib.mapAttrs' (
-        writer: reference: lib.nameValuePair "writer-${writer}" { from = [ reference ]; }
+        writer: reference: lib.nameValuePair "writer-${writer}" { value.copied = reference; }
       ) cfg.writers;
     };
 

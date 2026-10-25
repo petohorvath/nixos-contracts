@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Settle a tag by the priority of its definitions
