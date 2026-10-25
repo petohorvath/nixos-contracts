@@ -58,8 +58,8 @@ A secret whose value is that of one other secret it references. A service holds 
 _Avoid_: Duplicate, replica
 
 **Reference**:
-A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it.
-_Avoid_: Handle, link, dependency, source
+A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it. A copied or derived secret's `sources` are the references its value comes from.
+_Avoid_: Handle, link, dependency
 
 **Inbox**:
 A service's hold on a place where claims of one kind arrive from any node, its own included. It says what the service accepts, and for secrets, whether and how it holds a copy of each.
