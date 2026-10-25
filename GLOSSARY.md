@@ -69,9 +69,6 @@ _Avoid_: Receiver, mailbox, channel
 A claim's naming of an inbox it goes to. The sending node writes nothing on the receiving node.
 _Avoid_: Contribution, offer, export
 
-**Copy set**:
-The read-only, configuration-wide collection of one kind's copies that the node's inboxes hold, by location, kept apart from the claim sets.
-
 **Send check**:
 An opt-in check that what each node sends does not depend on what its inboxes received.
 _Avoid_: Routing check
@@ -97,7 +94,7 @@ Handing a secret to a dynamic identity's unit, so its daemon reads it from where
 _Avoid_: Injection, mounting
 
 **Adapter**:
-An opt-in module that turns one claim kind's claim set and copy set into one backend's configuration, such as preservation or agenix-rekey.
+An opt-in module that turns one claim kind's claims, including the copies its inboxes hold, into one backend's configuration, such as preservation or agenix-rekey.
 _Avoid_: Materialiser, consumer
 
 **Adapter slot**:
