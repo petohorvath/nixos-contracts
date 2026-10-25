@@ -94,10 +94,42 @@ in
     };
   };
 
-  testSwitchingTheIdentityTagNeedsForce = {
+  testNodeLeafOfAnotherTagReplacesTheWholeIdentity = {
     expr =
-      (evaluateChrony { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }).identity;
-    expectedError.msg = "contracts\\.services\\.chrony\\.identity";
+      (evaluate [
+        {
+          contracts.services.chrony = mkDefaultContract {
+            identity.static = {
+              user = "chrony";
+              group = "time";
+            };
+          };
+        }
+        { contracts.services.chrony.identity.dynamic.unit = "chronyd.service"; }
+      ]).contracts.services.chrony.identity;
+    expected.dynamic = {
+      unit = "chronyd.service";
+      sharedGroup = null;
+    };
+  };
+
+  testNodeSwitchesADefaultDynamicIdentityToAStaticOne = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.alloy = mkDefaultContract {
+            identity.dynamic = {
+              unit = "alloy.service";
+              sharedGroup = "alloy";
+            };
+          };
+        }
+        { contracts.services.alloy.identity.static.user = "alloy"; }
+      ]).contracts.services.alloy.identity;
+    expected.static = {
+      user = "alloy";
+      group = null;
+    };
   };
 
   testForcedIdentitySwitchesTheTag = {

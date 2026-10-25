@@ -3,7 +3,8 @@
 { config, lib, ... }:
 let
   references = import ./references.nix;
-  identityType = lib.types.attrTag {
+  contractTypes = import ./types.nix { inherit lib; };
+  identityType = contractTypes.tag {
     static = lib.mkOption {
       type = lib.types.submodule {
         options = {

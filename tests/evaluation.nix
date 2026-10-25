@@ -33,7 +33,7 @@ in
       inherit lib;
       module = self.modules.generic.default;
     };
-    core = import ./modules/core.nix { inherit contracts; };
+    core = import ./modules/core.nix { inherit contracts lib; };
     mkClaimKind = import ./modules/mk-claim-kind.nix { inherit contracts contractsLib lib; };
     types = import ./modules/types.nix { inherit contractsLib lib; };
     kinds = {

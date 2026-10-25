@@ -10,7 +10,7 @@ Run `nix fmt --no-update-lock-file` and `nix flake check --no-update-lock-file`.
 
 ## Public interface
 
-The public interface comprises `nixosModules.default`, the adapter modules `nixosModules.{preservation,agenix-rekey,systemd-credentials}`, `nixosModules.cross-config`, `modules.generic.default`, the `contracts.*` options the [API reference](docs/api.md) describes, and `lib.mkDefaultContract`, `lib.mkClaimKind`, `lib.types.reference` and `lib.types.referenceTo`. Keep `lib/` loadable by path with a caller-owned library, and the `modules/` and `nixos/` directories by path when applied to `{ libnet }`.
+The public interface comprises `nixosModules.default`, the adapter modules `nixosModules.{preservation,agenix-rekey,systemd-credentials}`, `nixosModules.cross-config`, `modules.generic.default`, the `contracts.*` options the [API reference](docs/api.md) describes, and `lib.mkDefaultContract`, `lib.mkClaimKind`, `lib.types.reference`, `lib.types.referenceTo` and `lib.types.tag`. Keep `lib/` loadable by path with a caller-owned library, and the `modules/` and `nixos/` directories by path when applied to `{ libnet }`.
 
 ## Releases
 

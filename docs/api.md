@@ -47,7 +47,7 @@ One contract per service, keyed by the service's name.
 `enable` (bool, default `false`)
 : Whether the contract counts. Only enabled contracts enter claim sets and clash checks. A service module usually ties it to the daemon's own enable.
 
-`identity` (attribute tag, required)
+`identity` ([tag](#libtypestag), required)
 : What the service effectively runs as, exactly one of:
 
 - `static = { user; group ? null; }`: a named account. A null group takes the user's like-named primary group.
@@ -271,7 +271,19 @@ contracts.services.nginx.binds.proxyHttp.port = 9080;
 
 While the condition is false, the service module defines no `proxyHttp` claim, but a node's override still does: the port alone above makes a complete bind, and an override of a field that is not required, such as `addresses`, fails for the missing `port`. A node guards such an override with the service module's condition.
 
-Switching a tagged field to its other tag, such as a static identity to a dynamic one, needs `lib.mkForce` on that field: a default-priority tag still counts as defined, and two tags are an error.
+A node switches a tagged field to its other tag, such as a static identity to a dynamic one, by writing the other tag at normal priority. A [tag](#libtypestag) settles by priority, and the service module's tag is at default priority, so the node's tag wins and every leaf of the service module's tag is dropped:
+
+```nix
+# Service module
+contracts.services.chrony = mkDefaultContract {
+  identity.static.user = "chrony";
+};
+
+# Node: the identity is { dynamic = { unit = "chronyd.service"; sharedGroup = null; }; }
+contracts.services.chrony.identity.dynamic.unit = "chronyd.service";
+```
+
+A node that writes a leaf of the service module's own tag, such as `identity.static.group`, keeps the tag's other leaves.
 
 To use it without the flake, import the library directory with a caller-owned library:
 
@@ -336,4 +348,34 @@ options.example.influxdb.writers = lib.mkOption {
 config.contracts.services.influxdb.secrets = lib.mapAttrs' (
   writer: token: lib.nameValuePair "writer-${writer}" { from = [ token ]; }
 ) config.example.influxdb.writers;
+```
+
+### `lib.types.tag`
+
+`tag tags` is the option type of a field that holds exactly one of several cases. It takes the same tag declarations as `lib.types.attrTag`, an attribute set of options, and settles definitions that name different tags by priority ([ADR 0013](adr/0013-settle-a-tag-by-the-priority-of-its-definitions.md)). A contract's `identity` has this type, and a project's claim kind uses it for its own tags, so a node switches them as it switches an identity.
+
+The tag rule:
+
+- A definition counts at the priority of its strongest leaf. Each leaf has the priority of its innermost `lib.mkOverride`, including `lib.mkDefault` and `lib.mkForce`, or the normal priority when nothing wraps it.
+- `lib.mkIf` passes the priority of its content through when its condition is true. A false condition contributes no priority, so a definition with no leaf left gives way to any other tag.
+- `lib.mkMerge` counts at the strongest of its contents.
+- A tag counts at its strongest definition. The strongest tag keeps its definitions, which merge as in `lib.types.attrTag`, and the other tags' definitions are dropped.
+- Two different tags at the same priority fail with an error naming the option, as in `lib.types.attrTag`.
+- `lib.mkForce` or `lib.mkOverride` on the whole field still drops the weaker definitions before the tags settle.
+
+A claim type's field, a service module's default through `mkDefaultContract`, and a node's switch:
+
+```nix
+options.target = lib.mkOption {
+  type = contractsLib.types.tag {
+    local = lib.mkOption { type = lib.types.str; };
+    remote = lib.mkOption { type = lib.types.str; };
+  };
+};
+
+# Service module
+contracts.services.app = mkDefaultContract { backups.state.target.local = "/var/backup/app"; };
+
+# Node: the target is { remote = "backup.example"; }
+contracts.services.app.backups.state.target.remote = "backup.example";
 ```

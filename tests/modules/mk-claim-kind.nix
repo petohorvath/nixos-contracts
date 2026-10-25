@@ -541,6 +541,53 @@ in
     };
   };
 
+  testNodeSwitchesADefaultTagOfACustomKind = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "backups";
+          description = "Backups of the service's state.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.target = lib.mkOption {
+                type = contractsLib.types.tag {
+                  local = lib.mkOption {
+                    type = lib.types.submodule {
+                      options.path = lib.mkOption {
+                        type = lib.types.str;
+                        description = "The directory the backup goes to.";
+                      };
+                    };
+                    description = "A backup on this node.";
+                  };
+                  remote = lib.mkOption {
+                    type = lib.types.submodule {
+                      options.host = lib.mkOption {
+                        type = lib.types.str;
+                        description = "The host the backup goes to.";
+                      };
+                    };
+                    description = "A backup on another host.";
+                  };
+                };
+                description = "Where the backup goes.";
+              };
+            };
+        })
+        {
+          contracts.services.a = contractsLib.mkDefaultContract {
+            enable = true;
+            identity.static.user = "a";
+            backups.state.target.local.path = "/var/backup/a";
+          };
+        }
+        { contracts.services.a.backups.state.target.remote.host = "backup.example"; }
+      ]).contracts.claimSets.backups.a-state.target;
+    expected.remote.host = "backup.example";
+  };
+
   testEnableKindNameIsRejected = {
     expr = mkClaimKind {
       name = "enable";
