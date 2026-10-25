@@ -352,7 +352,7 @@ options.example.influxdb.writers = lib.mkOption {
 };
 
 config.contracts.services.influxdb.secrets = lib.mapAttrs' (
-  writer: token: lib.nameValuePair "writer-${writer}" { from = [ token ]; }
+  writer: token: lib.nameValuePair "writer-${writer}" { value.copied = token; }
 ) config.example.influxdb.writers;
 ```
 
@@ -368,6 +368,8 @@ The tag rule:
 - A tag counts at its strongest definition. The strongest tag keeps its definitions, which merge as in `lib.types.attrTag`, and the other tags' definitions are dropped.
 - Two different tags at the same priority fail with an error naming the option, as in `lib.types.attrTag`.
 - `lib.mkForce` or `lib.mkOverride` on the whole field still drops the weaker definitions before the tags settle.
+
+To find each definition's priority, the tag type reads the overrides of every leaf in every definition, including the definitions of a tag it drops, so a leaf that throws or recurses fails the option even in a losing tag.
 
 A claim type's field, a service module's default through `mkDefaultContract`, and a node's switch:
 
