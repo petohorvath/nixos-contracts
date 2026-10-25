@@ -4,12 +4,10 @@
 let
   references = import ../references.nix;
 
-  # Kinds whose received claims the receiving service can hold a copy of.
-  copyKinds = [ "secrets" ];
-
-  # Nests sends as `<node>.<service>.<id>` of what `f` makes of each,
-  # keeping one of the sends of a claim that names the inbox twice.
-  nest =
+  # Nests sends by the sent claim, as `<node>.<service>.<id>` of what `f`
+  # makes of each, keeping one of the sends of a claim that names the
+  # inbox twice.
+  mapBySentClaim =
     f: sends:
     lib.mapAttrs (
       _: byNode:
@@ -38,7 +36,7 @@ in
       "it takes `${claim.kind}`, which is no claim kind of this node"
     else if !config.contracts.internal.kinds.${claim.kind}.sendable then
       "it takes `${claim.kind}`, which no claim can be sent as"
-    else if claim.copy != null && !builtins.elem claim.kind copyKinds then
+    else if claim.copy != null && claim.kind != "secrets" then
       "it sets `copy`, but `${claim.kind}` claims have no copies; set `copy = null` and read `received`"
     else
       null;
@@ -62,11 +60,11 @@ in
 
       # An inbox receives only while its node has an identity, which every
       # send names, and its contract is enabled, and never in the evaluation
-      # `contracts.checkSends` collects the sends from.
+      # the send check reads the sends from.
       receives =
         node != null
         && topConfig.contracts.services.${service}.enable
-        && !topConfig.contracts.internal.collecting;
+        && !topConfig.contracts.internal.emptyInboxes;
 
       sends = lib.filter (
         send: send.to.service == service && send.to.id == name && send.ref.kind == inbox.kind
@@ -74,7 +72,7 @@ in
 
       # An inbox whose kind has no copies holds none, though it sets `copy`,
       # which its check reports.
-      holdsCopies = inbox.copy != null && builtins.elem inbox.kind copyKinds;
+      holdsCopies = inbox.copy != null && inbox.kind == "secrets";
 
       # A copy is a secret claim of this service, so its owner and group
       # follow this service's identity, placed by its own location.
@@ -137,7 +135,7 @@ in
           type = lib.types.lazyAttrsOf (lib.types.lazyAttrsOf (lib.types.lazyAttrsOf lib.types.raw));
           readOnly = true;
           default = lib.optionalAttrs receives (
-            nest (send: {
+            mapBySentClaim (send: {
               inherit (send) ref;
               # The sent claim as its node's claim set holds it.
               inherit ((topConfig.contracts.lookup send.ref)) claim;
@@ -176,7 +174,7 @@ in
           internal = true;
           readOnly = true;
           default = lib.optionalAttrs (receives && holdsCopies) (
-            nest (send: {
+            mapBySentClaim (send: {
               imports = [ inbox.copy ];
               location = [
                 service

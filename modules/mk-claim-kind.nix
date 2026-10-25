@@ -153,13 +153,14 @@ else
       ) claimSet
     );
 
-    entries = map (claimWithIdentity: claimWithIdentity.claim) claims;
+    # The claim set's entries, in a list.
+    claimSetEntries = map (claimWithIdentity: claimWithIdentity.claim) claims;
 
     # Every unordered pair of entries, each pair once.
     pairs = lib.concatLists (
       lib.imap0 (
-        index: first: map (second: { inherit first second; }) (lib.drop (index + 1) entries)
-      ) entries
+        index: first: map (second: { inherit first second; }) (lib.drop (index + 1) claimSetEntries)
+      ) claimSetEntries
     );
 
     clashAssertions = lib.optionals (clash != null) (

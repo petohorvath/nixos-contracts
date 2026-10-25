@@ -12,7 +12,7 @@ let
   references = import ./references.nix;
   inherit (references) labelOf locationLabelOf;
   inherit (config.contracts) checkSends;
-  inherit (config.contracts.internal) collecting;
+  inherit (config.contracts.internal) emptyInboxes;
 
   # The sends of a configuration's contracts, `{ ref; location; to; }` per
   # claim and inbox it names, read from its claim sets alone: those of
@@ -36,9 +36,9 @@ let
 
   # The sends of this configuration evaluated again with every inbox empty.
   # Nothing they depend on is received, so reading them never recurses.
-  collectedSends =
+  sendsWithEmptyInboxes =
     sendsOf
-      (extendModules { modules = [ { contracts.internal.collecting = true; } ]; }).config.contracts;
+      (extendModules { modules = [ { contracts.internal.emptyInboxes = true; } ]; }).config.contracts;
 
   # The labels of the inboxes each claim sends to, sorted, by the claim.
   inboxesByClaim =
@@ -49,10 +49,10 @@ let
 
   # One check per claim of either evaluation, failing when the claim sends
   # to other inboxes once its node has received claims than before.
-  driftAssertions =
+  sendCheckAssertions =
     let
       after = inboxesByClaim sends;
-      before = inboxesByClaim collectedSends;
+      before = inboxesByClaim sendsWithEmptyInboxes;
       describe =
         inboxes:
         if inboxes == [ ] then "nothing" else lib.concatMapStringsSep ", " (inbox: "`${inbox}`") inboxes;
@@ -102,13 +102,13 @@ in
       '';
     };
 
-    internal.collecting = lib.mkOption {
+    internal.emptyInboxes = lib.mkOption {
       type = lib.types.bool;
       internal = true;
       default = false;
       description = ''
-        Whether this is the evaluation `contracts.checkSends` reads the
-        sends from, in which every inbox's `received` is empty.
+        Whether every inbox's `received` is empty, as it is in the
+        evaluation the send check reads the sends from.
       '';
     };
 
@@ -122,7 +122,7 @@ in
       readOnly = true;
       default = lib.groupBy (send: send.to.node) (
         lib.filter (send: send.to.node != null) (
-          if checkSends && !collecting then collectedSends else sends
+          if checkSends && !emptyInboxes then sendsWithEmptyInboxes else sends
         )
       );
       defaultText = lib.literalMD ''
@@ -138,5 +138,5 @@ in
   };
 
   config.contracts.assertions =
-    map sendAssertion sends ++ lib.optionals (checkSends && !collecting) driftAssertions;
+    map sendAssertion sends ++ lib.optionals (checkSends && !emptyInboxes) sendCheckAssertions;
 }

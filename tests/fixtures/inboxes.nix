@@ -43,10 +43,9 @@ rec {
     {
       options.upstreams = lib.mkOption { type = lib.types.attrsOf (lib.types.listOf lib.types.str); };
       config.upstreams = lib.concatMapAttrs (
-        node:
+        _:
         lib.concatMapAttrs (
-          sender:
-          lib.mapAttrs' (id: entry: lib.nameValuePair "${node}_${sender}_${id}" entry.claim.bindpoints)
+          _: lib.mapAttrs' (_: entry: lib.nameValuePair entry.claim.name entry.claim.bindpoints)
         )
       ) config.contracts.services.nginx.inboxes.upstreams.received;
     };
