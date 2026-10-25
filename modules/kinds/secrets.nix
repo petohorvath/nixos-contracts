@@ -6,7 +6,11 @@ let
   referenceType = contractTypes.referenceTo "secrets";
   # References resolve through the lookup every kind shares; a secret's
   # value adds only its own rules.
-  inherit (import ../references.nix) labelOf locationLabelOf lookup;
+  inherit (import ../references.nix)
+    backendPathOf
+    labelOf
+    lookup
+    ;
 
   # The references of a `copied` or `derived` value, in order, or none.
   referencesOf =
@@ -309,10 +313,8 @@ in
                 inherit unit;
                 inherit (config) location;
               }
-            else if backend == null then
-              throw "nixos-contracts: secret `${locationLabelOf config.location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
             else
-              backend.path config.location;
+              backendPathOf backend config.location;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the delivered credential for

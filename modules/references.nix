@@ -34,6 +34,15 @@ rec {
   # locations make one name.
   backendNameOf = builtins.concatStringsSep "_";
 
+  # Where the secret backend `backend` installs the secret at `location`,
+  # failing, naming the secret, while no backend adapter sets it.
+  backendPathOf =
+    backend: location:
+    if backend == null then
+      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+    else
+      backend.path location;
+
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
 
@@ -52,6 +61,10 @@ rec {
         builtins.concatMap receivedOf (claimsOf config.contracts.claimSets.inboxes)
       )
     );
+
+  # The secrets a secret adapter installs alike: the claims of the
+  # configuration's secret claim set and the copies its inboxes hold.
+  secretsOf = config: claimsOf config.contracts.claimSets.secrets ++ copiesOf config;
 
   # A reference as messages name it.
   labelOf =

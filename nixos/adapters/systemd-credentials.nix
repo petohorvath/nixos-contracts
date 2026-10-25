@@ -9,25 +9,11 @@
 { config, lib, ... }:
 let
   inherit (config.contracts.kinds.secrets) backend;
-  inherit (import ../../modules/references.nix)
-    backendNameOf
-    claimsOf
-    copiesOf
-    locationLabelOf
-    ;
-
-  backendPath =
-    location:
-    if backend == null then
-      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
-    else
-      backend.path location;
+  inherit (import ../../modules/references.nix) backendNameOf backendPathOf secretsOf;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
-  delivered = lib.filter (secret: secret.delivered) (
-    claimsOf config.contracts.claimSets.secrets ++ copiesOf config
-  );
+  delivered = lib.filter (secret: secret.delivered) (secretsOf config);
 
   units = lib.unique (map (secret: secret.unit) delivered);
 
@@ -58,7 +44,7 @@ in
     systemd.services = lib.mkMerge (
       map (secret: {
         ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
-          "${backendNameOf secret.location}:${backendPath secret.location}"
+          "${backendNameOf secret.location}:${backendPathOf backend secret.location}"
         ];
       }) delivered
     );

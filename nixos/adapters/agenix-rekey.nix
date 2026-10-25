@@ -16,15 +16,13 @@
 let
   inherit (import ../../modules/references.nix)
     backendNameOf
-    claimsOf
-    copiesOf
     labelOf
     locationLabelOf
     nodeConfigOrNull
+    secretsOf
     ;
 
-  # The authored secrets and the copies the inboxes hold, installed alike.
-  secrets = claimsOf config.contracts.claimSets.secrets ++ copiesOf config;
+  secrets = secretsOf config;
 
   # The generator of a `generated` or `derived` value, or null.
   generatorOf = secret: secret.value.generated or secret.value.derived.generator or null;
