@@ -173,9 +173,11 @@ else
     # is one failed check.
     toReasons = reasons: if reasons == null then [ ] else lib.toList reasons;
 
-    checkAssertions = lib.optionals (check != null) (
-      lib.concatMap (
-        arguments:
+    # The failed checks of one claim, given as `{ identity, claim }`, each
+    # naming the claim by its location.
+    checkAssertionsOf =
+      arguments:
+      lib.optionals (check != null) (
         lib.pipe
           (
             arguments
@@ -192,8 +194,11 @@ else
               message = "${kindName} claim `${locationLabelOf arguments.claim.location}`: ${reason}.";
             }))
           ]
-      ) claims
-    );
+      );
+
+    checkAssertions = lib.concatMap checkAssertionsOf claims;
+
+    identityOf = service: resolveIdentity config.contracts.services.${service}.identity;
   in
   {
     options.contracts = {
@@ -325,6 +330,35 @@ else
       };
 
       kinds.${kindName} = settings;
+
+      # The kind's claim type and check rule, for a claim a service holds
+      # outside the claim set, such as an inbox's copy.
+      internal.kinds.${kindName} = lib.mkOption {
+        type = lib.types.raw;
+        internal = true;
+        readOnly = true;
+        default = {
+          claim =
+            service:
+            claim {
+              inherit service;
+              identity = identityOf service;
+              config = topConfig;
+            };
+          assertions =
+            service: claim:
+            checkAssertionsOf {
+              identity = identityOf service;
+              inherit claim;
+            };
+        };
+        defaultText = lib.literalMD "the kind's claim type and check rule";
+        description = ''
+          `claim service`, the submodule of one ${kindName} claim of a
+          service, and `assertions service claim`, the failed checks of
+          such a claim.
+        '';
+      };
     };
 
     # Forcing the claim set checks every id, so evaluating the checks fails

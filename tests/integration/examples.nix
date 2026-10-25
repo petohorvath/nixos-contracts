@@ -53,19 +53,22 @@
     };
   };
 
-  testSharedTokenExampleCopiesAnotherNodesSecret = {
+  testSharedTokenExampleSendsTelegrafsTokenToAnInfluxdbInbox = {
     expr = examples.sharedToken.result;
     expected = {
       copy = {
-        owner = "root";
+        owner = "influxdb2";
         group = "influxdb2";
-        mode = "0440";
+        mode = "0400";
         rekeyFile = "metrics/telegraf_token.age";
         generator = null;
       };
       original = "metrics/telegraf_token.age";
-      storesOwn = "store/telegraf_token.age";
-      auths.telegraf-metrics = "/run/agenix/influxdb_writer-telegraf-metrics";
+      copiesOwn = "store/telegraf_token.age";
+      auths = {
+        metrics_telegraf_token = "/run/agenix/influxdb_writers_metrics_telegraf_token";
+        store_telegraf_token = "/run/agenix/influxdb_writers_store_telegraf_token";
+      };
       failures = {
         metrics = [ ];
         store = [ ];

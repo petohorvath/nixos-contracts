@@ -76,6 +76,39 @@ let
     inherit (entry) ref copy;
     inherit (entry.claim) name value;
   };
+
+  # Influxdb's `writers` inbox on the `store` node, holding a copy of each
+  # token it receives with the settings `copy`.
+  writers = {
+    node = "store";
+    service = "influxdb";
+    id = "writers";
+  };
+  influxdb = identity: copy: {
+    contracts.services.influxdb = {
+      enable = true;
+      inherit identity;
+      inboxes.writers = { inherit copy; };
+    };
+  };
+  # A backend naming a secret by its location joined with `_`, with one
+  # generator.
+  backend.contracts.kinds.secrets.backend = {
+    path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
+    generators = [ "alnum" ];
+  };
+  writersOf = config: config.contracts.services.influxdb.inboxes.writers.received;
+  # What a test reads of a copy.
+  copyOf = copy: {
+    inherit (copy)
+      owner
+      group
+      mode
+      value
+      location
+      ;
+    hasRefOrName = copy ? ref || copy ? name;
+  };
 in
 {
   testBindSentToAnotherNodeBuildsAnUpstreamThere = {
@@ -287,6 +320,59 @@ in
       };
     };
 
+  # Telegraf sends its token to influxdb's writers, and influxdb its own
+  # token to telegraf's outputs, each holding a copy of what it receives.
+  testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
+    let
+      nodes = nodesOf {
+        metrics = [
+          backend
+          (service "telegraf" {
+            secrets.token = {
+              value.generated = "alnum";
+              sendTo = [ writers ];
+            };
+            inboxes.outputs.copy = { };
+          })
+        ];
+        store = [
+          backend
+          (influxdb { static.user = "influxdb2"; } { })
+          {
+            contracts.services.influxdb.secrets.token = {
+              value.generated = "alnum";
+              sendTo = [
+                {
+                  node = "metrics";
+                  service = "telegraf";
+                  id = "outputs";
+                }
+              ];
+            };
+          }
+        ];
+      };
+      inboxesOf = node: nodes.${node}.config.contracts.claimSets.inboxes;
+    in
+    {
+      expr = {
+        outputs = (inboxesOf "metrics").telegraf.outputs.received.store.influxdb.token.copy.path;
+        writers = (inboxesOf "store").influxdb.writers.received.metrics.telegraf.token.copy.path;
+        failures = map failuresOf [
+          nodes.metrics
+          nodes.store
+        ];
+      };
+      expected = {
+        outputs = "/run/agenix/telegraf_outputs_store_influxdb_token";
+        writers = "/run/agenix/influxdb_writers_metrics_telegraf_token";
+        failures = [
+          [ ]
+          [ ]
+        ];
+      };
+    };
+
   testSendThatDoesNotResolveFailsACheckOnTheSendingNode = {
     expr =
       map
@@ -361,6 +447,127 @@ in
       [
         "nixos-contracts: inboxes claim `nginx.upstreams`: it takes `inboxes`, which no claim can be sent as."
       ]
+    ];
+  };
+
+  testCopyOfAReceivedSecretIsOwnedByTheReceivingService = {
+    expr =
+      copyOf
+        (writersOf
+          (nodesOf {
+            metrics = [ (telegraf [ writers ]) ];
+            store = [ (influxdb { static.user = "influxdb2"; } { mode = "0400"; }) ];
+          }).store.config
+        ).metrics.telegraf.token.copy;
+    expected = {
+      owner = "root";
+      group = "influxdb2";
+      mode = "0400";
+      value.copied = tokenOf "metrics";
+      location = [
+        "influxdb"
+        "writers"
+        "metrics"
+        "telegraf"
+        "token"
+      ];
+      hasRefOrName = false;
+    };
+  };
+
+  testCopyPathIsWhereTheReceivingDaemonReadsIt =
+    let
+      pathOf =
+        identity: modules:
+        (writersOf
+          (nodesOf {
+            metrics = [ (telegraf [ writers ]) ];
+            store = [ (influxdb identity { }) ] ++ modules;
+          }).store.config
+        ).metrics.telegraf.token.copy.path;
+    in
+    {
+      expr = {
+        static = pathOf { static.user = "influxdb2"; } [ backend ];
+        delivered = pathOf { dynamic.unit = "influxdb.service"; } [
+          backend
+          {
+            contracts.kinds.secrets.delivery.path =
+              { unit, location }: "/run/credentials/${unit}/${lib.concatStringsSep "_" location}";
+          }
+        ];
+      };
+      expected = {
+        static = "/run/agenix/influxdb_writers_metrics_telegraf_token";
+        delivered = "/run/credentials/influxdb.service/influxdb_writers_metrics_telegraf_token";
+      };
+    };
+
+  testMisspeltCopyFieldFailsAtItsDefinition = {
+    expr =
+      (writersOf
+        (nodesOf {
+          metrics = [ (telegraf [ writers ]) ];
+          store = [ (influxdb { static.user = "influxdb2"; } { gruop = "writers"; }) ];
+        }).store.config
+      ).metrics.telegraf.token.copy.group;
+    expectedError.msg = "telegraf\\.token\\.gruop' does not exist";
+  };
+
+  testMisspeltCopyFieldOffersTheClosestOption = {
+    expr =
+      (writersOf
+        (nodesOf {
+          metrics = [ (telegraf [ writers ]) ];
+          store = [ (influxdb { static.user = "influxdb2"; } { gruop = "writers"; }) ];
+        }).store.config
+      ).metrics.telegraf.token.copy.group;
+    expectedError.msg = "Did you mean `[^`]*\\.group'";
+  };
+
+  testCopyOfACopiedOrDerivedSecretFailsTheCopysCheck = {
+    expr =
+      map
+        (
+          value:
+          failuresOf
+            (nodesOf {
+              metrics = [
+                (service "telegraf" {
+                  secrets = {
+                    origin.value.generated = "alnum";
+                    token = {
+                      inherit value;
+                      sendTo = [ writers ];
+                    };
+                  };
+                })
+              ];
+              store = [ (influxdb { static.user = "influxdb2"; } { }) ];
+            }).store
+        )
+        [
+          {
+            copied = (tokenOf "metrics") // {
+              id = "origin";
+            };
+          }
+          { derived.generator = "basic-auth"; }
+        ];
+    expected = lib.replicate 2 [
+      "nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret."
+    ];
+  };
+
+  testCopyItsDynamicIdentityCannotReadFailsTheReadabilityCheck = {
+    expr =
+      failuresOf
+        (nodesOf {
+          metrics = [ (telegraf [ writers ]) ];
+          store = [ (influxdb { dynamic.unit = "influxdb.service"; } { }) ];
+        }).store;
+    expected = [
+      "nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
     ];
   };
 

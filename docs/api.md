@@ -123,12 +123,13 @@ Service names, claim ids and node identities are names: non-empty, and made of l
 
 ### References
 
-A reference names one claim by its node, kind, service and id, `{ node; kind; service; id; }`, and always names its node, so it means the same claim on every node that reads it ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). A claim's `ref` is its reference, built from `contracts.node` alone, so a module that hands its own claim to another node, such as through a nixos-cross-config contribution, passes the `ref` rather than writing it out:
+A reference names one claim by its node, kind, service and id, `{ node; kind; service; id; }`, and always names its node, so it means the same claim on every node that reads it ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). A claim's `ref` is its reference, built from `contracts.node` alone, so a module that names its own claim in another of its settings passes the `ref` rather than writing it out:
 
 ```nix
-crossConfig.contributions.store.example.influxdb.writers.${config.contracts.node} =
-  config.contracts.services.telegraf.secrets.token.ref;
+secrets.htpasswd.value.derived.from = [ config.contracts.services.alloy.secrets.loki-password.ref ];
 ```
+
+A claim reaches another node by being sent to an [inbox](#inboxes) there, so no node writes a reference into another node's options.
 
 A field that takes references of one kind, such as a secret's `value.copied`, has the type [`lib.types.referenceTo`](#libtypesreferenceto) of that kind, so a reference written by hand omits `kind`, and one of another kind fails as a type error at its definition.
 
@@ -183,6 +184,43 @@ Checks fail for a send on the sending node, naming the claim by its location and
 - When the inbox takes another kind, naming both, such as ``nixos-contracts: binds claim `loki.http` sends to `proxy:inboxes.nginx.clients`, which takes `secrets`, not `binds`.``
 
 Checks also fail for an inbox whose `kind` is no claim kind of its node or is `inboxes`, and for an inbox of a kind other than secrets that sets `copy`.
+
+#### Copies
+
+An inbox of secrets whose `copy` is set holds a [copy](#secrets) of each secret it receives. `copy` takes the settings of a secret claim, such as `mode`, and each copy is a secret claim of the receiving service:
+
+- built from the secrets kind's claim type for the receiving service, so its `owner` and `group` follow the receiving identity as an authored secret's do, and its `unit`, `delivered` and `path` too;
+- with the inbox's `copy` settings applied;
+- with `value.copied` set to the sent secret's `ref`;
+- placed by its own `location`, `[ <service> <inbox> <node> <sender service> <id> ]`, and with no `ref` or `name`, since nothing references a copy.
+
+A copy is read only where it arrived, as `received.<node>.<sender service>.<id>.copy`, so the receiving daemon reads `copy.path`:
+
+```nix
+# On every node running telegraf: send its token to influxdb on the node store
+contracts.services.telegraf.secrets.token.sendTo = [ { node = "store"; service = "influxdb"; id = "writers"; } ];
+
+# On the node store: hold a copy of each token, and authorise each sender
+contracts.services.influxdb.inboxes.writers.copy = { owner = "influxdb2"; mode = "0400"; };
+services.influxdb2.provision.organizations.main.auths = lib.concatMapAttrs (
+  node: lib.concatMapAttrs (
+    service: lib.mapAttrs' (
+      id: entry: lib.nameValuePair entry.claim.name { tokenFile = entry.copy.path; }
+    )
+  )
+) config.contracts.services.influxdb.inboxes.writers.received;
+```
+
+With `copy = null`, the default, an inbox holds no copies and every `received.<…>.copy` is null; the receiver reads `received` or `refs` alone, such as to derive a secret from `refs`.
+
+A misspelt setting in `copy` fails at its definition once a copy is read, naming the copy's option under the internal `copies` and offering the closest option, such as ``The option `contracts.services.influxdb.inboxes.writers.copies.metrics.telegraf.token.gruop' does not exist. … Did you mean `….group', …``.
+
+Copies are not in any claim set, since a claim set's keys never depend on other nodes, and no root option holds them. An adapter finds them through the inboxes in `contracts.claimSets.inboxes`, as each non-null `received.<…>.copy`, and installs each like an authored secret, named by its location joined with `_`, such as `influxdb_writers_metrics_telegraf_token`. A disabled receiving contract holds no copies.
+
+Each copy runs the secrets kind's checks with the receiving identity, labelled by its location joined with `.`:
+
+- A copy that its dynamic identity cannot read fails the same readability check as an authored secret, such as ``nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: its dynamic identity cannot read it; …``.
+- A copy of a received secret that is itself copied or derived fails, such as ``nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret.``
 
 ### Binds
 
@@ -313,15 +351,15 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets` entry per secret claim, named by its location joined with `_`, such as `age.secrets.influxdb_admin-token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<name>.path` of the name a location makes, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets` entry per secret claim and per [copy an inbox holds](#copies), named by its location joined with `_`, such as `age.secrets.influxdb_admin-token` or `age.secrets.influxdb_writers_metrics_telegraf_token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<name>.path` of the name a location makes, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
-The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, so entries across nodes, in either direction, evaluate without cycles. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node.
+The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set and the copies its inboxes hold, never from another node's entries, so entries across nodes, in either direction, evaluate without cycles. A copy's `rekeyFile` is the sent secret's, read from the sender's entry on the sender's node, or from this configuration for a secret sent from its own node. Its check fails for a reference to a secret on a node without this adapter, a copy's sent secret included. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file, authored or held by an inbox, fails a check that names the referenced or sent secret, since the file is missing on that node, such as ``nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: …``.
 
 A derived secret with references defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `value.derived.from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
 
 ### `nixosModules.systemd-credentials`
 
-For every secret of a dynamic-identity service, adds `<name>:<backend path>` to the unit's `LoadCredential=`, where the credential's name joins the secret's location with `_`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<name>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every secret of a dynamic-identity service, and every copy its inboxes hold, adds `<name>:<backend path>` to the unit's `LoadCredential=`, where the credential's name joins the secret's location with `_`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<name>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
 Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
@@ -414,17 +452,15 @@ The option type of a [reference](#references) of any kind, `{ node; kind; servic
 
 ### `lib.types.referenceTo`
 
-`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. A secret's `value.copied` and `value.derived.from` take `referenceTo "secrets"`. A service module whose own settings carry a reference, such as one a nixos-cross-config contribution delivers, types the setting with it, so the value it receives is already a reference of the kind it uses:
+`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. A secret's `value.copied` and `value.derived.from` take `referenceTo "secrets"`, and a claim's `sendTo` takes `referenceTo "inboxes"`. A service module whose own settings carry a reference, such as an inbox reference a fleet registry provides, types the setting with it, so the value it receives is already a reference of the kind it uses:
 
 ```nix
-options.example.influxdb.writers = lib.mkOption {
-  type = lib.types.attrsOf (contractsLib.types.referenceTo "secrets");
-  default = { };
+options.example.telegraf.writeTo = lib.mkOption {
+  type = lib.types.listOf (contractsLib.types.referenceTo "inboxes");
+  default = [ ];
 };
 
-config.contracts.services.influxdb.secrets = lib.mapAttrs' (
-  writer: token: lib.nameValuePair "writer-${writer}" { value.copied = token; }
-) config.example.influxdb.writers;
+config.contracts.services.telegraf.secrets.token.sendTo = config.example.telegraf.writeTo;
 ```
 
 ### `lib.types.tag`

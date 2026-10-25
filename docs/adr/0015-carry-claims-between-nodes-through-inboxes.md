@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Carry claims between nodes through inboxes

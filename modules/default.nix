@@ -24,6 +24,7 @@ in
   imports = [
     ./core.nix
     ./sends.nix
+    ./copies.nix
   ]
   ++ kinds;
 }

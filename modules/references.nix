@@ -37,6 +37,22 @@ rec {
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
 
+  # The entries of an inbox's `received`, by node, service and then id, in
+  # a list.
+  receivedOf = inbox: builtins.concatMap claimsOf (builtins.attrValues inbox.received);
+
+  # The copies a configuration's inboxes hold, found through the inboxes of
+  # enabled contracts in its claim set. Each is a secret claim of its
+  # receiving service, placed by its `location`, so a backend installs it
+  # like an authored secret.
+  copiesOf =
+    config:
+    builtins.filter (copy: copy != null) (
+      map (entry: entry.copy) (
+        builtins.concatMap receivedOf (claimsOf config.contracts.claimSets.inboxes)
+      )
+    );
+
   # A reference as messages name it.
   labelOf =
     reference:

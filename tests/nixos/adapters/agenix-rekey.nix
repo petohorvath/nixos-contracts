@@ -90,6 +90,43 @@ let
       inherit secrets;
     };
   };
+
+  # Influxdb's `writers` inbox on the store node, holding a copy of each
+  # token it receives, and telegraf sending its token there.
+  writers = {
+    node = "store";
+    service = "influxdb";
+    id = "writers";
+  };
+  influxdbWriters = {
+    imports = [ (influxdb { }) ];
+    contracts.services.influxdb.inboxes.writers.copy = { };
+  };
+  sendingTelegraf = {
+    imports = [ telegraf ];
+    contracts.services.telegraf.secrets.token.sendTo = [ writers ];
+  };
+  # The store node's configuration, sharing one node collection with a
+  # metrics node that `evaluateMetrics` evaluates, neither with secrets
+  # directories.
+  storeWithMetrics =
+    evaluateMetrics:
+    let
+      nodeOf = node: {
+        contracts = { inherit node nodes; };
+      };
+      nodes = {
+        metrics.config = evaluateMetrics [
+          (nodeOf "metrics")
+          sendingTelegraf
+        ];
+        store.config = configuration [
+          (nodeOf "store")
+          influxdbWriters
+        ];
+      };
+    in
+    nodes.store.config;
 in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
@@ -314,6 +351,132 @@ in
       expected = {
         rekeyFile = ./generated/store/influxdb_origin.age;
         failures = [ ];
+      };
+    };
+
+  testInboxCopyTakesTheEncryptedFileOfTheSecretSentFromAnotherNode = {
+    expr =
+      secretOf "influxdb_writers_metrics_telegraf_token"
+        (nodesOf {
+          metrics = [ sendingTelegraf ];
+          store = [ influxdbWriters ];
+        }).store.config;
+    expected = {
+      owner = "root";
+      group = "influxdb2";
+      mode = "0440";
+      rekeyFile = ./generated/metrics/telegraf_token.age;
+      generator = null;
+    };
+  };
+
+  testInboxCopyOfASecretSentFromItsOwnNodeReadsThisConfiguration =
+    let
+      inherit
+        ((nodesOf {
+          store = [
+            sendingTelegraf
+            influxdbWriters
+          ];
+        }).store
+        )
+        config
+        ;
+    in
+    {
+      expr = {
+        inherit (config.age.secrets.influxdb_writers_store_telegraf_token) rekeyFile;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        rekeyFile = ./generated/store/telegraf_token.age;
+        failures = [ ];
+      };
+    };
+
+  testFileSetOnTheBackendWinsOverAnInboxCopys = {
+    expr =
+      (nodesOf {
+        metrics = [ sendingTelegraf ];
+        store = [
+          influxdbWriters
+          { age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile = ./agenix-rekey.nix; }
+        ];
+      }).store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
+    expected = ./agenix-rekey.nix;
+  };
+
+  testDisabledReceivingContractInstallsNoCopies = {
+    expr =
+      builtins.attrNames
+        (nodesOf {
+          metrics = [ sendingTelegraf ];
+          store = [
+            influxdbWriters
+            { contracts.services.influxdb.enable = lib.mkForce false; }
+          ];
+        }).store.config.age.secrets;
+    expected = [ ];
+  };
+
+  # The metrics node sets no secrets directories, so its token has no
+  # encrypted file.
+  testInboxCopyOfASecretWithoutAFileNamesTheSentSecret = {
+    expr = (storeWithMetrics configuration).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile`."
+    ];
+  };
+
+  # The metrics node holds its contracts, but no secret backend.
+  testInboxCopyFromANodeWithoutTheAdapterFailsItsCheck = {
+    expr = (storeWithMetrics (modules: nixos.evaluate ([ contracts ] ++ modules))).contracts.failures;
+    expected = [
+      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+    ];
+  };
+
+  # Each node holds a copy of the token the other sends it.
+  testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
+    let
+      nodes = nodesOf {
+        metrics = [
+          sendingTelegraf
+          { contracts.services.telegraf.inboxes.outputs.copy = { }; }
+        ];
+        store = [
+          influxdbWriters
+          {
+            contracts.services.influxdb.secrets.token = {
+              value.generated = "alnum";
+              sendTo = [
+                {
+                  node = "metrics";
+                  service = "telegraf";
+                  id = "outputs";
+                }
+              ];
+            };
+          }
+        ];
+      };
+    in
+    {
+      expr = {
+        outputs = nodes.metrics.config.age.secrets.telegraf_outputs_store_influxdb_token.rekeyFile;
+        writers = nodes.store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
+        failures = map (node: node.config.contracts.failures) [
+          nodes.metrics
+          nodes.store
+        ];
+      };
+      expected = {
+        outputs = ./generated/store/influxdb_token.age;
+        writers = ./generated/metrics/telegraf_token.age;
+        failures = [
+          [ ]
+          [ ]
+        ];
       };
     };
 

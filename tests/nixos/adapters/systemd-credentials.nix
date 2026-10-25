@@ -30,6 +30,20 @@ let
     path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
     generators = [ ];
   };
+
+  # Configurations by node identity with the adapter and the backend,
+  # sharing one node collection.
+  nodesOf = import ../../fixtures/nodes.nix {
+    evaluate =
+      modules:
+      evaluate (
+        [
+          adapter
+          backend
+        ]
+        ++ modules
+      );
+  };
 in
 {
   testDynamicIdentitySecretIsLoadedIntoItsUnit = {
@@ -42,6 +56,46 @@ in
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
     expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
+
+  # Chrony on the `time` node sends its key to alloy's `keys` inbox on the
+  # `edge` node, which holds a copy of it.
+  testDynamicIdentityCopyIsDeliveredIntoItsUnit =
+    let
+      nodes = nodesOf {
+        time = [
+          chrony
+          {
+            contracts.services.chrony.secrets.key.sendTo = [
+              {
+                node = "edge";
+                service = "alloy";
+                id = "keys";
+              }
+            ];
+          }
+        ];
+        edge = [
+          alloy
+          { contracts.services.alloy.inboxes.keys.copy = { }; }
+        ];
+      };
+      inherit (nodes.edge) config;
+    in
+    {
+      expr = {
+        inherit (config.systemd.services.alloy.serviceConfig) LoadCredential;
+        inherit (config.contracts.services.alloy.inboxes.keys.received.time.chrony.key.copy) path;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        LoadCredential = [
+          "alloy_keys_time_chrony_key:/run/agenix/alloy_keys_time_chrony_key"
+          "alloy_password:/run/agenix/alloy_password"
+        ];
+        path = "/run/credentials/alloy.service/alloy_keys_time_chrony_key";
+        failures = [ ];
+      };
+    };
 
   testDynamicIdentityClaimReadsTheCredential = {
     expr =

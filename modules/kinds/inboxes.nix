@@ -20,9 +20,6 @@ let
         )
       ) (lib.groupBy (send: send.ref.service) byNode)
     ) (lib.groupBy (send: send.ref.node) sends);
-
-  # The entries of `received`, by node, service and then id, in a list.
-  entriesOf = received: lib.concatMap references.claimsOf (lib.attrValues received);
 in
 {
   name = "inboxes";
@@ -67,6 +64,28 @@ in
       sends = lib.filter (
         send: send.to.service == service && send.to.id == name && send.ref.kind == inbox.kind
       ) sendsHere;
+
+      # An inbox whose kind has no copies holds none, though it sets `copy`,
+      # which its check reports.
+      holdsCopies = inbox.copy != null && builtins.elem inbox.kind copyKinds;
+
+      # A copy is a secret claim of this service, so its owner and group
+      # follow this service's identity, placed by its own location.
+      copyType = lib.types.submoduleWith {
+        modules = [
+          (topConfig.contracts.internal.kinds.secrets.claim service)
+          {
+            options.location = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              readOnly = true;
+              description = ''
+                The names that place the copy within its node,
+                `[ <service> <inbox> <node> <sender service> <id> ]`.
+              '';
+            };
+          }
+        ];
+      };
     in
     {
       options = {
@@ -92,7 +111,8 @@ in
               inherit (send) ref;
               # The sent claim as its node's claim set holds it.
               inherit ((topConfig.contracts.lookup send.ref)) claim;
-              copy = null;
+              copy =
+                if holdsCopies then inbox.copies.${send.ref.node}.${send.ref.service}.${send.ref.id} else null;
             }) sends
           );
           defaultText = lib.literalMD "the claims sent here, while the contract is enabled";
@@ -108,13 +128,39 @@ in
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
           default = lib.sort (first: second: references.labelOf first < references.labelOf second) (
-            map (entry: entry.ref) (entriesOf inbox.received)
+            map (entry: entry.ref) (references.receivedOf inbox)
           );
           defaultText = lib.literalMD "the references of `received`, sorted by label";
           description = ''
             The references of `received`, sorted by their label
             `<node>:<kind>.<service>.<id>`, so it is empty whenever
             `received` is.
+          '';
+        };
+        # Held here rather than in a claim set, whose keys must never
+        # depend on other nodes, and lazy, so two nodes copying each
+        # other's secrets don't recurse.
+        copies = lib.mkOption {
+          type = lib.types.lazyAttrsOf (lib.types.lazyAttrsOf (lib.types.lazyAttrsOf copyType));
+          internal = true;
+          readOnly = true;
+          default = lib.optionalAttrs (receives && holdsCopies) (
+            nest (send: {
+              imports = [ inbox.copy ];
+              location = [
+                service
+                name
+                send.ref.node
+                send.ref.service
+                send.ref.id
+              ];
+              value.copied = send.ref;
+            }) sends
+          );
+          defaultText = lib.literalMD "a copy of each secret sent here, while `copy` is set";
+          description = ''
+            The copies the service holds of the secrets sent to the inbox,
+            as `<node>.<service>.<id>`, read through `received`.
           '';
         };
       };
