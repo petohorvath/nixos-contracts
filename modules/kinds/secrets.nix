@@ -107,7 +107,10 @@ in
         };
         generators = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          description = "The generators a secret's `generated` or `derived` value may name, such as `alnum`.";
+          description = ''
+            The generators a secret's `generated` or `derived` value may
+            name, such as `alnum`.
+          '';
           example = [
             "alnum"
             "hex"
