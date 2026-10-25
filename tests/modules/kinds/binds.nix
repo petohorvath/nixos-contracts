@@ -27,6 +27,7 @@ in
         "http"
       ];
       name = null;
+      sendTo = [ ];
       ref = {
         node = null;
         kind = "binds";

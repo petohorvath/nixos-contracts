@@ -53,6 +53,7 @@ in
         "data"
       ];
       name = null;
+      sendTo = [ ];
       ref = {
         node = null;
         kind = "mounts";

@@ -99,6 +99,7 @@ in
         database = "grafana_main";
         unit = null;
         label = "grafana/main";
+        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -118,6 +119,7 @@ in
         database = "vault";
         unit = "vaultwarden.service";
         label = "vaultwarden/main";
+        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -587,6 +589,61 @@ in
         }
       ]).contracts.claimSets.tokens.a.t.location;
     expectedError.msg = "tokens\\.t\\.location' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimTypeCannotDeclareTheSendTo = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens";
+          description = "Tokens.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.sendTo = lib.mkOption {
+                type = lib.types.str;
+                default = "mine";
+                description = "A sendTo of the kind's own.";
+              };
+            };
+        })
+        {
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens.a.t.sendTo;
+    expectedError.msg = "tokens\\.t\\.sendTo' .* already declared in .*mk-claim-kind\\.nix";
+  };
+
+  testClaimOfANewKindIsSentToAnInbox = {
+    expr =
+      builtins.attrNames
+        (evaluate [
+          databases
+          services
+          {
+            contracts = {
+              node = "db";
+              services.grafana.databases.main.sendTo = [
+                {
+                  node = "db";
+                  service = "backup";
+                  id = "databases";
+                }
+              ];
+              services.backup = {
+                enable = true;
+                identity.static.user = "backup";
+                inboxes.databases.kind = "databases";
+              };
+            };
+          }
+        ]).contracts.services.backup.inboxes.databases.received.db.grafana;
+    expected = [ "main" ];
   };
 
   testLocationIsReadOnly = {

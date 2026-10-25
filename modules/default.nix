@@ -13,6 +13,7 @@ let
     (mkKindModule ./kinds/binds.nix { inherit lib libnet; })
     (mkKindModule ./kinds/mounts.nix { inherit lib; })
     (mkKindModule ./kinds/secrets.nix { inherit lib; })
+    (mkKindModule ./kinds/inboxes.nix { inherit lib; })
   ];
 in
 {
@@ -20,5 +21,9 @@ in
   # however often it is imported.
   key = toString ./default.nix;
 
-  imports = [ ./core.nix ] ++ kinds;
+  imports = [
+    ./core.nix
+    ./sends.nix
+  ]
+  ++ kinds;
 }

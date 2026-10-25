@@ -9,7 +9,7 @@ This reference describes the public interface of nixos-contracts: its modules, o
 | `nixosModules.default`    | NixOS        | Forwarded from `contracts.failures` to NixOS `assertions` |
 | `modules.generic.default` | any          | Left in `contracts.failures` for the caller to read       |
 
-Both import the core and the three shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
+Both import the core and the four shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
 
 The [adapters](#adapters) and [`nixosModules.cross-config`](#nixosmodulescross-config) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several of them declares its options once.
 
@@ -103,6 +103,8 @@ Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
 
+A claim of every kind but inboxes also has a writable `sendTo` (list of [`lib.types.referenceTo "inboxes"`](#libtypesreferenceto), default `[ ]`): the [inboxes](#inboxes) it is sent to.
+
 ### Locations and names
 
 A claim's `location` places it within its node, and its `name` names it across the node collection ([ADR 0014](adr/0014-name-a-claim-by-its-location.md)):
@@ -129,6 +131,58 @@ crossConfig.contributions.store.example.influxdb.writers.${config.contracts.node
 ```
 
 A field that takes references of one kind, such as a secret's `value.copied`, has the type [`lib.types.referenceTo`](#libtypesreferenceto) of that kind, so a reference written by hand omits `kind`, and one of another kind fails as a type error at its definition.
+
+### Inboxes
+
+`contracts.services.<service>.inboxes.<id>`: a place where claims of one kind arrive from any node, the node itself included ([ADR 0015](adr/0015-carry-claims-between-nodes-through-inboxes.md)).
+
+| Field      | Type                                               | Default     |
+| ---------- | -------------------------------------------------- | ----------- |
+| `kind`     | the name of a claim kind                           | `"secrets"` |
+| `copy`     | null, or the settings of a copy of each secret     | `null`      |
+| `received` | read-only, `<node>.<service>.<id>` of what arrived | derived     |
+| `refs`     | read-only, the references of `received`, sorted    | derived     |
+
+A claim reaches an inbox when its `sendTo` names the inbox's node, service and id, as `{ node; service; id; }`. One claim may name several inboxes, on other nodes or its own:
+
+```nix
+# On the node logs: send loki's bind to nginx's upstreams on the node proxy
+contracts.services.loki.binds.http = {
+  port = 3100;
+  sendTo = [ { node = "proxy"; service = "nginx"; id = "upstreams"; } ];
+};
+
+# On the node proxy: take binds, and build an upstream from each
+contracts.services.nginx.inboxes.upstreams.kind = "binds";
+services.nginx.upstreams = lib.concatMapAttrs (
+  node: lib.concatMapAttrs (
+    service: lib.mapAttrs' (
+      id: entry: lib.nameValuePair "${node}_${service}_${id}" {
+        servers = lib.genAttrs entry.claim.bindpoints (_: { });
+      }
+    )
+  )
+) config.contracts.services.nginx.inboxes.upstreams.received;
+```
+
+Each node publishes what it sends, built from its own claim sets, and an inbox reads the sends meant for it from every node in [`contracts.nodes`](#contractsnodes) and from its own configuration. The sender writes nothing on the receiving node, and the receiver declares no option of its own for a relation. Only claims of enabled contracts are sent. Two nodes that send to each other evaluate without a cycle, as long as no claim's `sendTo` reads what its node received.
+
+`received` holds each claim sent to the inbox, by the sender's node, service and id, as `{ ref; claim; copy; }`:
+
+- `ref`: the sent claim's [reference](#references).
+- `claim`: the sent claim as its node's claim set holds it, such as a bind's `bindpoints` or a secret's `name`.
+- `copy`: the copy the receiving service holds of a sent secret, or null.
+
+An inbox receives only claims of its `kind`, and only while its contract is enabled and `contracts.node` is set, which every sent `ref` names. A claim that names one inbox twice arrives once.
+
+`refs` lists the references of `received`, sorted by their label `<node>:<kind>.<service>.<id>`, so it is in the same order on every evaluation and empty whenever `received` is. `-` sorts before `:`, so a sender on `beta-vm` comes before one on `beta`.
+
+Checks fail for a send on the sending node, naming the claim by its location and the inbox by its reference:
+
+- For each reason [`contracts.lookup`](#contractslookup-and-contractsresolve) gives for the inbox's reference: an unknown node, a node without nixos-contracts, or an inbox no enabled contract holds, such as ``nixos-contracts: secrets claim `telegraf.token` sends to `proxy:inboxes.nginx.client`: no enabled contract on `proxy` holds it.``
+- When the inbox takes another kind, naming both, such as ``nixos-contracts: binds claim `loki.http` sends to `proxy:inboxes.nginx.clients`, which takes `secrets`, not `binds`.``
+
+Checks also fail for an inbox whose `kind` is no claim kind of its node or is `inboxes`, and for an inbox of a kind other than secrets that sets `copy`.
 
 ### Binds
 
@@ -325,7 +379,7 @@ To use it without the flake, import the library directory with a caller-owned li
 : The description of the contract field.
 
 `claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `location`, `name` and `ref` on every claim, so a claim type cannot declare options with these names, and reads a claim's own `location` from `config.location`.
+: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `location`, `name` and `ref` on every claim, and `sendTo` on every claim of a kind other than inboxes, so a claim type cannot declare options with these names, and reads a claim's own `location` from `config.location`.
 
 `clash`
 : The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when no two claims of the kind can clash.

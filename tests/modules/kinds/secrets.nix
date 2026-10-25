@@ -83,6 +83,7 @@ in
       owner = "root";
       group = "chrony";
       value.provided = { };
+      sendTo = [ ];
       ref = {
         node = null;
         kind = "secrets";

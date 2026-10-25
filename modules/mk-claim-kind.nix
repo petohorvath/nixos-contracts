@@ -2,8 +2,8 @@
   Build a claim kind: a module that adds one kind of claim to every contract,
   folds the claims of enabled contracts into a read-only claim set by service
   and id, and checks that no two claims clash and that each passes the
-  kind's check rule. The shipped binds, mounts and secrets are built with
-  this function, so a new kind gets the same treatment.
+  kind's check rule. The shipped binds, mounts, secrets and inboxes are
+  built with this function, so a new kind gets the same treatment.
 
   # Inputs
 
@@ -28,9 +28,11 @@
     the claim's id. A value that follows from the identity, such as a file
     owner, is an option defaulting to it. The constructor declares five
     read-only options on every claim, `service`, `id`, its `location`
-    `[ <service> <id> ]`, its claim name `name` and its reference `ref`, so
-    a claim type cannot declare options with these names. A claim id, like
-    a service name, may contain only lowercase letters, digits and hyphens.
+    `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
+    and on every kind but inboxes the writable `sendTo`, the inboxes the
+    claim is sent to, so a claim type cannot declare options with these
+    names. A claim id, like a service name, may contain only lowercase
+    letters, digits and hyphens.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -117,6 +119,7 @@ else
   { config, lib, ... }:
   let
     topConfig = config;
+    contractTypes = import ./types.nix { inherit lib; };
 
     # The claims of enabled contracts, by service and id. Its keys come from
     # this configuration's contracts alone, and are checked as they are
@@ -282,6 +285,19 @@ else
                               The reference to this claim, naming
                               `contracts.node`, which no lookup resolves
                               while that is null.
+                            '';
+                          };
+                        }
+                        # An inbox is where claims arrive, so it is sent
+                        # nowhere.
+                        // lib.optionalAttrs (kindName != "inboxes") {
+                          sendTo = lib.mkOption {
+                            type = lib.types.listOf (contractTypes.referenceTo "inboxes");
+                            default = [ ];
+                            description = ''
+                              The inboxes the claim is sent to, each a
+                              reference `{ node; service; id; }`, on another
+                              node or on this one.
                             '';
                           };
                         };
