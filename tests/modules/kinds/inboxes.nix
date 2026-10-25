@@ -76,6 +76,21 @@ let
     inherit (entry) ref copy;
     inherit (entry.claim) name value;
   };
+
+  # An alloy password sent to nginx's clients.
+  alloy = service "alloy" { secrets.password.sendTo = [ clients ]; };
+  # Nginx deriving an htpasswd from the secrets its clients inbox received,
+  # and the names of the htpasswd's sources.
+  htpasswd =
+    { config, ... }:
+    {
+      contracts.services.nginx.secrets.htpasswd.value.derived = {
+        generator = "basic-auth";
+        from = config.contracts.services.nginx.inboxes.clients.refs;
+      };
+    };
+  sourceNamesOf =
+    config: map (source: source.claim.name) config.contracts.services.nginx.secrets.htpasswd.sources;
 in
 {
   testBindSentToAnotherNodeBuildsAnUpstreamThere = {
@@ -166,6 +181,109 @@ in
       (tokenOf "alpha")
       (tokenOf "beta-vm")
       (tokenOf "beta")
+    ];
+  };
+
+  # `beta-vm:…` sorts before `beta:…`, and the second collection defines
+  # alpha's services the other way round.
+  testSecretDerivedFromAnInboxsRefsHasASourcePerSentSecretInTheirOrder =
+    let
+      nodesWith =
+        alphaModules:
+        nodesOf {
+          alpha = alphaModules;
+          beta = [ (telegraf [ clients ]) ];
+          beta-vm = [ (telegraf [ clients ]) ];
+          proxy = [
+            nginx
+            htpasswd
+            (service "grafana" {
+              secrets.password.sendTo = [ (clients // { node = "proxy"; }) ];
+            })
+          ];
+        };
+      nodes = nodesWith [
+        (telegraf [ clients ])
+        alloy
+      ];
+      reordered = nodesWith [
+        alloy
+        (telegraf [ clients ])
+      ];
+    in
+    {
+      expr = {
+        sources = sourceNamesOf nodes.proxy.config;
+        reordered = sourceNamesOf reordered.proxy.config;
+        inherit (nodes.proxy.config.contracts) failures;
+      };
+      expected = {
+        sources = [
+          "alpha_alloy_password"
+          "alpha_telegraf_token"
+          "beta-vm_telegraf_token"
+          "beta_telegraf_token"
+          "proxy_grafana_password"
+        ];
+        reordered = [
+          "alpha_alloy_password"
+          "alpha_telegraf_token"
+          "beta-vm_telegraf_token"
+          "beta_telegraf_token"
+          "proxy_grafana_password"
+        ];
+        failures = [ ];
+      };
+    };
+
+  testAddingASenderAddsASourceWithoutChangingTheReceivingNode = {
+    expr =
+      map
+        (
+          senders:
+          sourceNamesOf
+            (nodesOf (
+              senders
+              // {
+                proxy = [
+                  nginx
+                  htpasswd
+                ];
+              }
+            )).proxy.config
+        )
+        [
+          { metrics = [ (telegraf [ clients ]) ]; }
+          {
+            metrics = [ (telegraf [ clients ]) ];
+            logs = [ alloy ];
+          }
+        ];
+    expected = [
+      [ "metrics_telegraf_token" ]
+      [
+        "logs_alloy_password"
+        "metrics_telegraf_token"
+      ]
+    ];
+  };
+
+  # A generator building a user per source from its name, as an htpasswd
+  # does, gets one user per node for one service and id sent from two.
+  testSecretsOfOneServiceSentFromTwoNodesHaveDistinctNames = {
+    expr =
+      sourceNamesOf
+        (nodesOf {
+          alpha = [ (telegraf [ clients ]) ];
+          beta = [ (telegraf [ clients ]) ];
+          proxy = [
+            nginx
+            htpasswd
+          ];
+        }).proxy.config;
+    expected = [
+      "alpha_telegraf_token"
+      "beta_telegraf_token"
     ];
   };
 

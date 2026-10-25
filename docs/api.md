@@ -177,6 +177,26 @@ An inbox receives only claims of its `kind`, and only while its contract is enab
 
 `refs` lists the references of `received`, sorted by their label `<node>:<kind>.<service>.<id>`, so it is in the same order on every evaluation and empty whenever `received` is. `-` sorts before `:`, so a sender on `beta-vm` comes before one on `beta`.
 
+An inbox with `copy = null` only collects references, and a [secret](#secrets) derived from its `refs` takes one source per secret sent to it, in the order of `refs`:
+
+```nix
+# On each client node: send the client's password to nginx's clients
+contracts.services.alloy.secrets.password.sendTo = [
+  { node = "proxy"; service = "nginx"; id = "clients"; }
+];
+
+# On the node proxy: an htpasswd the generator makes from every client's password
+contracts.services.nginx = {
+  inboxes.clients = { };
+  secrets.htpasswd.value.derived = {
+    generator = "basic-auth";
+    from = config.contracts.services.nginx.inboxes.clients.refs;
+  };
+};
+```
+
+A client added on another node adds a source with no change on the receiving node. Each source's `claim.name` joins the sender's node, service and id with `_`, so a generator that names a user after it gets one user per client, even when two nodes run the same service. A backend adapter finds each source's entry on the sender's node, as [agenix-rekey](#nixosmodulesagenix-rekey) does for its dependencies.
+
 Checks fail for a send on the sending node, naming the claim by its location and the inbox by its reference:
 
 - For each reason [`contracts.lookup`](#contractslookup-and-contractsresolve) gives for the inbox's reference: an unknown node, a node without nixos-contracts, or an inbox no enabled contract holds, such as ``nixos-contracts: secrets claim `telegraf.token` sends to `proxy:inboxes.nginx.client`: no enabled contract on `proxy` holds it.``
