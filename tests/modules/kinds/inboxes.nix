@@ -76,6 +76,110 @@ let
     inherit (entry) ref copy;
     inherit (entry.claim) name value;
   };
+
+  # Influxdb on the `store` node takes secrets in its writers and sends its
+  # bind to telegraf's outputs on the `metrics` node.
+  writers = {
+    node = "store";
+    service = "influxdb";
+    id = "writers";
+  };
+  outputs = {
+    node = "metrics";
+    service = "telegraf";
+    id = "outputs";
+  };
+  influxdb = service "influxdb" {
+    binds.http = {
+      port = 8086;
+      sendTo = [ outputs ];
+    };
+    inboxes.writers = { };
+  };
+  checkSendsIs = checkSends: { contracts = { inherit checkSends; }; };
+
+  # The nodes above, with telegraf's secrets built by `secretsOf` from its
+  # outputs inbox, under the send check on `metrics` when `checkSends`.
+  driftingNodes =
+    checkSends: secretsOf:
+    nodesOf {
+      store = [ influxdb ];
+      metrics = [
+        (checkSendsIs checkSends)
+        (
+          { config, ... }:
+          service "telegraf" {
+            inboxes.outputs.kind = "binds";
+            secrets = secretsOf config.contracts.services.telegraf.inboxes.outputs;
+          }
+        )
+      ];
+    };
+  driftThroughReceived = inbox: {
+    token.sendTo = lib.mapAttrsToList (node: _: writers // { inherit node; }) inbox.received;
+  };
+  driftThroughRefs = inbox: {
+    token.sendTo = map (ref: writers // { inherit (ref) node; }) inbox.refs;
+  };
+
+  # Nodes sending to others and to themselves, none depending on what it
+  # received, every node under the send check when `checkSends`.
+  fleetOf =
+    checkSends:
+    builtins.mapAttrs (_: modules: [ (checkSendsIs checkSends) ] ++ modules) {
+      metrics = [
+        (service "telegraf" {
+          secrets.token.sendTo = [
+            writers
+            clients
+          ];
+          inboxes.outputs.kind = "binds";
+        })
+      ];
+      store = [
+        influxdb
+        (telegraf [ writers ])
+        (loki [
+          upstreams
+          outputs
+        ])
+      ];
+      proxy = [
+        nginx
+        nginxUpstreams
+      ];
+    };
+
+  # What each node of a fleet sends, receives and fails, by node.
+  observedIn = builtins.mapAttrs (
+    _: node: {
+      sends = builtins.mapAttrs (_: builtins.mapAttrs (_: builtins.mapAttrs (_: claim: claim.sendTo))) (
+        removeAttrs node.config.contracts.claimSets [ "inboxes" ]
+      );
+      inboxes = builtins.mapAttrs (
+        _:
+        builtins.mapAttrs (
+          _: inbox: {
+            received = builtins.mapAttrs (
+              _:
+              builtins.mapAttrs (
+                _:
+                builtins.mapAttrs (
+                  _: entry: {
+                    inherit (entry) ref copy;
+                    inherit (entry.claim) name;
+                  }
+                )
+              )
+            ) inbox.received;
+            inherit (inbox) refs;
+          }
+        )
+      ) node.config.contracts.claimSets.inboxes;
+      upstreams = node.config.upstreams or { };
+      inherit (node.config.contracts) failures;
+    }
+  );
 in
 {
   testBindSentToAnotherNodeBuildsAnUpstreamThere = {
@@ -388,5 +492,55 @@ in
         })
       ]).contracts.services.nginx.inboxes.upstreams.kind;
     expectedError.msg = "inboxes\\.upstreams\\.sendTo' does not exist";
+  };
+
+  testSendCheckNamesAClaimWhoseSendToDependsOnWhatItsNodeReceived = {
+    expr = failuresOf (driftingNodes true driftThroughReceived).metrics;
+    expected = [
+      "nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
+    ];
+  };
+
+  # One claim exists only once the node has received, the other only before.
+  testSendCheckNamesAClaimWhoseExistenceDependsOnWhatItsNodeReceived = {
+    expr = map (secretsOf: failuresOf (driftingNodes true secretsOf).metrics) [
+      (
+        outputs:
+        lib.mapAttrs' (node: _: lib.nameValuePair "echo-${node}" { sendTo = [ writers ]; }) outputs.received
+      )
+      (outputs: lib.optionalAttrs (outputs.received == { }) { standby.sendTo = [ writers ]; })
+    ];
+    expected = [
+      [
+        "nixos-contracts: secrets claim `telegraf.echo-store` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
+      ]
+      [
+        "nixos-contracts: secrets claim `telegraf.standby` sends to nothing once its node has received claims, but to `store:inboxes.influxdb.writers` before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
+      ]
+    ];
+  };
+
+  testSendCheckNamesAClaimWhoseSendToDependsOnTheRefsItsNodeReceived = {
+    expr = failuresOf (driftingNodes true driftThroughRefs).metrics;
+    expected = [
+      "nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
+    ];
+  };
+
+  # Without the send check, a send that depends on what its node received
+  # recurses, as documented for `contracts.checkSends`.
+  testSendDependingOnWhatItsNodeReceivedRecursesWithoutTheSendCheck = {
+    expr = failuresOf (driftingNodes false driftThroughReceived).metrics;
+    expectedError.msg = "infinite recursion encountered";
+  };
+
+  testSendDependingOnTheRefsItsNodeReceivedRecursesWithoutTheSendCheck = {
+    expr = failuresOf (driftingNodes false driftThroughRefs).metrics;
+    expectedError.msg = "infinite recursion encountered";
+  };
+
+  testSendCheckChangesNoSendAndNothingReceivedWithoutADependence = {
+    expr = observedIn (nodesOf (fleetOf true));
+    expected = observedIn (nodesOf (fleetOf false));
   };
 }
