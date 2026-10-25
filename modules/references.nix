@@ -1,6 +1,7 @@
-# How a claim is named and placed, and how a reference
-# `{ node; kind; service; id; }` reads its node and claim, shared by the
-# core's `contracts.lookup`, the claim kinds and the adapters.
+# How a claim is named and placed, how a configuration's claims and
+# copies are listed, and how a reference `{ node; kind; service; id; }`
+# reads its node and claim, shared by the core's `contracts.lookup`, the
+# claim kinds and the adapters.
 rec {
   /*
     `name` when it is a name, as service names, claim ids and node
