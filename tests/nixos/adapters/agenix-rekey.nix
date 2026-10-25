@@ -18,7 +18,7 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns.generate = "base64";
+          ddns.value.generated = "base64";
           token = { };
         };
       };
@@ -81,7 +81,7 @@ let
   telegraf.contracts.services.telegraf = {
     enable = true;
     identity.static.user = "telegraf";
-    secrets.token.generate = "alnum";
+    secrets.token.value.generated = "alnum";
   };
   influxdb = secrets: {
     contracts.services.influxdb = {
@@ -149,7 +149,7 @@ in
     expected = [ "kea-token" ];
   };
 
-  testNodeRemovesTheGeneratorOfADefaultClaim = {
+  testNodeWritesProvidedOverADefaultGenerated = {
     expr =
       (configuration [
         values
@@ -157,10 +157,10 @@ in
           contracts.services.kea = contractsLib.mkDefaultContract {
             enable = true;
             identity.static.user = "kea";
-            secrets.ddns.generate = "alnum";
+            secrets.ddns.value.generated = "alnum";
           };
         }
-        { contracts.services.kea.secrets.ddns.generate = null; }
+        { contracts.services.kea.secrets.ddns.value.provided = { }; }
       ]).age.secrets.kea-ddns.generator;
     expected = null;
   };
@@ -172,7 +172,7 @@ in
         (failures [
           keaWithoutValues
           values
-          { contracts.services.kea.secrets.ddns.generate = "alnm"; }
+          { contracts.services.kea.secrets.ddns.value.generated = "alnm"; }
         ]);
     expected = [ true ];
   };
@@ -217,7 +217,7 @@ in
   testSecretWithoutAFileFailsItsCheck = {
     expr = failures [
       keaWithoutValues
-      { contracts.services.kea.secrets.ddns.generate = "base64"; }
+      { contracts.services.kea.secrets.ddns.value.generated = "base64"; }
     ];
     expected = [
       "nixos-contracts: secret `kea-ddns` has no encrypted file: set its `age.secrets.kea-ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
@@ -293,7 +293,7 @@ in
         ((nodesOf {
           store = [
             (influxdb {
-              origin.generate = "alnum";
+              origin.value.generated = "alnum";
               copy.from = [
                 {
                   node = "store";
@@ -327,9 +327,9 @@ in
           store = [
             { age.generators.basic-auth = _: "true"; }
             (influxdb {
-              local.generate = "alnum";
+              local.value.generated = "alnum";
               hashes = {
-                generate = "basic-auth";
+                value.generated = "basic-auth";
                 from = [
                   metricsToken
                   {

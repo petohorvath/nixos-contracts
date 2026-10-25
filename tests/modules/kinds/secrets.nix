@@ -1,4 +1,4 @@
-{ contracts }:
+{ contracts, contractsLib }:
 let
   inherit (contracts) evaluate failures nodesOf;
 
@@ -43,7 +43,7 @@ let
 
   # A telegraf service generating its token, and a store service copying
   # the secrets its references name.
-  telegraf = service "telegraf" { static.user = "telegraf"; } { token.generate = "alnum"; };
+  telegraf = service "telegraf" { static.user = "telegraf"; } { token.value.generated = "alnum"; };
   store = service "influxdb" { static.user = "influxdb2"; };
   remoteToken = {
     node = "metrics";
@@ -74,7 +74,7 @@ in
       mode = "0440";
       owner = "root";
       group = "chrony";
-      generate = null;
+      value.provided = { };
       ref = {
         node = null;
         kind = "secrets";
@@ -135,8 +135,41 @@ in
   };
 
   testSecretNamesTheGeneratorOfItsValue = {
-    expr = (secretOf [ ] { static.user = "svc"; } { generate = "alnum"; }).generate;
-    expected = "alnum";
+    expr = (secretOf [ ] { static.user = "svc"; } { value.generated = "alnum"; }).value;
+    expected.generated = "alnum";
+  };
+
+  testNodeWritesProvidedOverADefaultGenerated = {
+    expr =
+      (evaluate [
+        {
+          contracts.services.svc = contractsLib.mkDefaultContract {
+            enable = true;
+            identity.static.user = "svc";
+            secrets.key.value.generated = "alnum";
+          };
+        }
+        { contracts.services.svc.secrets.key.value.provided = { }; }
+      ]).contracts.claimSets.secrets.svc-key.value;
+    expected.provided = { };
+  };
+
+  testProvidedValueTakesNoOptions = {
+    expr = (secretOf [ ] { static.user = "svc"; } { value.provided.length = 32; }).value;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.provided\\.length' does not exist";
+  };
+
+  testGeneratedAndProvidedAtOnePriorityFail = {
+    expr =
+      (secretOf [
+        { contracts.services.svc.secrets.key.value.provided = { }; }
+      ] { static.user = "svc"; } { value.generated = "alnum"; }).value;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value` is defined both as `generated` and `provided`";
+  };
+
+  testMisspeltValueTagIsATypeError = {
+    expr = (secretOf [ ] { static.user = "svc"; } { value.generate = "alnum"; }).value;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value' is not of type `attribute-tagged union with choices: generated, provided'";
   };
 
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck =
@@ -148,7 +181,7 @@ in
           "hex"
         ];
       };
-      generating = generate: service "svc" { static.user = "svc"; } { key.generate = generate; };
+      generating = generator: service "svc" { static.user = "svc"; } { key.value.generated = generator; };
     in
     {
       expr = {
@@ -243,12 +276,12 @@ in
         ];
         generated = failures [
           here
-          (referencing { generate = "basic-auth"; })
+          (referencing { value.generated = "basic-auth"; })
         ];
       };
       expected = {
         copy = [
-          "nixos-contracts: secrets claim `svc-key`: it references several secrets but has no `generate`; a copy references one."
+          "nixos-contracts: secrets claim `svc-key`: it references several secrets but its value is not `generated`; a copy references one."
         ];
         generated = [ ];
       };
@@ -412,7 +445,7 @@ in
         metrics = [ telegraf ];
         store = [
           (store {
-            origin.generate = "alnum";
+            origin.value.generated = "alnum";
             remote.from = [ remoteToken ];
             local.from = [ (storeSecret "origin") ];
           })
@@ -439,7 +472,7 @@ in
       map (reference: reference.claim.name)
         (evaluate [
           onStore
-          (store { origin.generate = "alnum"; })
+          (store { origin.value.generated = "alnum"; })
           (
             { config, ... }:
             {
@@ -454,7 +487,7 @@ in
 
   testReferenceWithoutANodeIdentityFailsItsCheck = {
     expr = failures [
-      (store { origin.generate = "alnum"; })
+      (store { origin.value.generated = "alnum"; })
       (
         { config, ... }:
         {
@@ -473,7 +506,7 @@ in
     expr = failures [
       onStore
       (store {
-        origin.generate = "alnum";
+        origin.value.generated = "alnum";
         copy.from = [ (storeSecret "origin" // { node = null; }) ];
       })
     ];
@@ -542,7 +575,7 @@ in
       onStore
       (store {
         hashes = {
-          generate = "basic-auth";
+          value.generated = "basic-auth";
           from = [
             (storeSecret "a")
             (storeSecret "b")
@@ -560,7 +593,7 @@ in
     expr = failures [
       onStore
       (store {
-        origin.generate = "alnum";
+        origin.value.generated = "alnum";
         copy.from = [ (storeSecret "origin") ];
         chained.from = [ (storeSecret "copy") ];
       })

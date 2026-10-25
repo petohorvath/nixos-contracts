@@ -39,7 +39,7 @@ in
     kinds = {
       binds = import ./modules/kinds/binds.nix { inherit contracts; };
       mounts = import ./modules/kinds/mounts.nix { inherit contracts; };
-      secrets = import ./modules/kinds/secrets.nix { inherit contracts; };
+      secrets = import ./modules/kinds/secrets.nix { inherit contracts contractsLib; };
     };
   };
   integration.examples = import ./integration/examples.nix {

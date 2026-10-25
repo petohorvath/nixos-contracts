@@ -30,8 +30,8 @@ in
       inherit (config.services.influxdb2) enable;
       identity.static.user = "influxdb2";
       secrets = {
-        admin-password.generate = "alnum";
-        admin-token.generate = "alnum";
+        admin-password.value.generated = "alnum";
+        admin-token.value.generated = "alnum";
       }
       // lib.mapAttrs' (
         writer: reference: lib.nameValuePair "writer-${writer}" { from = [ reference ]; }

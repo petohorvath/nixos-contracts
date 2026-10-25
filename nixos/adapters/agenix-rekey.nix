@@ -13,7 +13,10 @@
 let
   secrets = config.contracts.claimSets.secrets;
 
-  isCopy = secret: secret.generate == null && secret.from != [ ];
+  # The generator of a `generated` value, or null for a `provided` one.
+  generatorOf = secret: secret.value.generated or null;
+
+  isCopy = secret: generatorOf secret == null && secret.from != [ ];
 
   inherit (import ../../modules/references.nix) labelOf nodeConfigOrNull;
 
@@ -40,14 +43,14 @@ in
   config = {
     /*
       The script alone is a default, so an entry adding dependencies keeps
-      it; the claim's `generate = null` is what removes the generator. The
-      entries' names come from the claim set alone: one depending on another
-      node's entries would recurse through `age.secrets`.
+      it; the claim's `value.provided = { }` is what removes the generator.
+      The entries' names come from the claim set alone: one depending on
+      another node's entries would recurse through `age.secrets`.
     */
     age.secrets = lib.mapAttrs (_: secret: {
       inherit (secret) group mode owner;
-      generator = lib.mkIf (secret.generate != null) {
-        script = lib.mkDefault secret.generate;
+      generator = lib.mkIf (generatorOf secret != null) {
+        script = lib.mkDefault (generatorOf secret);
         dependencies = lib.mkIf (secret.from != [ ]) (
           lib.filter (entry: entry != null) (map entryOrNull secret.referenced)
         );

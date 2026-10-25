@@ -2,7 +2,8 @@
 # runtime and must keep private.
 { lib }:
 let
-  referenceType = (import ../types.nix { inherit lib; }).referenceTo "secrets";
+  contractTypes = import ../types.nix { inherit lib; };
+  referenceType = contractTypes.referenceTo "secrets";
   # References resolve through the lookup every kind shares; `from` adds
   # only its own rules.
   inherit (import ../references.nix) labelOf lookup;
@@ -81,8 +82,8 @@ in
         The secret backend: where it installs a secret and which
         generators it provides. Set by a backend adapter, such as
         `nixosModules.agenix-rekey`; null when none is imported, which
-        leaves `generate` unchecked and fails reading a secret's location.
-        A node does not set it.
+        leaves a `generated` value unchecked and fails reading a secret's
+        location. A node does not set it.
       '';
       options = {
         location = lib.mkOption {
@@ -96,7 +97,7 @@ in
         };
         generators = lib.mkOption {
           type = lib.types.listOf lib.types.str;
-          description = "The generators a secret's `generate` may name, such as `alnum`.";
+          description = "The generators a secret's `generated` value may name, such as `alnum`.";
           example = [
             "alnum"
             "hex"
@@ -130,20 +131,19 @@ in
     }:
     let
       inherit (settings) backend;
+      generator = claim.value.generated or null;
       # A dynamic identity's user exists only while its unit runs, so it
       # reads a secret the backend installs only through its shared group.
       claimReason =
         if identity.unit != null && !claim.delivered && claim.group != identity.group then
           "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
-        else if
-          claim.generate != null && backend != null && !builtins.elem claim.generate backend.generators
-        then
-          "the secret backend provides no generator `${claim.generate}`"
+        else if generator != null && backend != null && !builtins.elem generator backend.generators then
+          "the secret backend provides no generator `${generator}`"
           +
             lib.optionalString (backend.generators != [ ])
-              "; name one of ${lib.concatMapStringsSep ", " (generator: "`${generator}`") backend.generators}"
-        else if claim.generate == null && builtins.length claim.from > 1 then
-          "it references several secrets but has no `generate`; a copy references one"
+              "; name one of ${lib.concatMapStringsSep ", " (name: "`${name}`") backend.generators}"
+        else if generator == null && builtins.length claim.from > 1 then
+          "it references several secrets but its value is not `generated`; a copy references one"
         else
           null;
     in
@@ -182,16 +182,34 @@ in
           defaultText = lib.literalMD "the identity's group, or `root` when it has none";
           description = "The group of the installed secret.";
         };
-        generate = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
+        value = lib.mkOption {
+          type = contractTypes.tag {
+            provided = lib.mkOption {
+              type = lib.types.submodule { };
+              description = ''
+                A value a person or another party provides, set on the
+                backend.
+              '';
+            };
+            generated = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                The generator that makes the value, such as `alnum`, when
+                the service makes its own value. A backend adapter turns it
+                into the backend's generator.
+              '';
+              example = "alnum";
+            };
+          };
+          default.provided = { };
           description = ''
-            The generator that makes the secret's value, such as `alnum`,
-            when the service makes its own value; null when a person or
-            another party provides it. A backend adapter turns it into the
-            backend's generator.
+            Where the secret's value comes from: `provided = { }`, the
+            default, when a person or another party provides it, or
+            `generated = "<generator>"` when the service makes it. A node
+            switches a module's default-priority tag by writing another at
+            normal priority.
           '';
-          example = "alnum";
+          example.generated = "alnum";
         };
         from = lib.mkOption {
           type = lib.types.listOf referenceType;
@@ -199,11 +217,11 @@ in
           description = ''
             The secrets the value comes from, each a reference
             `{ node; service; id; }`, such as another secret's `ref`.
-            Without `generate`, the secret is a copy of the one secret it
-            references; with it, the generator makes the value from the
-            secrets it references. Each reference names `contracts.node` or
-            a node in `contracts.nodes`, and the core resolves it into
-            `referenced`.
+            With a `provided` value, the secret is a copy of the one secret
+            it references; with a `generated` one, the generator makes the
+            value from the secrets it references. Each reference names
+            `contracts.node` or a node in `contracts.nodes`, and the core
+            resolves it into `referenced`.
           '';
           example = [
             {
