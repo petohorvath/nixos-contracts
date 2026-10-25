@@ -112,7 +112,9 @@ in
 
     internal.sends = lib.mkOption {
       # Lazy, so a node reading what another node sends it forces no other
-      # node's sends, and two nodes sending to each other don't recurse.
+      # node's entry. `attrsOf` would force only each entry's list, which
+      # `groupBy` builds with the keys, so it would not recurse either and
+      # no test tells them apart.
       type = lib.types.lazyAttrsOf lib.types.raw;
       internal = true;
       readOnly = true;

@@ -127,6 +127,10 @@ in
           '';
         };
         received = lib.mkOption {
+          # Lazy, so reading one received claim forces no other. `attrsOf`
+          # would force only each entry's attribute set, which reads no
+          # node, so it would not recurse either and no test tells them
+          # apart.
           type = lib.types.lazyAttrsOf (lib.types.lazyAttrsOf (lib.types.lazyAttrsOf lib.types.raw));
           readOnly = true;
           default = lib.optionalAttrs receives (
@@ -161,8 +165,9 @@ in
           '';
         };
         # Held here rather than in a claim set, whose keys must never
-        # depend on other nodes, and lazy, so two nodes copying each
-        # other's secrets don't recurse.
+        # depend on other nodes. Lazy, as `received` is, so reading one
+        # copy merges no other; `attrsOf` would force only each copy's
+        # settings module, so it would not recurse either.
         copies = lib.mkOption {
           type = lib.types.lazyAttrsOf (lib.types.lazyAttrsOf (lib.types.lazyAttrsOf copyType));
           internal = true;
