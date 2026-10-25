@@ -34,6 +34,7 @@ contracts.claimSets.<kind>.<service>.<id>    read-only
 contracts.node                               this configuration's node identity
 contracts.nodes.<node>                       the node collection
 contracts.lookup, contracts.resolve          read-only, functions of a reference
+contracts.checkSends                         whether to check that sends don't depend on what arrived
 contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
@@ -78,6 +79,14 @@ Read-only functions of a [reference](#references) that find the claim it names, 
 ```nix
 port = (config.contracts.resolve backend.bind).port;
 ```
+
+### `contracts.checkSends`
+
+Whether to check that what this node sends doesn't depend on what its [inboxes](#inboxes) received (bool, default `false`). A claim whose `sendTo`, or whose existence, depends on an inbox's `received` or `refs` makes a cycle: the inbox reads the node's sends, which read the claim, which reads the inbox. Without the check, such a configuration fails to evaluate with `infinite recursion encountered`, naming no claim.
+
+With the check, the node is evaluated a second time with `extendModules`, with every inbox's `received` empty, and with it every `refs` and copy, and the node publishes the sends of that evaluation. A check fails for each claim that sends to other inboxes in the two evaluations, such as ``nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`.`` When no send depends on what arrived, the sends, `received`, `refs` and copies of every node are those of the default mode, so the check changes nothing a configuration builds.
+
+Each node with the check is evaluated twice. On six nodes of the prototype, evaluation took about a third more CPU time. Turn it on where that cost is paid once, such as in CI, so a send that depends on what arrived is named before it ships, or while diagnosing an infinite recursion, and leave it off where evaluation time matters.
 
 ### `contracts.kinds.<kind>`
 
@@ -166,7 +175,7 @@ services.nginx.upstreams = lib.concatMapAttrs (
 ) config.contracts.services.nginx.inboxes.upstreams.received;
 ```
 
-Each node publishes what it sends, built from its own claim sets, and an inbox reads the sends meant for it from every node in [`contracts.nodes`](#contractsnodes) and from its own configuration. The sender writes nothing on the receiving node, and the receiver declares no option of its own for a relation. Only claims of enabled contracts are sent. Two nodes that send to each other evaluate without a cycle, as long as no claim's `sendTo` reads what its node received.
+Each node publishes what it sends, built from its own claim sets, and an inbox reads the sends meant for it from every node in [`contracts.nodes`](#contractsnodes) and from its own configuration. The sender writes nothing on the receiving node, and the receiver declares no option of its own for a relation. Only claims of enabled contracts are sent. Two nodes that send to each other evaluate without a cycle, as long as no claim's `sendTo` or existence reads what its node received. One that does recurses, and [`contracts.checkSends`](#contractschecksends) names it.
 
 `received` holds each claim sent to the inbox, by the sender's node, service and id, as `{ ref; claim; copy; }`:
 
@@ -177,6 +186,26 @@ Each node publishes what it sends, built from its own claim sets, and an inbox r
 An inbox receives only claims of its `kind`, and only while its contract is enabled and `contracts.node` is set, which every sent `ref` names. A claim that names one inbox twice arrives once.
 
 `refs` lists the references of `received`, sorted by their label `<node>:<kind>.<service>.<id>`, so it is in the same order on every evaluation and empty whenever `received` is. `-` sorts before `:`, so a sender on `beta-vm` comes before one on `beta`.
+
+An inbox with `copy = null` only collects references, and a [secret](#secrets) derived from its `refs` takes one source per secret sent to it, in the order of `refs`:
+
+```nix
+# On each client node: send the client's password to nginx's clients
+contracts.services.alloy.secrets.password.sendTo = [
+  { node = "proxy"; service = "nginx"; id = "clients"; }
+];
+
+# On the node proxy: an htpasswd the generator makes from every client's password
+contracts.services.nginx = {
+  inboxes.clients = { };
+  secrets.htpasswd.value.derived = {
+    generator = "basic-auth";
+    from = config.contracts.services.nginx.inboxes.clients.refs;
+  };
+};
+```
+
+A client added on another node adds a source with no change on the receiving node. Each source's `claim.name` joins the sender's node, service and id with `_`, so a generator that names a user after it gets one user per client, even when two nodes run the same service. A backend adapter finds each source's entry on the sender's node, as [agenix-rekey](#nixosmodulesagenix-rekey) does for its dependencies.
 
 Checks fail for a send on the sending node, naming the claim by its location and the inbox by its reference:
 
