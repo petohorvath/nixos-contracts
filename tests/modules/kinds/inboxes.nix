@@ -1,98 +1,30 @@
 { contracts, lib }:
 let
   inherit (contracts) evaluate failures nodesOf;
+  inherit (import ../../fixtures/inboxes.nix)
+    service
+    upstreams
+    clients
+    nginx
+    loki
+    nginxUpstreams
+    receivedBy
+    failuresOf
+    telegraf
+    tokenOf
+    writers
+    outputs
+    copyingInfluxdb
+    ;
 
-  service = name: claims: {
-    contracts.services.${name} = {
-      enable = true;
-      identity.static.user = name;
-    }
-    // claims;
-  };
-
-  # Inboxes of nginx on the `proxy` node: `upstreams` takes binds and
-  # `clients` takes secrets.
-  upstreams = {
-    node = "proxy";
-    service = "nginx";
-    id = "upstreams";
-  };
-  clients = upstreams // {
-    id = "clients";
-  };
-  nginx = service "nginx" {
-    inboxes = {
-      upstreams.kind = "binds";
-      clients = { };
-    };
-  };
-
-  # A loki bind sent to nginx's upstreams.
-  loki =
-    sendTo:
-    service "loki" {
-      binds.http = {
-        port = 3100;
-        addresses = "10.0.0.2";
-        inherit sendTo;
-      };
-    };
-
-  # An upstream per received bind, as a service module builds it.
-  nginxUpstreams =
-    { config, lib, ... }:
-    {
-      options.upstreams = lib.mkOption { type = lib.types.attrsOf (lib.types.listOf lib.types.str); };
-      config.upstreams = lib.concatMapAttrs (
-        node:
-        lib.concatMapAttrs (
-          sender:
-          lib.mapAttrs' (id: entry: lib.nameValuePair "${node}_${sender}_${id}" entry.claim.bindpoints)
-        )
-      ) config.contracts.services.nginx.inboxes.upstreams.received;
-    };
-
-  receivedBy = config: inbox: config.contracts.services.nginx.inboxes.${inbox}.received;
   refsOf = config: inbox: config.contracts.services.nginx.inboxes.${inbox}.refs;
-  failuresOf = node: node.config.contracts.failures;
 
-  # A telegraf token sent to nginx's clients.
-  telegraf =
-    sendTo:
-    service "telegraf" {
-      secrets.token = {
-        value.generated = "alnum";
-        inherit sendTo;
-      };
-    };
-  tokenOf = node: {
-    inherit node;
-    kind = "secrets";
-    service = "telegraf";
-    id = "token";
-  };
   # What a test reads of a received entry.
   entryOf = entry: {
     inherit (entry) ref copy;
     inherit (entry.claim) name value;
   };
 
-  # Influxdb on the `store` node takes secrets in its writers and sends its
-  # bind to telegraf's outputs on the `metrics` node.
-  writers = {
-    node = "store";
-    service = "influxdb";
-    id = "writers";
-  };
-  # Influxdb holding a copy of each token its writers receive, with the
-  # settings `copy`.
-  copyingInfluxdb = identity: copy: {
-    contracts.services.influxdb = {
-      enable = true;
-      inherit identity;
-      inboxes.writers = { inherit copy; };
-    };
-  };
   # A backend naming a secret by its location joined with `_`, with one
   # generator.
   backend.contracts.kinds.secrets.backend = {
@@ -111,102 +43,6 @@ let
       ;
     hasRefOrName = copy ? ref || copy ? name;
   };
-  outputs = {
-    node = "metrics";
-    service = "telegraf";
-    id = "outputs";
-  };
-  influxdb = service "influxdb" {
-    binds.http = {
-      port = 8086;
-      sendTo = [ outputs ];
-    };
-    inboxes.writers = { };
-  };
-  checkSendsIs = checkSends: { contracts = { inherit checkSends; }; };
-
-  # The nodes above, with telegraf's secrets built by `secretsOf` from its
-  # outputs inbox, under the send check on `metrics` when `checkSends`.
-  driftingNodes =
-    checkSends: secretsOf:
-    nodesOf {
-      store = [ influxdb ];
-      metrics = [
-        (checkSendsIs checkSends)
-        (
-          { config, ... }:
-          service "telegraf" {
-            inboxes.outputs.kind = "binds";
-            secrets = secretsOf config.contracts.services.telegraf.inboxes.outputs;
-          }
-        )
-      ];
-    };
-  driftThroughReceived = inbox: {
-    token.sendTo = lib.mapAttrsToList (node: _: writers // { inherit node; }) inbox.received;
-  };
-  driftThroughRefs = inbox: {
-    token.sendTo = map (ref: writers // { inherit (ref) node; }) inbox.refs;
-  };
-
-  # Nodes sending to others and to themselves, none depending on what it
-  # received, every node under the send check when `checkSends`.
-  fleetOf =
-    checkSends:
-    builtins.mapAttrs (_: modules: [ (checkSendsIs checkSends) ] ++ modules) {
-      metrics = [
-        (service "telegraf" {
-          secrets.token.sendTo = [
-            writers
-            clients
-          ];
-          inboxes.outputs.kind = "binds";
-        })
-      ];
-      store = [
-        influxdb
-        (telegraf [ writers ])
-        (loki [
-          upstreams
-          outputs
-        ])
-      ];
-      proxy = [
-        nginx
-        nginxUpstreams
-      ];
-    };
-
-  # What each node of a fleet sends, receives and fails, by node.
-  observedIn = builtins.mapAttrs (
-    _: node: {
-      sends = builtins.mapAttrs (_: builtins.mapAttrs (_: builtins.mapAttrs (_: claim: claim.sendTo))) (
-        removeAttrs node.config.contracts.claimSets [ "inboxes" ]
-      );
-      inboxes = builtins.mapAttrs (
-        _:
-        builtins.mapAttrs (
-          _: inbox: {
-            received = builtins.mapAttrs (
-              _:
-              builtins.mapAttrs (
-                _:
-                builtins.mapAttrs (
-                  _: entry: {
-                    inherit (entry) ref copy;
-                    inherit (entry.claim) name;
-                  }
-                )
-              )
-            ) inbox.received;
-            inherit (inbox) refs;
-          }
-        )
-      ) node.config.contracts.claimSets.inboxes;
-      upstreams = node.config.upstreams or { };
-      inherit (node.config.contracts) failures;
-    }
-  );
 
   # An alloy password sent to nginx's clients.
   alloy = service "alloy" { secrets.password.sendTo = [ clients ]; };
@@ -436,27 +272,6 @@ in
     };
   };
 
-  testDisabledSendingContractSendsNothing =
-    let
-      nodes = nodesOf {
-        metrics = [
-          (telegraf [ clients ])
-          { contracts.services.telegraf.enable = lib.mkForce false; }
-        ];
-        proxy = [ nginx ];
-      };
-    in
-    {
-      expr = {
-        received = receivedBy nodes.proxy.config "clients";
-        failures = failuresOf nodes.metrics;
-      };
-      expected = {
-        received = { };
-        failures = [ ];
-      };
-    };
-
   testDisabledReceivingContractShowsNothingReceived =
     let
       nodes = nodesOf {
@@ -482,60 +297,6 @@ in
       };
     };
 
-  # Telegraf sends its token to the store's influxdb, which sends its bind
-  # to telegraf's outputs.
-  testNodesSendingToEachOtherEvaluateWithoutACycle =
-    let
-      nodes = nodesOf {
-        metrics = [
-          (service "telegraf" {
-            secrets.token.sendTo = [
-              {
-                node = "store";
-                service = "influxdb";
-                id = "writers";
-              }
-            ];
-            inboxes.outputs.kind = "binds";
-          })
-        ];
-        store = [
-          (service "influxdb" {
-            binds.http = {
-              port = 8086;
-              sendTo = [
-                {
-                  node = "metrics";
-                  service = "telegraf";
-                  id = "outputs";
-                }
-              ];
-            };
-            inboxes.writers = { };
-          })
-        ];
-      };
-      inboxesOf = node: nodes.${node}.config.contracts.claimSets.inboxes;
-    in
-    {
-      expr = {
-        outputs = (inboxesOf "metrics").telegraf.outputs.received.store.influxdb.http.claim.bindpoints;
-        writers = (inboxesOf "store").influxdb.writers.refs;
-        failures = map failuresOf [
-          nodes.metrics
-          nodes.store
-        ];
-      };
-      expected = {
-        outputs = [ "0.0.0.0:8086" ];
-        writers = [ (tokenOf "metrics") ];
-        failures = [
-          [ ]
-          [ ]
-        ];
-      };
-    };
-
   # Telegraf sends its token to influxdb's writers, and influxdb its own
   # token to telegraf's outputs, each holding a copy of what it receives.
   testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
@@ -557,13 +318,7 @@ in
           {
             contracts.services.influxdb.secrets.token = {
               value.generated = "alnum";
-              sendTo = [
-                {
-                  node = "metrics";
-                  service = "telegraf";
-                  id = "outputs";
-                }
-              ];
+              sendTo = [ outputs ];
             };
           }
         ];
@@ -586,68 +341,6 @@ in
           [ ]
           [ ]
         ];
-      };
-    };
-
-  testSendThatDoesNotResolveFailsACheckOnTheSendingNode = {
-    expr =
-      map
-        (
-          case:
-          failuresOf
-            (nodesOf {
-              metrics = [ (telegraf [ case.to ]) ] ++ case.modules;
-              proxy = [ nginx ];
-            }).metrics
-        )
-        [
-          {
-            to = clients // {
-              node = "nowhere";
-            };
-            modules = [ ];
-          }
-          {
-            to = clients;
-            modules = [ { contracts.nodes.proxy = lib.mkForce { config = { }; }; } ];
-          }
-          {
-            to = clients // {
-              id = "client";
-            };
-            modules = [ ];
-          }
-        ];
-    expected = [
-      [
-        "nixos-contracts: secrets claim `telegraf.token` sends to `nowhere:inboxes.nginx.clients`: node `nowhere` is not in `contracts.nodes`."
-      ]
-      [
-        "nixos-contracts: secrets claim `telegraf.token` sends to `proxy:inboxes.nginx.clients`: node `proxy` imports no nixos-contracts module."
-      ]
-      [
-        "nixos-contracts: secrets claim `telegraf.token` sends to `proxy:inboxes.nginx.client`: no enabled contract on `proxy` holds it."
-      ]
-    ];
-  };
-
-  testClaimSentToAnInboxOfAnotherKindFailsACheckNamingBoth =
-    let
-      nodes = nodesOf {
-        logs = [ (loki [ clients ]) ];
-        proxy = [ nginx ];
-      };
-    in
-    {
-      expr = {
-        failures = failuresOf nodes.logs;
-        received = receivedBy nodes.proxy.config "clients";
-      };
-      expected = {
-        failures = [
-          "nixos-contracts: binds claim `loki.http` sends to `proxy:inboxes.nginx.clients`, which takes `secrets`, not `binds`."
-        ];
-        received = { };
       };
     };
 
@@ -749,52 +442,6 @@ in
     expectedError.msg = "Did you mean `[^`]*\\.group'";
   };
 
-  testCopyOfACopiedOrDerivedSecretFailsTheCopysCheck = {
-    expr =
-      map
-        (
-          value:
-          failuresOf
-            (nodesOf {
-              metrics = [
-                (service "telegraf" {
-                  secrets = {
-                    origin.value.generated = "alnum";
-                    token = {
-                      inherit value;
-                      sendTo = [ writers ];
-                    };
-                  };
-                })
-              ];
-              store = [ (copyingInfluxdb { static.user = "influxdb2"; } { }) ];
-            }).store
-        )
-        [
-          {
-            copied = (tokenOf "metrics") // {
-              id = "origin";
-            };
-          }
-          { derived.generator = "basic-auth"; }
-        ];
-    expected = lib.replicate 2 [
-      "nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret."
-    ];
-  };
-
-  testCopyItsDynamicIdentityCannotReadFailsTheReadabilityCheck = {
-    expr =
-      failuresOf
-        (nodesOf {
-          metrics = [ (telegraf [ writers ]) ];
-          store = [ (copyingInfluxdb { dynamic.unit = "influxdb.service"; } { }) ];
-        }).store;
-    expected = [
-      "nixos-contracts: secrets claim `influxdb.writers.metrics.telegraf.token`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
-    ];
-  };
-
   testCopyOnAnInboxOfAKindOtherThanSecretsFailsACheck = {
     expr = map (inbox: failures [ (service "nginx" { inboxes.received = inbox; }) ]) [
       {
@@ -819,55 +466,5 @@ in
         })
       ]).contracts.services.nginx.inboxes.upstreams.kind;
     expectedError.msg = "inboxes\\.upstreams\\.sendTo' does not exist";
-  };
-
-  testSendCheckNamesAClaimWhoseSendToDependsOnWhatItsNodeReceived = {
-    expr = failuresOf (driftingNodes true driftThroughReceived).metrics;
-    expected = [
-      "nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
-    ];
-  };
-
-  # One claim exists only once the node has received, the other only before.
-  testSendCheckNamesAClaimWhoseExistenceDependsOnWhatItsNodeReceived = {
-    expr = map (secretsOf: failuresOf (driftingNodes true secretsOf).metrics) [
-      (
-        outputs:
-        lib.mapAttrs' (node: _: lib.nameValuePair "echo-${node}" { sendTo = [ writers ]; }) outputs.received
-      )
-      (outputs: lib.optionalAttrs (outputs.received == { }) { standby.sendTo = [ writers ]; })
-    ];
-    expected = [
-      [
-        "nixos-contracts: secrets claim `telegraf.echo-store` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
-      ]
-      [
-        "nixos-contracts: secrets claim `telegraf.standby` sends to nothing once its node has received claims, but to `store:inboxes.influxdb.writers` before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
-      ]
-    ];
-  };
-
-  testSendCheckNamesAClaimWhoseSendToDependsOnTheRefsItsNodeReceived = {
-    expr = failuresOf (driftingNodes true driftThroughRefs).metrics;
-    expected = [
-      "nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`."
-    ];
-  };
-
-  # Without the send check, a send that depends on what its node received
-  # recurses, as documented for `contracts.checkSends`.
-  testSendDependingOnWhatItsNodeReceivedRecursesWithoutTheSendCheck = {
-    expr = failuresOf (driftingNodes false driftThroughReceived).metrics;
-    expectedError.msg = "infinite recursion encountered";
-  };
-
-  testSendDependingOnTheRefsItsNodeReceivedRecursesWithoutTheSendCheck = {
-    expr = failuresOf (driftingNodes false driftThroughRefs).metrics;
-    expectedError.msg = "infinite recursion encountered";
-  };
-
-  testSendCheckChangesNoSendAndNothingReceivedWithoutADependence = {
-    expr = observedIn (nodesOf (fleetOf true));
-    expected = observedIn (nodesOf (fleetOf false));
   };
 }
