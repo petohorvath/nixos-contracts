@@ -90,6 +90,25 @@ in
           }
         ];
       };
+
+      # The settings of each copy, merged into one module and checked
+      # against the copy's type at once, so a misspelt setting fails at
+      # `copy` whether or not anything was received. The check reads only
+      # this service's own options, so it adds no dependence on other nodes.
+      # The module system substitutes the submodules of an option it
+      # declares, so the substituted type keeps the check.
+      copySettingsTypeOf =
+        deferred:
+        deferred
+        // {
+          merge =
+            loc: defs:
+            let
+              settings = deferred.merge loc defs;
+            in
+            if inbox.kind == "secrets" then builtins.seq (copyType.merge loc defs) settings else settings;
+          substSubModules = modules: copySettingsTypeOf (deferred.substSubModules modules);
+        };
     in
     {
       options = {
@@ -99,7 +118,7 @@ in
           description = "The claim kind the inbox takes.";
         };
         copy = lib.mkOption {
-          type = lib.types.nullOr lib.types.deferredModule;
+          type = lib.types.nullOr (copySettingsTypeOf lib.types.deferredModule);
           default = null;
           description = ''
             Null to only receive references, or the settings of the copy the

@@ -242,7 +242,7 @@ services.influxdb2.provision.organizations.main.auths = lib.concatMapAttrs (
 
 With `copy = null`, the default, an inbox holds no copies and every `received.<…>.copy` is null; the receiver reads `received` or `refs` alone, such as to derive a secret from `refs`.
 
-A misspelt setting in `copy` fails at its definition once a copy is read, naming the copy's option under the internal `copies` and offering the closest option, such as ``The option `contracts.services.influxdb.inboxes.writers.copies.metrics.telegraf.token.gruop' does not exist. … Did you mean `….group', …``.
+A misspelt setting in `copy` fails at its definition whether or not anything was received, naming the option under `copy` and offering the closest option, such as ``The option `contracts.services.influxdb.inboxes.writers.copy.gruop' does not exist. … Did you mean `contracts.services.influxdb.inboxes.writers.copy.group', …``.
 
 Copies are not in any claim set, since a claim set's keys never depend on other nodes, and no root option holds them. An adapter finds them through the inboxes in `contracts.claimSets.inboxes`, as each non-null `received.<…>.copy`, and installs each like an authored secret, named by its location joined with `_`, such as `influxdb_writers_metrics_telegraf_token`. A disabled receiving contract holds no copies.
 

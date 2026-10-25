@@ -727,7 +727,15 @@ in
           store = [ (copyingInfluxdb { static.user = "influxdb2"; } { gruop = "writers"; }) ];
         }).store.config
       ).metrics.telegraf.token.copy.group;
-    expectedError.msg = "telegraf\\.token\\.gruop' does not exist";
+    expectedError.msg = "inboxes\\.writers\\.copy\\.gruop' does not exist";
+  };
+
+  testMisspeltCopyFieldFailsAtItsDefinitionWithNothingReceived = {
+    expr = failures [
+      { contracts.node = "store"; }
+      (copyingInfluxdb { static.user = "influxdb2"; } { gruop = "writers"; })
+    ];
+    expectedError.msg = "inboxes\\.writers\\.copy\\.gruop' does not exist";
   };
 
   testMisspeltCopyFieldOffersTheClosestOption = {
