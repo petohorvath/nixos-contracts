@@ -52,7 +52,8 @@ let
   };
 
   # Nodes sending to others and to themselves, none depending on what it
-  # received, every node under the send check when `checkSends`.
+  # received, every node under the send check when `checkSends`. Influxdb
+  # holds a copy of each token its writers receive.
   fleetOf =
     checkSends:
     builtins.mapAttrs (_: modules: [ (checkSendsIs checkSends) ] ++ modules) {
@@ -67,6 +68,7 @@ let
       ];
       store = [
         influxdb
+        { contracts.services.influxdb.inboxes.writers.copy.mode = "0400"; }
         (telegraf [ writers ])
         (loki [
           upstreams
@@ -95,8 +97,23 @@ let
                 _:
                 builtins.mapAttrs (
                   _: entry: {
-                    inherit (entry) ref copy;
+                    inherit (entry) ref;
                     inherit (entry.claim) name;
+                    # A copy's `path` needs a backend, which the fleet has
+                    # none of.
+                    copy =
+                      if entry.copy == null then
+                        null
+                      else
+                        {
+                          inherit (entry.copy)
+                            owner
+                            group
+                            mode
+                            value
+                            location
+                            ;
+                        };
                   }
                 )
               )
@@ -273,8 +290,38 @@ in
     expectedError.msg = "infinite recursion encountered";
   };
 
-  testSendCheckChangesNoSendAndNothingReceivedWithoutADependence = {
-    expr = observedIn (nodesOf (fleetOf true));
-    expected = observedIn (nodesOf (fleetOf false));
-  };
+  # The copies' locations show that the comparison covers copies.
+  testSendCheckChangesNoSendAndNothingReceivedWithoutADependence =
+    let
+      observed = observedIn (nodesOf (fleetOf true));
+      writersReceived = observed.store.inboxes.influxdb.writers.received;
+    in
+    {
+      expr = {
+        inherit observed;
+        copies = map (node: writersReceived.${node}.telegraf.token.copy.location) [
+          "metrics"
+          "store"
+        ];
+      };
+      expected = {
+        observed = observedIn (nodesOf (fleetOf false));
+        copies = [
+          [
+            "influxdb"
+            "writers"
+            "metrics"
+            "telegraf"
+            "token"
+          ]
+          [
+            "influxdb"
+            "writers"
+            "store"
+            "telegraf"
+            "token"
+          ]
+        ];
+      };
+    };
 }

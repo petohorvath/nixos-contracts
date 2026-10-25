@@ -19,12 +19,13 @@ let
   # Influxdb on `store` sends its bind to telegraf's outputs on `metrics`,
   # where telegraf sends its token to influxdb's writers, to every node its
   # outputs received from when `drifts`, under the send check when
-  # `checkSends`.
+  # `checkSends` on both. Influxdb holds a copy of each token it receives.
   telegrafAndInfluxdb =
     { checkSends, drifts }:
     nodesOf {
       store = [
         {
+          contracts.checkSends = checkSends;
           contracts.services.influxdb = {
             enable = true;
             identity.static.user = "influxdb";
@@ -38,7 +39,7 @@ let
                 }
               ];
             };
-            inboxes.writers = { };
+            inboxes.writers.copy.mode = "0400";
           };
         }
       ];
@@ -131,14 +132,49 @@ in
     ];
   };
 
-  testSendCheckChangesNothingReceivedWithoutADependence =
+  # The copy's location shows that the comparison covers copies, whose
+  # `path` needs a backend, which neither node has.
+  testSendCheckChangesNoSendAndNothingReceivedWithoutADependence =
     let
       observe =
         checkSends:
         builtins.mapAttrs
           (_: node: {
-            refs = builtins.mapAttrs (
-              _: builtins.mapAttrs (_: inbox: inbox.refs)
+            sends = builtins.mapAttrs (_: builtins.mapAttrs (_: builtins.mapAttrs (_: claim: claim.sendTo))) (
+              removeAttrs node.config.contracts.claimSets [ "inboxes" ]
+            );
+            inboxes = builtins.mapAttrs (
+              _:
+              builtins.mapAttrs (
+                _: inbox: {
+                  received = builtins.mapAttrs (
+                    _:
+                    builtins.mapAttrs (
+                      _:
+                      builtins.mapAttrs (
+                        _: entry: {
+                          inherit (entry) ref;
+                          inherit (entry.claim) name;
+                          copy =
+                            if entry.copy == null then
+                              null
+                            else
+                              {
+                                inherit (entry.copy)
+                                  owner
+                                  group
+                                  mode
+                                  value
+                                  location
+                                  ;
+                              };
+                        }
+                      )
+                    )
+                  ) inbox.received;
+                  inherit (inbox) refs;
+                }
+              )
             ) node.config.contracts.claimSets.inboxes;
             inherit (node.config.contracts) failures;
           })
@@ -146,9 +182,22 @@ in
             inherit checkSends;
             drifts = false;
           });
+      observed = observe true;
     in
     {
-      expr = observe true;
-      expected = observe false;
+      expr = {
+        inherit observed;
+        copy = observed.store.inboxes.influxdb.writers.received.metrics.telegraf.token.copy.location;
+      };
+      expected = {
+        observed = observe false;
+        copy = [
+          "influxdb"
+          "writers"
+          "metrics"
+          "telegraf"
+          "token"
+        ];
+      };
     };
 }
