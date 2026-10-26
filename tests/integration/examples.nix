@@ -57,14 +57,14 @@
     expr = examples.sharedToken.result;
     expected = {
       copies = {
-        influxdb_metrics_telegraf_token = {
+        influxdb_metrics_secrets_telegraf_token = {
           owner = "influxdb2";
           group = "influxdb2";
           mode = "0400";
           rekeyFile = "metrics/telegraf_token.age";
           generator = null;
         };
-        influxdb_store_telegraf_token = {
+        influxdb_store_secrets_telegraf_token = {
           owner = "influxdb2";
           group = "influxdb2";
           mode = "0400";
@@ -74,8 +74,8 @@
       };
       original = "metrics/telegraf_token.age";
       auths = {
-        metrics_telegraf_token = "/run/agenix/influxdb_metrics_telegraf_token";
-        store_telegraf_token = "/run/agenix/influxdb_store_telegraf_token";
+        metrics_secrets_telegraf_token = "/run/agenix/influxdb_metrics_secrets_telegraf_token";
+        store_secrets_telegraf_token = "/run/agenix/influxdb_store_secrets_telegraf_token";
       };
       failures = {
         metrics = [ ];

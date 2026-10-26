@@ -98,9 +98,9 @@ let
 
   # The nodes `alpha` and `beta`, each running telegraf and an influxdb
   # that holds one copy of every node's telegraf token, its id joining the
-  # reference's node, service and id with `_`, and an htpasswd derived
-  # from all of them. A `let`-bound list carries the tokens' `ref`s, as a
-  # fleet's shared data does. The nodes `withoutAdapter` names lack the
+  # reference's node, kind, service and id with `_`, and an htpasswd
+  # derived from all of them. A `let`-bound list carries the tokens' `ref`s,
+  # as a fleet's shared data does. The nodes `withoutAdapter` names lack the
   # adapter.
   handingTokensWithout =
     withoutAdapter:
@@ -115,7 +115,7 @@ let
             lib.listToAttrs (
               map (
                 reference:
-                lib.nameValuePair "${reference.node}_${reference.service}_${reference.id}" {
+                lib.nameValuePair "${reference.node}_${reference.kind}_${reference.service}_${reference.id}" {
                   value.copied = reference;
                 }
               ) tokens
@@ -281,7 +281,7 @@ in
         inherit (config.age.secrets.openssh_ssh_host_ed25519_key) rekeyFile;
       };
     expected = {
-      name = "beta_openssh_ssh_host_ed25519_key";
+      name = "beta_secrets_openssh_ssh_host_ed25519_key";
       entries = [ "openssh_ssh_host_ed25519_key" ];
       rekeyFile = ./openssh_ssh_host_ed25519_key.age;
     };
@@ -402,9 +402,10 @@ in
   # Alpha's copy of its own token reads this configuration's entry.
   testCopyOfEachReferenceTakesTheEncryptedFileFromTheSendersNode = {
     expr = lib.mapAttrs (_: node: {
-      copies = lib.genAttrs [ "influxdb_alpha_telegraf_token" "influxdb_beta_telegraf_token" ] (
-        name: secretOf name node.config
-      );
+      copies = lib.genAttrs [
+        "influxdb_alpha_secrets_telegraf_token"
+        "influxdb_beta_secrets_telegraf_token"
+      ] (name: secretOf name node.config);
       inherit (node.config.contracts) failures;
     }) handingTokens;
     expected =
@@ -419,8 +420,8 @@ in
       in
       lib.genAttrs [ "alpha" "beta" ] (_: {
         copies = {
-          influxdb_alpha_telegraf_token = copyOf "alpha";
-          influxdb_beta_telegraf_token = copyOf "beta";
+          influxdb_alpha_secrets_telegraf_token = copyOf "alpha";
+          influxdb_beta_secrets_telegraf_token = copyOf "beta";
         };
         failures = [ ];
       });
@@ -565,7 +566,7 @@ in
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
     expr = (handingTokensWithout [ "beta" ]).alpha.config.contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb.beta_telegraf_token` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.beta_secrets_telegraf_token` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
       "nixos-contracts: secret `influxdb.htpasswd` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };

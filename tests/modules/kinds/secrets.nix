@@ -76,14 +76,14 @@ let
 
   # Influxdb receiving `references` as a receiver writes its claims from
   # shared data: one copy of each, its id joining the reference's own
-  # node, service and id with `_`, and an htpasswd derived from all.
+  # node, kind, service and id with `_`, and an htpasswd derived from all.
   receiving =
     references:
     store (
       lib.listToAttrs (
         map (
           reference:
-          lib.nameValuePair "${reference.node}_${reference.service}_${reference.id}" {
+          lib.nameValuePair "${reference.node}_${reference.kind}_${reference.service}_${reference.id}" {
             value.copied = reference;
           }
         ) references
@@ -561,11 +561,11 @@ in
         inherit (nodes.store.config.contracts) failures;
       };
       expected = {
-        remote = [ "metrics_telegraf_token" ];
-        local = [ "store_influxdb_origin" ];
+        remote = [ "metrics_secrets_telegraf_token" ];
+        local = [ "store_secrets_influxdb_origin" ];
         derived = [
-          "store_influxdb_origin"
-          "metrics_telegraf_token"
+          "store_secrets_influxdb_origin"
+          "metrics_secrets_telegraf_token"
         ];
         failures = [ ];
       };
@@ -596,7 +596,7 @@ in
             }
           )
         ]).contracts.claimSets.secrets.influxdb.copy.sources;
-    expected = [ "store_influxdb_origin" ];
+    expected = [ "store_secrets_influxdb_origin" ];
   };
 
   testReferenceWithoutANodeIdentityFailsItsCheck = {
@@ -770,12 +770,12 @@ in
         });
     expected = lib.genAttrs [ "alpha" "beta" ] (_: {
       copies = {
-        alpha_telegraf_token = [ "alpha_telegraf_token" ];
-        beta_telegraf_token = [ "beta_telegraf_token" ];
+        alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
+        beta_secrets_telegraf_token = [ "beta_secrets_telegraf_token" ];
       };
       derived = [
-        "alpha_telegraf_token"
-        "beta_telegraf_token"
+        "alpha_secrets_telegraf_token"
+        "beta_secrets_telegraf_token"
       ];
       failures = [ ];
     });
@@ -801,17 +801,17 @@ in
         ];
     expected = [
       {
-        copies.alpha_telegraf_token = [ "alpha_telegraf_token" ];
-        derived = [ "alpha_telegraf_token" ];
+        copies.alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
+        derived = [ "alpha_secrets_telegraf_token" ];
       }
       {
         copies = {
-          alpha_telegraf_token = [ "alpha_telegraf_token" ];
-          beta_telegraf_token = [ "beta_telegraf_token" ];
+          alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
+          beta_secrets_telegraf_token = [ "beta_secrets_telegraf_token" ];
         };
         derived = [
-          "alpha_telegraf_token"
-          "beta_telegraf_token"
+          "alpha_secrets_telegraf_token"
+          "beta_secrets_telegraf_token"
         ];
       }
     ];
@@ -832,7 +832,7 @@ in
         ];
       }).alpha.config.contracts.failures;
     expected = [
-      "nixos-contracts: secrets claim `influxdb.alhpa_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb.alhpa_secrets_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`."
       "nixos-contracts: secrets claim `influxdb.htpasswd`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`."
     ];
   };

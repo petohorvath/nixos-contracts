@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0018
 ---
 
 # Allow `_` in a claim id, and name a claim without a location

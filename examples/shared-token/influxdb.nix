@@ -18,7 +18,7 @@ let
   # A copy's id joins the reference's own fields with `_`, which gives the
   # writer token's claim name. Resolving the reference to choose the id
   # would make this claim set read the writer's node.
-  copyIdOf = writer: "${writer.node}_${writer.service}_${writer.id}";
+  copyIdOf = writer: "${writer.node}_${writer.kind}_${writer.service}_${writer.id}";
 in
 {
   options.example.influxdb.writers = lib.mkOption {
@@ -60,7 +60,7 @@ in
         tokenFile = contract.secrets.admin-token.path;
       };
       # One authorization per writer, named by its token's claim name, such
-      # as `metrics_telegraf_token`.
+      # as `metrics_secrets_telegraf_token`.
       organizations.main.auths = lib.listToAttrs (
         map (
           writer:

@@ -4,9 +4,10 @@
 rec {
   /*
     What a name may contain, by what it names. A claim id may also contain
-    `_`, a service name or node identity may not, so the first `_` of a
-    backend name `<service>_<id>` ends the service, and the first two of a
-    claim name `<node>_<service>_<id>` end the node and the service.
+    `_`, a node identity, kind name or service name may not, so the first
+    `_` of a backend name `<service>_<id>` ends the service, and the first
+    three of a claim name `<node>_<kind>_<service>_<id>` end the node, the
+    kind and the service.
   */
   nameRules =
     let
@@ -16,8 +17,9 @@ rec {
       };
     in
     {
-      service = lowercaseDigitsAndHyphens;
       node = lowercaseDigitsAndHyphens;
+      kind = lowercaseDigitsAndHyphens;
+      service = lowercaseDigitsAndHyphens;
       id = {
         pattern = "[a-z0-9_-]+";
         allowed = "lowercase letters, digits, hyphens and `_`";
