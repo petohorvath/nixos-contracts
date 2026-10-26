@@ -48,10 +48,6 @@ in
     expected = {
       service = "influxdb";
       id = "data";
-      location = [
-        "influxdb"
-        "data"
-      ];
       name = null;
       ref = {
         node = null;

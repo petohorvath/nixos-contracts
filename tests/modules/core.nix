@@ -353,7 +353,7 @@ in
             binds.http.port = 8080;
           };
         }
-      ]).contracts.services."".binds.http.location;
+      ]).contracts.services."".binds.http.service;
     expectedError.msg = "service name `` may contain only lowercase letters, digits and hyphens";
   };
 
@@ -408,14 +408,12 @@ in
         result = (nodesOf { backend = [ web ]; }).backend.config.contracts.lookup (webHttp "backend");
       in
       {
-        inherit (result.claim) location name;
+        inherit (result.claim) service id name;
         inherit (result) reason;
       };
     expected = {
-      location = [
-        "web"
-        "http"
-      ];
+      service = "web";
+      id = "http";
       name = "backend_web_http";
       reason = null;
     };

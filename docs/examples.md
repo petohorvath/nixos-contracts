@@ -19,7 +19,7 @@ The [example](../examples/influxdb/default.nix) imports both adapters with their
 
 - `bindAddress`: `127.0.0.1:8086`, the node's address with the service module's port.
 - `preserved`: `/var/lib/influxdb2`, owned by `influxdb2:influxdb2` with mode `0700`, under `/persist/state`.
-- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim's location, `influxdb_admin-password.age` in the generated secrets directory and `influxdb_admin-token.age` in the secrets directory.
+- `secrets`: both installed root-owned with group `influxdb2` and mode `0440`; the password names the `alnum` generator, and each one's encrypted file is named after its claim's service and id, `influxdb_admin-password.age` in the generated secrets directory and `influxdb_admin-token.age` in the secrets directory.
 - `initialSetup`: the daemon reads both from `/run/agenix/<service>_<id>`.
 - `failures`: none.
 

@@ -82,8 +82,8 @@ The resolved claims are then readable in one place:
 
 ```nix
 config.contracts.claimSets.mounts.chrony.state
-# => { service = "chrony"; id = "state"; location = [ "chrony" "state" ];
-#      name = null; ref = { node = null; kind = "mounts"; service = "chrony"; id = "state"; };
+# => { service = "chrony"; id = "state"; name = null;
+#      ref = { node = null; kind = "mounts"; service = "chrony"; id = "state"; };
 #      path = "/var/lib/chrony"; class = "state"; type = "directory";
 #      mode = "0700"; owner = "chrony"; group = "chrony"; }
 ```

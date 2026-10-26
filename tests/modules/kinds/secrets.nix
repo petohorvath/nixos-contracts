@@ -36,17 +36,23 @@ let
     {
       inherit (claim) owner group;
     };
-  # A backend and a delivery naming a secret by its location joined with
-  # `_`, as the shipped adapters do.
-  nameOf = builtins.concatStringsSep "_";
+  # A backend and a delivery naming a secret `<service>_<id>`, as the
+  # shipped adapters do. Their paths take no other arguments, so a slot
+  # passed anything else fails.
+  backendPath = { service, id }: "/run/agenix/${service}_${id}";
   backend.contracts.kinds.secrets.backend = {
-    path = location: "/run/agenix/${nameOf location}";
+    path = backendPath;
     generators = [ ];
   };
   rules = {
     imports = [ backend ];
     contracts.kinds.secrets.delivery.path =
-      { unit, location }: "/run/credentials/${unit}/${nameOf location}";
+      {
+        unit,
+        service,
+        id,
+      }:
+      "/run/credentials/${unit}/${service}_${id}";
   };
 
   # A telegraf service generating its token, and a store service copying
@@ -134,10 +140,6 @@ in
     expected = {
       service = "chrony";
       id = "key";
-      location = [
-        "chrony"
-        "key"
-      ];
       name = null;
       mode = "0440";
       owner = "root";
@@ -267,7 +269,7 @@ in
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck =
     let
       alnumAndHex.contracts.kinds.secrets.backend = {
-        path = location: "/run/agenix/${nameOf location}";
+        path = backendPath;
         generators = [
           "alnum"
           "hex"
@@ -358,7 +360,7 @@ in
     expr = failures [
       {
         contracts.kinds.secrets.backend = {
-          path = location: "/run/agenix/${nameOf location}";
+          path = backendPath;
           generators = [ "basic-auth" ];
         };
       }
@@ -462,7 +464,7 @@ in
         backend
         {
           contracts.kinds.secrets.backend = {
-            path = location: "/run/secrets/${nameOf location}";
+            path = { service, id }: "/run/secrets/${service}_${id}";
             generators = [ "hex" ];
           };
         }
@@ -475,7 +477,13 @@ in
       (secretOf [
         rules
         {
-          contracts.kinds.secrets.delivery.path = { unit, location }: "/run/keys/${unit}/${nameOf location}";
+          contracts.kinds.secrets.delivery.path =
+            {
+              unit,
+              service,
+              id,
+            }:
+            "/run/keys/${unit}/${service}_${id}";
         }
       ] { dynamic.unit = "svc.service"; } { }).path;
     expectedError.msg = "contracts\\.kinds\\.secrets\\.delivery'[^\n]*\nA configuration imports one delivery adapter[^\n]*\nDefinition values:\n- In [\\s\\S]*\n- In ";
@@ -489,7 +497,7 @@ in
           { lib, ... }:
           {
             contracts.kinds.secrets.backend = lib.mkForce {
-              path = location: "/run/secrets/${nameOf location}";
+              path = { service, id }: "/run/secrets/${service}_${id}";
               generators = [ ];
             };
           }
@@ -505,7 +513,9 @@ in
         (
           { lib, ... }:
           {
-            contracts.kinds.secrets.backend.path = lib.mkForce (location: "/run/secrets/${nameOf location}");
+            contracts.kinds.secrets.backend.path = lib.mkForce (
+              { service, id }: "/run/secrets/${service}_${id}"
+            );
           }
         )
       ] { static.user = "svc"; } { }).path;

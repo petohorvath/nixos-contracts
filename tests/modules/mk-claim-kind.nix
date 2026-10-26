@@ -53,8 +53,8 @@ let
           label = lib.mkOption {
             type = lib.types.str;
             readOnly = true;
-            default = lib.concatStringsSep "/" config.location;
-            description = "The claim's location, read from the claim.";
+            default = "${config.service}/${config.id}";
+            description = "The claim's service and id, read from the claim.";
           };
         };
       };
@@ -90,10 +90,6 @@ in
       grafana.main = {
         service = "grafana";
         id = "main";
-        location = [
-          "grafana"
-          "main"
-        ];
         name = null;
         engine = "postgresql";
         database = "grafana_main";
@@ -109,10 +105,6 @@ in
       vaultwarden.main = {
         service = "vaultwarden";
         id = "main";
-        location = [
-          "vaultwarden"
-          "main"
-        ];
         name = null;
         engine = "postgresql";
         database = "vault";
@@ -214,7 +206,7 @@ in
     expectedError.msg = "contracts\\.services\\.grafana\\.databases\\.main\\.engine' is not of type";
   };
 
-  testCustomKindClaimTypeReadsIdentityAndLocation = {
+  testCustomKindClaimTypeReadsIdentityServiceAndId = {
     expr =
       lib.mapAttrs
         (_: contract: {
@@ -298,6 +290,7 @@ in
             claim = _: { };
           })
           {
+            contracts.node = "n";
             contracts.services = {
               a = {
                 enable = true;
@@ -315,22 +308,16 @@ in
       in
       {
         inherit (config.contracts) failures;
-        locations = [
-          config.contracts.claimSets.tokens.a.b-c.location
-          config.contracts.claimSets.tokens.a-b.c.location
+        names = [
+          config.contracts.claimSets.tokens.a.b-c.name
+          config.contracts.claimSets.tokens.a-b.c.name
         ];
       };
     expected = {
       failures = [ ];
-      locations = [
-        [
-          "a"
-          "b-c"
-        ]
-        [
-          "a-b"
-          "c"
-        ]
+      names = [
+        "n_a_b-c"
+        "n_a-b_c"
       ];
     };
   };
@@ -561,7 +548,7 @@ in
     expectedError.msg = "tokens\\.t\\.ref' .* already declared in .*mk-claim-kind\\.nix";
   };
 
-  testClaimTypeCannotDeclareTheLocation = {
+  testClaimTypeMayDeclareALocation = {
     expr =
       (evaluate [
         (mkClaimKind {
@@ -586,7 +573,7 @@ in
           };
         }
       ]).contracts.claimSets.tokens.a.t.location;
-    expectedError.msg = "tokens\\.t\\.location' .* already declared in .*mk-claim-kind\\.nix";
+    expected = "mine";
   };
 
   testClaimTypeMayDeclareASendTo = {
@@ -615,16 +602,6 @@ in
         }
       ]).contracts.claimSets.tokens.a.t.sendTo;
     expected = "mine";
-  };
-
-  testLocationIsReadOnly = {
-    expr =
-      (evaluate [
-        databases
-        services
-        { contracts.services.grafana.databases.main.location = [ "elsewhere" ]; }
-      ]).contracts.services.grafana.databases.main.location;
-    expectedError.msg = "databases\\.main\\.location' is read-only";
   };
 
   testClaimIdMayContainDigitsAndHyphens =
