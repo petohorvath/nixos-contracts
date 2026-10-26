@@ -53,6 +53,33 @@
     };
   };
 
+  testGrafanaExampleDeliversItsSecretsToItsStaticUnit = {
+    expr = examples.grafana.result;
+    expected = {
+      security = {
+        admin_password = "$__file{/run/credentials/grafana.service/grafana_admin-password}";
+        secret_key = "$__file{/run/credentials/grafana.service/grafana_secret-key}";
+      };
+      loadCredential = [
+        "grafana_secret-key:/run/agenix/grafana_secret-key"
+        "grafana_admin-password:/run/agenix/grafana_admin-password"
+      ];
+      installed = {
+        grafana_admin-password = {
+          owner = "root";
+          group = "root";
+          mode = "0440";
+        };
+        grafana_secret-key = {
+          owner = "root";
+          group = "root";
+          mode = "0440";
+        };
+      };
+      failures = [ ];
+    };
+  };
+
   testSharedTokenExampleCopiesEveryTelegrafTokenOnTheStore = {
     expr = examples.sharedToken.result;
     expected = {

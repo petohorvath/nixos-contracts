@@ -181,8 +181,8 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `group`     | a group name                                                          | derived  |
 | `value`     | a [tag](#libtypestag): `provided`, `generated`, `copied` or `derived` | provided |
 | `sources`   | read-only, each reference of the value with its resolved claim        | derived  |
-| `unit`      | read-only, the dynamic identity's unit, or null                       | derived  |
-| `delivered` | read-only, whether the secret is delivered                            | derived  |
+| `unit`      | the unit the secret is delivered to, or null                          | derived  |
+| `delivered` | read-only, whether the secret names a `unit`                          | derived  |
 | `path`      | read-only, where the daemon reads the secret                          | derived  |
 
 A secret holds no value. Its `value` says where the value comes from, as one of four tags ([ADR 0013](adr/0013-settle-a-tag-by-the-priority-of-its-definitions.md)):
@@ -231,13 +231,27 @@ contracts.kinds.secrets.delivery = {
 
 - `backend.path` (function of `{ service, id }`): where the secret backend installs a secret. It must answer for any service and id, including those of claims of disabled contracts, which the backend does not install, since a service module may read a claim's `path` regardless.
 - `backend.generators` (list of strings): the generators a `generated` or `derived` value may name. A check fails for a claim whose generator is not in it, and lists the ones the backend provides. While `backend` is null, the generator is not checked.
-- `delivery.path` (function of `{ unit, service, id }`): where a dynamic identity's unit reads a delivered secret, given the secret's unit, service and id.
+- `delivery.path` (function of `{ unit, service, id }`): where a unit reads a delivered secret, given the secret's `unit`, service and id.
 
 A configuration imports at most one backend adapter and one delivery adapter: a second definition of `backend` or `delivery` fails once the slot is read, naming both, unless the definitions differ in priority. A slot takes its adapter's data as one definition, so a module that replaces part of it, such as the backend's `path`, replaces the whole slot with `lib.mkForce`, generators included.
 
-A secret is `delivered` when its identity is dynamic and `delivery` is set. Its `path` is then what `delivery.path` answers for its unit, service and id; otherwise it is what `backend.path` answers for its service and id. A secret has no path while `backend` is null, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs a backend adapter imported.
+A secret names the unit it is delivered to in `unit` ([ADR 0019](adr/0019-name-the-unit-a-secret-is-delivered-to-on-the-secret.md)). Its default is a dynamic identity's unit, or null for a static identity. A static identity is an account that may run several units, and a delivered secret's `path` differs per unit, so the module that hands `path` to the daemon names the one unit that reads it:
 
-A dynamic identity's user exists only while its unit runs, so it reads a secret the backend installs only through its `sharedGroup`. A check fails for a dynamic identity's secret that no adapter delivers, unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
+```nix
+contracts.services.grafana = contractsLib.mkDefaultContract {
+  identity.static.user = "grafana";
+  secrets.secret-key.unit = "grafana.service";
+};
+
+# A dynamic identity's secret read through its sharedGroup instead
+contracts.services.alloy.secrets.loki-password.unit = null;
+```
+
+A secret is `delivered` when its `unit` is not null, whichever adapters are imported. Its `path` is then what `delivery.path` answers for its unit, service and id; otherwise it is what `backend.path` answers for its service and id. A secret has no path while `backend` is null, or while `delivery` is null for a delivered secret, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs the adapters imported.
+
+The backend still installs a delivered secret, and the delivery adapter loads it from there, so a delivered secret's `group` defaults to `root` and the account's other units cannot read the installed file.
+
+Checks fail for a delivered secret while `delivery` is null, and for a dynamic identity's secret delivered to a unit other than the identity's. A dynamic identity's user exists only while its unit runs, so it reads an undelivered secret only through its `sharedGroup`: a check fails for a dynamic identity's undelivered secret unless the secret's `group` is the identity's `sharedGroup`. Mode bits are not checked.
 
 Secrets have no clash rule.
 
@@ -282,9 +296,9 @@ A mount's or secret's `owner` and `group` default to values derived from the ser
 | `static.user = "chrony"`                     | chrony / chrony     | root / chrony        |
 | `static = { user = "kea"; group = "dhcp"; }` | kea / dhcp          | root / dhcp          |
 | `dynamic.unit = "alloy.service"`             | root / root         | root / root          |
-| `dynamic` with `sharedGroup = "logs"`        | root / logs         | root / logs          |
+| `dynamic` with `sharedGroup = "logs"`        | root / logs         | root / root          |
 
-An explicit `owner` or `group` on the claim wins. A mount's group otherwise falls back to the identity's group and then to its owner. A secret stays root-owned unless its claim says otherwise, so the service reads it through its group but cannot change it. A dynamic identity has no account at activation time, so nothing is owned by it; its secrets reach the daemon through a delivery adapter.
+A delivered secret's group is `root`, and an undelivered one's is the identity's group. The table shows each secret with its default `unit`: a static identity's undelivered, a dynamic identity's delivered. A dynamic identity's secret with `unit = null` gets its `sharedGroup`, `logs`. An explicit `owner` or `group` on the claim wins. A mount's group otherwise falls back to the identity's group and then to its owner. A secret stays root-owned unless its claim says otherwise, so the service reads it through its group but cannot change it. A dynamic identity has no account at activation time, so nothing is owned by it; its secrets reach the daemon through a delivery adapter or its `sharedGroup`.
 
 ## Adapters
 
@@ -307,9 +321,9 @@ A derived secret with references defines its entry's `generator.dependencies` as
 
 ### `nixosModules.systemd-credentials`
 
-For every secret of a dynamic-identity service in `contracts.claimSets.secrets`, copies included, adds `<service>_<id>:<backend path>` to the unit's `LoadCredential=`, naming the credential `<service>_<id>`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>_<id>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every delivered secret in `contracts.claimSets.secrets`, copies included, adds `<service>_<id>:<backend path>` to the `LoadCredential=` of the secret's `unit`, naming the credential `<service>_<id>`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>_<id>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
-Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a dynamic identity's `unit` does not end in `.service` or is not defined by another module, and when it does not set `DynamicUser`. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
+Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a unit a secret is delivered to does not end in `.service` or is not defined by another module, and when a dynamic identity's unit does not set `DynamicUser`. The units of static identities need not set it. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
 

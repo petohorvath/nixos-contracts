@@ -38,6 +38,17 @@ The [example](../examples/alloy/default.nix) names one instance, `main`, and imp
 - `passwordFile`: the daemon reads `/run/credentials/alloy.service/alloy_loki-main-password`.
 - `failures`: none, since the unit exists and sets `DynamicUser`.
 
+## grafana: a static identity with delivered secrets
+
+The [service module](../examples/grafana/service.nix) wraps nixpkgs' `services.grafana`, which runs `grafana.service` as the static user `grafana`. Its contract holds a generated admin password and secret key, and names `grafana.service` as the `unit` of each, since Grafana's own process reads both. The module passes each claim's `path` to Grafana's file provider, as `$__file{<path>}`.
+
+The [example](../examples/grafana/default.nix) imports the agenix-rekey and systemd-credentials adapters. Its result shows:
+
+- `security`: Grafana reads `/run/credentials/grafana.service/grafana_admin-password` and `/run/credentials/grafana.service/grafana_secret-key`.
+- `loadCredential`: the unit loads both from `/run/agenix/<service>_<id>`.
+- `installed`: agenix-rekey installs both owned by `root:root` with mode `0440`, so the `grafana` account's other units cannot read them.
+- `failures`: none, since the unit exists; a static identity's unit need not set `DynamicUser`.
+
 ## exporter: a helper daemon as a service of its own
 
 The [chrony module](../examples/exporter/chrony.nix) wraps nixpkgs' `services.chrony` with a contract of the static user `chrony` and a UDP bind on port 123. It never mentions the exporter.

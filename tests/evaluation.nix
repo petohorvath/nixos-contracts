@@ -60,6 +60,14 @@ in
           system
           ;
       };
+      grafana = import ../examples/grafana {
+        inherit
+          backends
+          exports
+          nixpkgs
+          system
+          ;
+      };
       sharedToken = import ../examples/shared-token {
         inherit
           backends

@@ -185,10 +185,32 @@ in
         unit = "alloy.service";
         sharedGroup = "logs";
       };
-    } { };
+    } { unit = null; };
     expected = {
       owner = "root";
       group = "logs";
+    };
+  };
+
+  testDeliveredSecretLeavesItsFileToRoot = {
+    expr = {
+      static = ownerOf { static.user = "mastodon"; } { unit = "mastodon-init-dirs.service"; };
+      sharedGroup = ownerOf {
+        dynamic = {
+          unit = "alloy.service";
+          sharedGroup = "logs";
+        };
+      } { };
+    };
+    expected = {
+      static = {
+        owner = "root";
+        group = "root";
+      };
+      sharedGroup = {
+        owner = "root";
+        group = "root";
+      };
     };
   };
 
@@ -384,6 +406,21 @@ in
     expected = "/run/agenix/svc_key";
   };
 
+  testStaticIdentitySecretNamingAUnitReadsTheDeliveredCredential = {
+    expr =
+      let
+        secret = secretOf [ rules ] { static.user = "mastodon"; } { unit = "mastodon-init-dirs.service"; };
+      in
+      {
+        inherit (secret) unit delivered path;
+      };
+    expected = {
+      unit = "mastodon-init-dirs.service";
+      delivered = true;
+      path = "/run/credentials/mastodon-init-dirs.service/svc_key";
+    };
+  };
+
   testDynamicIdentitySecretNamesItsUnit = {
     expr = (secretOf [ ] { dynamic.unit = "svc.service"; } { }).unit;
     expected = "svc.service";
@@ -394,28 +431,68 @@ in
     expected = "/run/credentials/svc.service/svc_key";
   };
 
-  testDynamicIdentityWithoutDeliveryReadsTheBackendPath = {
-    expr = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).path;
+  testUndeliveredDynamicIdentitySecretReadsTheBackendPath = {
+    expr = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { unit = null; }).path;
     expected = "/run/agenix/svc_key";
   };
 
-  testOnlyADynamicIdentityWithADeliveryAdapterIsDelivered = {
+  testDeliveredSecretWithoutADeliveryAdapterHasNoPath = {
+    expr = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).path;
+    expectedError.msg = "nixos-contracts: secret `svc\\.key` is delivered to `svc\\.service` but has no path: import a delivery adapter such as `nixosModules\\.systemd-credentials`";
+  };
+
+  testDeliveredSecretWithoutADeliveryAdapterFailsItsCheck = {
     expr = {
-      dynamicWithDelivery = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
-      dynamicWithoutDelivery = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamic = failures [
+        backend
+        (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
+      ];
+      static = failures [
+        backend
+        (service "svc" { static.user = "svc"; } { key.unit = "svc.service"; })
+      ];
+    };
+    expected = {
+      dynamic = [
+        "nixos-contracts: secrets claim `svc.key`: it is delivered to `svc.service`, but no delivery adapter is imported; import one such as `nixosModules.systemd-credentials`, or set its `unit` to null."
+      ];
+      static = [
+        "nixos-contracts: secrets claim `svc.key`: it is delivered to `svc.service`, but no delivery adapter is imported; import one such as `nixosModules.systemd-credentials`, or set its `unit` to null."
+      ];
+    };
+  };
+
+  testDynamicIdentitySecretDeliveredToAnotherUnitFailsItsCheck = {
+    expr = failures [
+      rules
+      (service "svc" { dynamic.unit = "svc.service"; } { key.unit = "other.service"; })
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `svc.key`: it is delivered to `other.service`, but its dynamic identity exists only in `svc.service`; deliver it to `svc.service`, or set its `unit` to null."
+    ];
+  };
+
+  testSecretIsDeliveredWhenItNamesAUnit = {
+    expr = {
+      dynamic = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamicWithoutADeliveryAdapter =
+        (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamicUndelivered =
+        (secretOf [ rules ] { dynamic.unit = "svc.service"; } { unit = null; }).delivered;
       static = (secretOf [ rules ] { static.user = "svc"; } { }).delivered;
     };
     expected = {
-      dynamicWithDelivery = true;
-      dynamicWithoutDelivery = false;
+      dynamic = true;
+      dynamicWithoutADeliveryAdapter = true;
+      dynamicUndelivered = false;
       static = false;
     };
   };
 
   testDynamicIdentityCannotReadAnUndeliveredSecretOutsideItsGroup =
     let
-      message = "nixos-contracts: secrets claim `svc.key`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group.";
-      undelivered = service "svc" { dynamic.unit = "svc.service"; } oneSecret;
+      message = "nixos-contracts: secrets claim `svc.key`: its dynamic identity cannot read it; deliver it to `svc.service`, or give the identity a `sharedGroup` and the secret that group.";
+      undelivered = service "svc" { dynamic.unit = "svc.service"; } { key.unit = null; };
     in
     {
       expr = {
@@ -440,7 +517,7 @@ in
             unit = "svc.service";
             sharedGroup = "logs";
           };
-        } oneSecret)
+        } { key.unit = null; })
       ];
       delivered = failures [
         rules
@@ -450,11 +527,16 @@ in
         backend
         (service "svc" { static.user = "svc"; } oneSecret)
       ];
+      staticDelivered = failures [
+        rules
+        (service "svc" { static.user = "svc"; } { key.unit = "svc.service"; })
+      ];
     };
     expected = {
       sharedGroup = [ ];
       delivered = [ ];
       static = [ ];
+      staticDelivered = [ ];
     };
   };
 

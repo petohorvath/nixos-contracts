@@ -1,6 +1,6 @@
 /*
-  Deliver every secret of a dynamic-identity service into its unit with
-  `LoadCredential=`, so the dynamic user reads it under
+  Deliver every delivered secret into the unit it names with
+  `LoadCredential=`, so the unit reads it under
   `/run/credentials/<unit>/<service>_<id>`, such as `alloy_loki-password`.
   Loads from the path a secret backend adapter sets in
   `contracts.kinds.secrets.backend`, so import one beside it.
@@ -14,26 +14,31 @@ let
 
   delivered = lib.filter (secret: secret.delivered) (claimsOf config.contracts.claimSets.secrets);
 
-  units = lib.unique (map (secret: secret.unit) delivered);
+  # A dynamic identity's secret is delivered only to the identity's unit,
+  # which the secrets check enforces.
+  isDynamic = secret: config.contracts.services.${secret.service}.identity ? dynamic;
+
+  unitsOf = secrets: lib.unique (map (secret: secret.unit) secrets);
+
+  systemdServiceOf = unit: config.systemd.services.${toServiceName unit} or { serviceConfig = { }; };
 
   # The delivery itself defines the unit's `systemd.services` entry, so the
   # unit exists only if another module gave it a command, an `ExecStart` set
   # directly or through `script`.
-  mkUnitAssertions =
+  mkUnitAssertion = unit: {
+    assertion = lib.hasSuffix ".service" unit && (systemdServiceOf unit).serviceConfig ? ExecStart;
+    message = "secrets are delivered to unit `${unit}`, which is not a service defined in `systemd.services`.";
+  };
+
+  mkDynamicUnitAssertion =
     unit:
     let
-      service = config.systemd.services.${toServiceName unit} or { serviceConfig = { }; };
+      service = systemdServiceOf unit;
     in
-    [
-      {
-        assertion = lib.hasSuffix ".service" unit && service.serviceConfig ? ExecStart;
-        message = "dynamic identity unit `${unit}` is not a service defined in `systemd.services`.";
-      }
-      {
-        assertion = !(service.serviceConfig ? ExecStart) || (service.serviceConfig.DynamicUser or false);
-        message = "dynamic identity unit `${unit}` does not set `DynamicUser`.";
-      }
-    ];
+    {
+      assertion = !(service.serviceConfig ? ExecStart) || (service.serviceConfig.DynamicUser or false);
+      message = "dynamic identity unit `${unit}` does not set `DynamicUser`.";
+    };
 in
 {
   config = {
@@ -48,6 +53,8 @@ in
       }) delivered
     );
 
-    contracts.assertions = lib.concatMap mkUnitAssertions units;
+    contracts.assertions =
+      map mkUnitAssertion (unitsOf delivered)
+      ++ map mkDynamicUnitAssertion (unitsOf (lib.filter isDynamic delivered));
   };
 }
