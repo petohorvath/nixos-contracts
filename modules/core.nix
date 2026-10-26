@@ -11,7 +11,10 @@ let
     descriptionClass = "noun";
     check = builtins.isString;
     merge =
-      loc: defs: references.checkName (node: "node identity `${node}`") (lib.mergeEqualOption loc defs);
+      loc: defs:
+      references.checkName references.nameRules.node (node: "node identity `${node}`") (
+        lib.mergeEqualOption loc defs
+      );
   };
   contractTypes = import ./types.nix { inherit lib; };
   identityType = contractTypes.tag {

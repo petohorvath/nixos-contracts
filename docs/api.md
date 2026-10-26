@@ -122,7 +122,7 @@ location = [ "influxdb" "admin-token" ];
 name = "beta-influxdb_influxdb_admin-token";
 ```
 
-Service names, claim ids and node identities are names: non-empty, and made of lowercase letters, digits and hyphens only. Any other, such as `ssh_host_ed25519_key` or `Influxdb`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `ssh_host_ed25519_key` of service `openssh` may contain only lowercase letters, digits and hyphens.`` No name contains `_`, so joining a location with `_` makes a name no other location makes:
+Service names and node identities are non-empty, and made of lowercase letters, digits and hyphens only. Claim ids may also contain `_`, such as `ssh_host_ed25519_key`, so a receiver can give a copy the sent claim's `name` as its id ([ADR 0017](adr/0017-allow-an-underscore-in-a-claim-id-and-name-a-claim-without-a-location.md)). Any other name, such as the service name `web_proxy` or the claim id `Host-Key`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `Host-Key` of service `openssh` may contain only lowercase letters, digits, hyphens and `_`.`` No service name or node identity contains `_`, so the first `_` of a joined claim location ends the service, and the first two of a claim `name` end the node and the service. Both names therefore stay unique however many `_` an id holds:
 
 - A backend adapter names its entry for a claim by joining the location with `_`, such as `age.secrets.influxdb_admin-token`.
 - A claim's `name` joins its node identity, service and id with `_`, so a value built from several nodes' claims, such as an htpasswd user name, takes `name` and never collides.

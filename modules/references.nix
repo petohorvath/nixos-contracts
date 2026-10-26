@@ -4,16 +4,35 @@
 # claim kinds and the adapters.
 rec {
   /*
-    `name` when it is a name, as service names, claim ids and node
-    identities must be: non-empty, of lowercase letters, digits and hyphens
-    only. Otherwise it fails, naming it as `describe name` does.
+    What a name may contain, by what it names. A claim id may also contain
+    `_`, a service name or node identity may not, so the first `_` of a
+    backend name `<service>_<id>` ends the service, and the first two of a
+    claim name `<node>_<service>_<id>` end the node and the service.
   */
+  nameRules =
+    let
+      lowercaseDigitsAndHyphens = {
+        pattern = "[a-z0-9-]+";
+        allowed = "lowercase letters, digits and hyphens";
+      };
+    in
+    {
+      service = lowercaseDigitsAndHyphens;
+      node = lowercaseDigitsAndHyphens;
+      id = {
+        pattern = "[a-z0-9_-]+";
+        allowed = "lowercase letters, digits, hyphens and `_`";
+      };
+    };
+
+  # `name` when it is non-empty and follows `rule`, one of `nameRules`.
+  # Otherwise it fails, naming it as `describe name` does.
   checkName =
-    describe: name:
-    if builtins.match "[a-z0-9-]+" name != null then
+    rule: describe: name:
+    if builtins.match rule.pattern name != null then
       name
     else
-      throw "nixos-contracts: ${describe name} may contain only lowercase letters, digits and hyphens.";
+      throw "nixos-contracts: ${describe name} may contain only ${rule.allowed}.";
 
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
@@ -31,8 +50,8 @@ rec {
   locationLabelOf = builtins.concatStringsSep ".";
 
   # The name a backend adapter gives its entry for a claim, such as
-  # `influxdb_admin-token`. No name of a location contains `_`, so no two
-  # locations make one name.
+  # `influxdb_admin-token`. No service name contains `_`, so the first `_`
+  # ends the service, and no two claims of a node make one name.
   backendNameOf = builtins.concatStringsSep "_";
 
   # Where the secret backend `backend` installs the secret at `location`,
