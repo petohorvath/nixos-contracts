@@ -5,6 +5,7 @@ status: accepted
 # Allow `_` in a claim id, and name a claim without a location
 
 A claim id may contain `_` besides lowercase letters, digits and hyphens. A service name or node identity still may not. A claim no longer holds a `location`:
+
 - A backend adapter names its entry for a claim `<service>_<id>`, such as `influxdb_admin-token`.
 - A claim's `name` stays `<node>_<service>_<id>`.
 - The secret backend slot's `path` takes `{ service, id }`, and the delivery slot's `path` takes `{ unit, service, id }`.
