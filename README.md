@@ -36,7 +36,6 @@ The flake exports:
 
 - `nixosModules.default`: the contracts for a NixOS configuration, with their failed checks forwarded to `assertions`.
 - `nixosModules.preservation`, `nixosModules.agenix-rekey` and `nixosModules.systemd-credentials`: one adapter each, also importing `nixosModules.default`. Importing an adapter turns it on; its backend's own NixOS module must be imported too.
-- `nixosModules.cross-config`: takes the node identity and node collection from nixos-cross-config, also importing `nixosModules.default`.
 - `modules.generic.default`: the same contracts for any module class, with failed checks left in `contracts.failures`.
 - `lib.mkDefaultContract`, `lib.mkClaimKind`, `lib.types.reference` and `lib.types.referenceTo`.
 

@@ -30,7 +30,6 @@ in
       generic = [ "default" ];
       nixos = [
         "agenix-rekey"
-        "cross-config"
         "default"
         "preservation"
         "systemd-credentials"

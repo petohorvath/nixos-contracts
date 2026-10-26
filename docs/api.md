@@ -11,7 +11,7 @@ This reference describes the public interface of nixos-contracts: its modules, o
 
 Both import the core and the four shipped claim kinds. The generic module reads no option outside `contracts`, so it also evaluates with a bare `lib.evalModules`, which is how the core is tested.
 
-The [adapters](#adapters) and [`nixosModules.cross-config`](#nixosmodulescross-config) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several of them declares its options once.
+The [adapters](#adapters) are further NixOS modules, each importing `nixosModules.default`. The generic module carries a module key, so a configuration that imports several of them declares its options once.
 
 To import the modules by path without the flake, apply their directory to the `nix-libnet` library. `nixos` returns the NixOS modules by export name, and `modules` the generic module:
 
@@ -20,9 +20,16 @@ To import the modules by path without the flake, apply their directory to the `n
 import "${nixos-contracts}/modules" { libnet = nix-libnet.lib; }
 ```
 
-### `nixosModules.cross-config`
+### Node identity and collection from nixos-cross-config
 
-Defaults [`contracts.node`](#contractsnode) to `crossConfig.name` and [`contracts.nodes`](#contractsnodes) to `crossConfig.nodeConfigurations`, so a configuration that takes part in [nixos-cross-config](https://github.com/petohorvath/nixos-cross-config) states its node identity and node collection once. It reads only options that nixos-cross-config's own NixOS module declares, which it requires beside it, and pulls in no flake input. It has no settings and adds no checks.
+nixos-contracts ships no module for a fleet's node collection, so a fleet sets [`contracts.node`](#contractsnode) and [`contracts.nodes`](#contractsnodes) itself, from whatever carries its nodes. A configuration that takes part in [nixos-cross-config](https://github.com/petohorvath/nixos-cross-config) takes both from there:
+
+```nix
+contracts = {
+  node = config.crossConfig.name;
+  nodes = config.crossConfig.nodeConfigurations;
+};
+```
 
 ## Options
 
@@ -66,7 +73,7 @@ A read-only attribute set of every enabled contract's claims of one kind, nested
 
 ### `contracts.node`
 
-This configuration's node identity, its name in the node collection (a [name](#locations-and-names) or null, default `null`). Every claim's `ref` and `name` include it. While it is null, a `ref` names a null node, which no lookup resolves, and a claim's `name` is null, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. [`nixosModules.cross-config`](#nixosmodulescross-config) defaults it to `crossConfig.name`.
+This configuration's node identity, its name in the node collection (a [name](#locations-and-names) or null, default `null`). Every claim's `ref` and `name` include it. While it is null, a `ref` names a null node, which no lookup resolves, and a claim's `name` is null, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. A fleet sets it, for example [from nixos-cross-config](#node-identity-and-collection-from-nixos-cross-config).
 
 ### `contracts.nodes`
 

@@ -2,7 +2,7 @@
   Two nodes sharing one value: each node's telegraf generates its token and
   sends it to the influxdb inbox on the store node, which holds a copy of
   each. Each node is given its node identity and all nodes as its node
-  collection, as `nixosModules.cross-config` would set them. The encrypted
+  collection, as a fleet sets them. The encrypted
   files under `secrets/` are not part of the example; the configurations
   are evaluated, not built.
 */

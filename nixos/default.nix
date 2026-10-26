@@ -13,7 +13,7 @@ let
     generic
     ./assertions.nix
   ];
-  # An adapter, or the cross-config module, with the default module.
+  # An adapter with the default module.
   withDefault = file: {
     imports = [
       default
@@ -24,7 +24,6 @@ in
 {
   inherit default;
   agenix-rekey = withDefault ./adapters/agenix-rekey.nix;
-  cross-config = withDefault ./cross-config.nix;
   preservation = withDefault ./adapters/preservation.nix;
   systemd-credentials = withDefault ./adapters/systemd-credentials.nix;
 }
