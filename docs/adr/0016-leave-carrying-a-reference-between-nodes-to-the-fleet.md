@@ -7,6 +7,7 @@ status: accepted
 nixos-contracts carries nothing between nodes. A sending node makes its claim's `ref` available through shared data the fleet already has, such as a nixos-registry field of `lib.types.referenceTo` values. The receiving node then writes its own claims from the references it reads there: a copy of each with `value.copied`, or one secret `value.derived.from` all of them. It reads a claim of any other kind through `contracts.resolve`. This supersedes ADR-0015, which carried claims through inboxes, and returns to ADR-0012's stance that how a reference travels between nodes is the consumer's choice.
 
 In nixos-config, every relation between nodes is one of three shapes:
+
 - discovery, such as a store's URL, which nixos-registry carries
 - options written on another node, such as a proxy's virtual hosts, which nixos-cross-config carries
 - a credential handed to another node
