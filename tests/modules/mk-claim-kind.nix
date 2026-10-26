@@ -120,14 +120,45 @@ in
     };
   };
 
-  testClaimNameJoinsNodeServiceAndIdWithUnderscores = {
+  testClaimNameJoinsNodeKindServiceAndIdWithUnderscores = {
     expr =
       (evaluate [
         databases
         services
         { contracts.node = "beta-db"; }
       ]).contracts.claimSets.databases.grafana.main.name;
-    expected = "beta-db_grafana_main";
+    expected = "beta-db_databases_grafana_main";
+  };
+
+  testClaimsOfTwoKindsWithOneServiceAndIdHaveDifferentNames = {
+    expr =
+      let
+        config = evaluate [
+          databases
+          (mkClaimKind {
+            name = "tokens";
+            description = "Tokens.";
+            claim = _: { };
+          })
+          {
+            contracts.node = "beta";
+            contracts.services.grafana = {
+              enable = true;
+              identity.static.user = "grafana";
+              databases.main = { };
+              tokens.main = { };
+            };
+          }
+        ];
+      in
+      [
+        config.contracts.claimSets.databases.grafana.main.name
+        config.contracts.claimSets.tokens.grafana.main.name
+      ];
+    expected = [
+      "beta_databases_grafana_main"
+      "beta_tokens_grafana_main"
+    ];
   };
 
   testClaimSetLeavesOutServicesWithoutClaimsOfTheKind = {
@@ -316,8 +347,8 @@ in
     expected = {
       failures = [ ];
       names = [
-        "n_a_b-c"
-        "n_a-b_c"
+        "n_tokens_a_b-c"
+        "n_tokens_a-b_c"
       ];
     };
   };
@@ -645,7 +676,7 @@ in
       };
     expected = {
       id = "main_db_2";
-      name = "beta_grafana_main_db_2";
+      name = "beta_databases_grafana_main_db_2";
     };
   };
 
@@ -822,6 +853,44 @@ in
       claim = _: { };
     };
     expectedError.msg = "claim kind name `enable` is reserved for the contract's own `enable` field; choose another name";
+  };
+
+  testKindNameMayContainDigitsAndHyphens = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "tokens-2";
+          description = "Tokens.";
+          claim = _: { };
+        })
+        {
+          contracts.node = "beta";
+          contracts.services.a = {
+            enable = true;
+            identity.static.user = "a";
+            tokens-2.t = { };
+          };
+        }
+      ]).contracts.claimSets.tokens-2.a.t.name;
+    expected = "beta_tokens-2_a_t";
+  };
+
+  testKindNameWithAnUnderscoreIsRejected = {
+    expr = mkClaimKind {
+      name = "api_tokens";
+      description = "Tokens.";
+      claim = _: { };
+    };
+    expectedError.msg = "claim kind name `api_tokens` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testKindNameWithAnUppercaseLetterIsRejected = {
+    expr = mkClaimKind {
+      name = "Tokens";
+      description = "Tokens.";
+      claim = _: { };
+    };
+    expectedError.msg = "claim kind name `Tokens` may contain only lowercase letters, digits and hyphens";
   };
 
   testIdentityKindNameIsRejected = {

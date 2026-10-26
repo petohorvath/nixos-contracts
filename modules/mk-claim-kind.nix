@@ -12,8 +12,9 @@
   `name`
   : The kind's name. It becomes the field `contracts.services.<service>.<name>`,
     the claim set `contracts.claimSets.<name>` and the settings root
-    `contracts.kinds.<name>`. The contract's own fields `enable` and
-    `identity` are reserved.
+    `contracts.kinds.<name>`, and part of every claim's name. It may contain
+    only lowercase letters, digits and hyphens, and the contract's own
+    fields `enable` and `identity` are reserved.
 
   `description`
   : Description of the contract field holding this kind's claims.
@@ -75,8 +76,12 @@
   settings ? { },
 }:
 let
-  kindName = name;
   inherit (import ./references.nix) checkName claimLabelOf nameRules;
+
+  # The kind's name, failing when it contains `_` or another character
+  # its rule forbids. The reserved-name check below reads it, so a kind
+  # fails as it is built.
+  kindName = checkName nameRules.kind (kind: "claim kind name `${kind}`") name;
 
   # A service name or claim id, failing when it breaks its rule, so `_`
   # joins a service and an id into a name no other pair makes.
@@ -244,14 +249,15 @@ else
                               else
                                 lib.concatStringsSep "_" [
                                   topConfig.contracts.node
+                                  kindName
                                   config.service
                                   config.id
                                 ];
-                            defaultText = lib.literalMD "`<node>_<service>_<id>`, or null without `contracts.node`";
+                            defaultText = lib.literalMD "`<node>_<kind>_<service>_<id>`, or null without `contracts.node`";
                             description = ''
-                              The claim name, `<node>_<service>_<id>`, which no
-                              other claim of the node collection shares; null
-                              while `contracts.node` is null.
+                              The claim name, `<node>_<kind>_<service>_<id>`,
+                              which no other claim of the node collection
+                              shares; null while `contracts.node` is null.
                             '';
                           };
                           # Built from the node identity, kind, service

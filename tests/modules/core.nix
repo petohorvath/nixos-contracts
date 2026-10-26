@@ -438,7 +438,7 @@ in
     expected = {
       service = "web";
       id = "http";
-      name = "backend_web_http";
+      name = "backend_binds_web_http";
       reason = null;
     };
   };

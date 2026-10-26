@@ -104,26 +104,26 @@ Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<
 
 - `service`: the name of its service.
 - `id`: its id within the contract.
-- `name`: its claim name, `<node>_<service>_<id>`, or null while `contracts.node` is null.
+- `name`: its claim name, `<node>_<kind>_<service>_<id>`, or null while `contracts.node` is null.
 - `ref`: its [reference](#references), `{ node; kind; service; id; }`, with `contracts.node` as its node.
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
 
 ### Names
 
-A claim's `service` and `id` place it within its node, and its `name` names it across the node collection ([ADR 0017](adr/0017-allow-an-underscore-in-a-claim-id-and-name-a-claim-without-a-location.md)):
+A claim's kind, `service` and `id` place it within its node, and its `name` names it across the node collection ([ADR 0018](adr/0018-put-the-kind-into-a-claims-name.md)):
 
 ```nix
 # The claim contracts.services.influxdb.secrets.admin-token, on the node beta-influxdb
 service = "influxdb";
 id = "admin-token";
-name = "beta-influxdb_influxdb_admin-token";
+name = "beta-influxdb_secrets_influxdb_admin-token";
 ```
 
-Service names and node identities are non-empty, and made of lowercase letters, digits and hyphens only. Claim ids may also contain `_`, such as `ssh_host_ed25519_key`, so a receiver can give a copy the sent claim's `name` as its id ([ADR 0017](adr/0017-allow-an-underscore-in-a-claim-id-and-name-a-claim-without-a-location.md)). Any other name, such as the service name `web_proxy` or the claim id `Host-Key`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `Host-Key` of service `openssh` may contain only lowercase letters, digits, hyphens and `_`.`` No service name or node identity contains `_`, so the first `_` of a backend name `<service>_<id>` ends the service, and the first two of a claim `name` end the node and the service. Both names therefore stay unique however many `_` an id holds:
+Node identities, kind names and service names are non-empty, and made of lowercase letters, digits and hyphens only. Claim ids may also contain `_`, such as `ssh_host_ed25519_key`, so a receiver can give a copy the sent claim's `name` as its id ([ADR 0017](adr/0017-allow-an-underscore-in-a-claim-id-and-name-a-claim-without-a-location.md)). Any other name, such as the service name `web_proxy` or the claim id `Host-Key`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `Host-Key` of service `openssh` may contain only lowercase letters, digits, hyphens and `_`.`` No node identity, kind name or service name contains `_`, so the first `_` of a backend name `<service>_<id>` ends the service, and the first three of a claim `name` end the node, the kind and the service. Both names therefore stay unique however many `_` an id holds:
 
 - A backend adapter names its entry for a claim `<service>_<id>`, such as `age.secrets.influxdb_admin-token`.
-- A claim's `name` joins its node identity, service and id with `_`, so a value built from several nodes' claims, such as an htpasswd user name, takes `name` and never collides.
+- A claim's `name` joins its node identity, kind, service and id with `_`, so a value built from several nodes' claims, such as an htpasswd user name, takes `name` and never collides, even with a claim of another kind.
 - Check messages name a claim `<service>.<id>`, such as ``nixos-contracts: secrets claim `influxdb.admin-token`: …``.
 
 ### References
@@ -253,23 +253,23 @@ nixos-contracts carries nothing between nodes ([ADR 0016](adr/0016-leave-carryin
 # On the store: a copy of each writer's token, `writers` being a list of
 # `lib.types.referenceTo "secrets"` values read from shared data
 contracts.services.influxdb.secrets = lib.listToAttrs (map (ref:
-  lib.nameValuePair "${ref.node}_${ref.service}_${ref.id}" { value.copied = ref; }
+  lib.nameValuePair "${ref.node}_${ref.kind}_${ref.service}_${ref.id}" { value.copied = ref; }
 ) writers);
 
 # On the proxy: an htpasswd with one line per client, in a stable order
 contracts.services.nginx.secrets.htpasswd.value.derived = {
   generator = "basic-auth";
-  from = lib.sortOn (ref: "${ref.node}_${ref.service}_${ref.id}") clients;
+  from = lib.sortOn (ref: "${ref.node}_${ref.kind}_${ref.service}_${ref.id}") clients;
 };
 ```
 
 A copy is an ordinary secret of the receiving service. It is in `contracts.claimSets.secrets`, its `owner` and `group` default from the receiving identity, it passes the secrets kind's checks, and every adapter installs and delivers it like any other secret. The receiving daemon reads it at its `path`. A sender added on another node adds a copy or a source, with no change on the receiving node.
 
-A copy's id joins the reference's own `node`, `service` and `id` with `_`, which gives the sent claim's `name`, so no two references give one id (see [Names](#names)). A receiver does not resolve a reference to choose an id. The keys of its claim set would then read the sender's claim set, and two receivers that each did so would recurse into each other. A receiver resolves references only in the values it builds, as `sources` does.
+A copy's id joins the reference's own `node`, `kind`, `service` and `id` with `_`, which gives the sent claim's `name`, so no two references give one id (see [Names](#names)). A receiver does not resolve a reference to choose an id. The keys of its claim set would then read the sender's claim set, and two receivers that each did so would recurse into each other. A receiver resolves references only in the values it builds, as `sources` does.
 
 A receiver gets the references in the order its shared data gives them. Where the order shows in what it builds, such as the lines of an htpasswd, it sorts them, for example by the claim `name` their joined fields give.
 
-The receiver's checks report a reference that does not resolve, naming the reference and the reason, such as ``nixos-contracts: secrets claim `influxdb.alhpa_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`.`` A copy of a secret that is copied or derived itself fails as any copy does. A reference of another kind fails as a type error where it is written, in a field typed [`lib.types.referenceTo`](#libtypesreferenceto). Nothing reports a missing or disabled receiver, since the core does not know who reads a reference.
+The receiver's checks report a reference that does not resolve, naming the reference and the reason, such as ``nixos-contracts: secrets claim `influxdb.alhpa_secrets_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`.`` A copy of a secret that is copied or derived itself fails as any copy does. A reference of another kind fails as a type error where it is written, in a field typed [`lib.types.referenceTo`](#libtypesreferenceto). Nothing reports a missing or disabled receiver, since the core does not know who reads a reference.
 
 Across a fleet, [nixos-registry](https://github.com/petohorvath/nixos-registry) carries the references. Each sender contributes its claim's `ref` to a registry field of `lib.types.referenceTo` values, keyed by the claim's `name`, and each receiver reads the combined data. nixos-registry reads each node's contributions and never its claim sets, so two nodes that hand each other references evaluate without a cycle. A node whose contribution reads what it received still recurses. Where the nodes are evaluated together, a `let`-bound list of their `ref`s does the same, as the [shared-token example](examples.md#shared-token-one-value-on-two-nodes) shows.
 
@@ -299,7 +299,7 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets` entry per claim of `contracts.claimSets.secrets`, named `<service>_<id>`, such as `age.secrets.influxdb_admin-token` or, for a [copy](#relating-nodes) whose id joins a reference's fields, `age.secrets.influxdb_metrics_telegraf_token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<service>_<id>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets` entry per claim of `contracts.claimSets.secrets`, named `<service>_<id>`, such as `age.secrets.influxdb_admin-token` or, for a [copy](#relating-nodes) whose id joins a reference's fields, `age.secrets.influxdb_metrics_secrets_telegraf_token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<service>_<id>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
 The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from that node's `config` in `contracts.nodes`. It takes the names of its own entries from its own claim set alone, never from another node's entries, so entries across nodes, in either direction, evaluate without cycles. A copy's `rekeyFile` is the referenced secret's, read from its entry on its own node, or from this configuration for a secret of its own node, so one encrypted file serves both nodes. A derived secret's dependencies are its sources' entries on their own nodes, so an htpasswd is built from clients on several nodes. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node, such as ``nixos-contracts: secret `influxdb.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: …``.
 
@@ -359,7 +359,7 @@ To use it without the flake, import the library directory with a caller-owned li
 `mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
-: The kind's name: the contract field, the claim set and the settings root. The contract's own fields `enable` and `identity` are reserved.
+: The kind's name: the contract field, the claim set, the settings root and part of every claim's `name`. It may contain only lowercase letters, digits and hyphens, so a name such as `api_tokens` fails as the kind is built, and the contract's own fields `enable` and `identity` are reserved.
 
 `description`
 : The description of the contract field.
@@ -409,7 +409,7 @@ options.example.influxdb.writers = lib.mkOption {
 };
 
 config.contracts.services.influxdb.secrets = lib.listToAttrs (map (ref:
-  lib.nameValuePair "${ref.node}_${ref.service}_${ref.id}" { value.copied = ref; }
+  lib.nameValuePair "${ref.node}_${ref.kind}_${ref.service}_${ref.id}" { value.copied = ref; }
 ) config.example.influxdb.writers);
 ```
 

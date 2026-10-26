@@ -53,13 +53,13 @@ The [example](../examples/exporter/default.nix) enables both with only `nixosMod
 
 ## shared-token: one value on two nodes
 
-A [telegraf module](../examples/shared-token/telegraf.nix) generates the token its node writes metrics with. An [influxdb module](../examples/shared-token/influxdb.nix) takes its writers' tokens as `example.influxdb.writers`, a list of `lib.types.referenceTo "secrets"` values, and [holds a copy](api.md#relating-nodes) of each, owned by `influxdb2` with mode `0400`. Each copy's id joins the reference's node, service and id with `_`, which gives the token's claim name. It provisions one write authorization per copy, named the same way, reads each copy at its `path` and writes no backend option.
+A [telegraf module](../examples/shared-token/telegraf.nix) generates the token its node writes metrics with. An [influxdb module](../examples/shared-token/influxdb.nix) takes its writers' tokens as `example.influxdb.writers`, a list of `lib.types.referenceTo "secrets"` values, and [holds a copy](api.md#relating-nodes) of each, owned by `influxdb2` with mode `0400`. Each copy's id joins the reference's node, kind, service and id with `_`, which gives the token's claim name. It provisions one write authorization per copy, named the same way, reads each copy at its `path` and writes no backend option.
 
 The [example](../examples/shared-token/default.nix) evaluates two nodes, `metrics` and `store`, each given its node identity at `contracts.node` and both nodes as its node collection at `contracts.nodes`, as a fleet sets them. Both run telegraf. A `let`-bound list holds every node's telegraf token `ref`, read from the nodes' evaluated configurations, and the store takes it as its writers, its own token included, as a fleet's shared data, such as nixos-registry, would carry it. Neither node writes the other's options. Its result shows:
 
-- `copies`: the store installs its copies as `influxdb_metrics_telegraf_token` and `influxdb_store_telegraf_token`, each owned by `influxdb2` with group `influxdb2` and mode `0400`, from the sender's encrypted file, `metrics/telegraf_token.age` and `store/telegraf_token.age`, without a generator of its own.
+- `copies`: the store installs its copies as `influxdb_metrics_secrets_telegraf_token` and `influxdb_store_secrets_telegraf_token`, each owned by `influxdb2` with group `influxdb2` and mode `0400`, from the sender's encrypted file, `metrics/telegraf_token.age` and `store/telegraf_token.age`, without a generator of its own.
 - `original`: the metrics node's file is the same one its copy reads.
-- `auths`: one authorization per writer, `metrics_telegraf_token` and `store_telegraf_token`, each reading its copy under `/run/agenix/influxdb_…`.
+- `auths`: one authorization per writer, `metrics_secrets_telegraf_token` and `store_secrets_telegraf_token`, each reading its copy under `/run/agenix/influxdb_…`.
 - `failures`: none on either node.
 
 ## custom-kind: a claim kind of a project's own
