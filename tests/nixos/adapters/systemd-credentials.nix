@@ -27,7 +27,7 @@ let
     };
   };
   backend.contracts.kinds.secrets.backend = {
-    path = location: "/run/agenix/${lib.concatStringsSep "_" location}";
+    path = { service, id }: "/run/agenix/${service}_${id}";
     generators = [ ];
   };
 
@@ -127,7 +127,7 @@ in
     expectedError.msg = "nixos-contracts: secret `alloy\\.password` has no path: import a secret backend adapter";
   };
 
-  testDeliveryPathNamesTheCredentialByTheLocation = {
+  testDeliveryPathNamesTheCredentialByServiceAndId = {
     expr =
       (evaluate [
         adapter
@@ -135,10 +135,8 @@ in
       ]).contracts.kinds.secrets.delivery.path
         {
           unit = "alloy.service";
-          location = [
-            "alloy"
-            "loki-password"
-          ];
+          service = "alloy";
+          id = "loki-password";
         };
     expected = "/run/credentials/alloy.service/alloy_loki-password";
   };

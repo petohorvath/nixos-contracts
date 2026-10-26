@@ -26,10 +26,10 @@
     `unit` null for a static identity) and `config` the configuration's
     top-level `config`. Inside the submodule, the module argument `name` is
     the claim's id. A value that follows from the identity, such as a file
-    owner, is an option defaulting to it. The constructor declares five
-    read-only options on every claim, `service`, `id`, its `location`
-    `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
-    so a claim type cannot declare options with these names. A claim id
+    owner, is an option defaulting to it. The constructor declares four
+    read-only options on every claim, `service`, `id`, its claim name
+    `name` and its reference `ref`, so a claim type cannot declare options
+    with these names. A claim id
     may contain only lowercase letters, digits, hyphens and `_`.
 
   `clash`
@@ -76,7 +76,7 @@
 }:
 let
   kindName = name;
-  inherit (import ./references.nix) checkName locationLabelOf nameRules;
+  inherit (import ./references.nix) checkName claimLabelOf nameRules;
 
   # A service name or claim id, failing when it breaks its rule, so `_`
   # joins a service and an id into a name no other pair makes.
@@ -163,7 +163,7 @@ else
         in
         {
           assertion = reason == null;
-          message = "${kindName} claims `${locationLabelOf pair.first.location}` and `${locationLabelOf pair.second.location}` clash: ${toString reason}.";
+          message = "${kindName} claims `${claimLabelOf pair.first}` and `${claimLabelOf pair.second}` clash: ${toString reason}.";
         }
       ) pairs
     );
@@ -173,7 +173,7 @@ else
     toReasons = reasons: if reasons == null then [ ] else lib.toList reasons;
 
     # The failed checks of one claim, given as `{ identity, claim }`, each
-    # naming the claim by its location.
+    # naming the claim by its service and id.
     checkAssertionsOf =
       arguments:
       lib.optionals (check != null) (
@@ -190,7 +190,7 @@ else
             toReasons
             (map (reason: {
               assertion = false;
-              message = "${kindName} claim `${locationLabelOf arguments.claim.location}`: ${reason}.";
+              message = "${kindName} claim `${claimLabelOf arguments.claim}`: ${reason}.";
             }))
           ]
       );
@@ -234,20 +234,6 @@ else
                             default = checkId service name;
                             defaultText = lib.literalMD "the claim's attribute name";
                             description = "The claim's id within its contract.";
-                          };
-                          location = lib.mkOption {
-                            type = lib.types.listOf lib.types.str;
-                            readOnly = true;
-                            default = [
-                              config.service
-                              config.id
-                            ];
-                            defaultText = lib.literalMD "`[ <service> <id> ]`";
-                            description = ''
-                              The names that place the claim within its
-                              node, `[ <service> <id> ]`. A backend adapter
-                              names its entry by joining them with `_`.
-                            '';
                           };
                           name = lib.mkOption {
                             type = lib.types.nullOr lib.types.str;

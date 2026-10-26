@@ -22,10 +22,6 @@ in
     expected = {
       service = "web";
       id = "http";
-      location = [
-        "web"
-        "http"
-      ];
       name = null;
       ref = {
         node = null;

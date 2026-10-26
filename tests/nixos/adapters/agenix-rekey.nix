@@ -29,8 +29,8 @@ let
       };
     };
   };
-  # The backend's directories, and a value set on agenix-rekey under the
-  # name of its claim's location.
+  # The backend's directories, and a value set on agenix-rekey under its
+  # claim's backend name `<service>_<id>`.
   values = {
     age = {
       rekey = {
@@ -603,16 +603,16 @@ in
     ];
   };
 
-  testBackendPathNamesTheEntryByTheLocation = {
+  testBackendPathNamesTheEntryByServiceAndId = {
     expr =
       (configuration [
         services
         values
       ]).contracts.kinds.secrets.backend.path
-        [
-          "influxdb"
-          "admin-token"
-        ];
+        {
+          service = "influxdb";
+          id = "admin-token";
+        };
     expected = "/run/agenix/influxdb_admin-token";
   };
 
@@ -626,7 +626,7 @@ in
     expected = "/run/keys/kea";
   };
 
-  testEntriesAreNamedByTheLocationJoinedWithUnderscores = {
+  testEntriesAreNamedByServiceAndIdJoinedWithAnUnderscore = {
     expr =
       builtins.attrNames
         (configuration [

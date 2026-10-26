@@ -46,22 +46,23 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
-  # A claim's location as messages name it, such as `influxdb.admin-token`.
-  locationLabelOf = builtins.concatStringsSep ".";
+  # A claim as messages name it, `<service>.<id>`, such as
+  # `influxdb.admin-token`.
+  claimLabelOf = { service, id, ... }: "${service}.${id}";
 
-  # The name a backend adapter gives its entry for a claim, such as
-  # `influxdb_admin-token`. No service name contains `_`, so the first `_`
-  # ends the service, and no two claims of a node make one name.
-  backendNameOf = builtins.concatStringsSep "_";
+  # The name a backend adapter gives its entry for a claim, `<service>_<id>`,
+  # such as `influxdb_admin-token`. No service name contains `_`, so the
+  # first `_` ends the service, and no two claims of a node make one name.
+  backendNameOf = { service, id, ... }: "${service}_${id}";
 
-  # Where the secret backend `backend` installs the secret at `location`,
-  # failing, naming the secret, while no backend adapter sets it.
+  # Where the secret backend `backend` installs the secret `secret`, failing,
+  # naming the secret, while no backend adapter sets it.
   backendPathOf =
-    backend: location:
+    backend: secret:
     if backend == null then
-      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+      throw "nixos-contracts: secret `${claimLabelOf secret}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
     else
-      backend.path location;
+      backend.path { inherit (secret) service id; };
 
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
