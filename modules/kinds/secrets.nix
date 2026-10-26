@@ -8,8 +8,8 @@ let
   # value adds only its own rules.
   inherit (import ../references.nix)
     backendPathOf
-    labelOf
     lookup
+    referenceLabelOf
     ;
 
   # The references of a `copied` or `derived` value, in order, or none.
@@ -48,7 +48,7 @@ let
     config: reference:
     let
       result = lookup config reference;
-      references = "it references `${labelOf reference}`";
+      references = "it references `${referenceLabelOf reference}`";
     in
     if result.reason != null then
       "${references}: ${result.reason}"

@@ -118,7 +118,7 @@ in
         if result.reason == null then
           result.claim
         else
-          throw "nixos-contracts: cannot resolve `${references.labelOf reference}`: ${result.reason}";
+          throw "nixos-contracts: cannot resolve `${references.referenceLabelOf reference}`: ${result.reason}";
       defaultText = lib.literalMD "the claim `contracts.lookup` finds, or an error with its reason";
       description = ''
         A function of a reference returning the claim-set entry it names,

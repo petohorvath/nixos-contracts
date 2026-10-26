@@ -67,7 +67,7 @@ rec {
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
 
   # A reference as messages name it.
-  labelOf =
+  referenceLabelOf =
     reference:
     "${
       if reference.node == null then "<no node>" else reference.node
