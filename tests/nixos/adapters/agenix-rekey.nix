@@ -91,68 +91,50 @@ let
     };
   };
 
-  # Influxdb's `writers` inbox on the store node, holding a copy of each
-  # token it receives, and telegraf sending its token there.
-  writers = {
-    node = "store";
-    service = "influxdb";
-    id = "writers";
-  };
-  influxdbWriters = {
-    imports = [ (influxdb { }) ];
-    contracts.services.influxdb.inboxes.writers.copy = { };
-  };
-  writingTelegraf = {
-    imports = [ telegraf ];
-    contracts.services.telegraf.secrets.token.sendTo = [ writers ];
-  };
-  # The store node's configuration, sharing one node collection with a
-  # metrics node that `evaluateMetrics` evaluates, neither with secrets
-  # directories.
-  storeWithMetrics =
-    evaluateMetrics:
+  # The nodes `alpha` and `beta`, each running telegraf and an influxdb
+  # that holds one copy of every node's telegraf token, its id joining the
+  # reference's node, service and id with `_`, and an htpasswd derived
+  # from all of them. A `let`-bound list carries the tokens' `ref`s, as a
+  # fleet's shared data does.
+  handingTokens =
     let
-      nodeOf = node: {
-        contracts = { inherit node nodes; };
-      };
-      nodes = {
-        metrics.config = evaluateMetrics [
-          (nodeOf "metrics")
-          writingTelegraf
+      tokens = map (node: nodes.${node}.config.contracts.services.telegraf.secrets.token.ref) [
+        "alpha"
+        "beta"
+      ];
+      receiving = {
+        imports = [
+          (influxdb (
+            lib.listToAttrs (
+              map (
+                reference:
+                lib.nameValuePair "${reference.node}_${reference.service}_${reference.id}" {
+                  value.copied = reference;
+                }
+              ) tokens
+            )
+            // {
+              htpasswd.value.derived = {
+                generator = "basic-auth";
+                from = tokens;
+              };
+            }
+          ))
         ];
-        store.config = configuration [
-          (nodeOf "store")
-          influxdbWriters
+        age.generators.basic-auth = _: "true";
+      };
+      nodes = nodesOf {
+        alpha = [
+          telegraf
+          receiving
+        ];
+        beta = [
+          telegraf
+          receiving
         ];
       };
     in
-    nodes.store.config;
-  # The telegraf token, sent to the clients inbox of nginx on the `proxy`
-  # node, and nginx deriving an htpasswd from what the inbox received.
-  sendingTelegraf = {
-    imports = [ telegraf ];
-    contracts.services.telegraf.secrets.token.sendTo = [
-      {
-        node = "proxy";
-        service = "nginx";
-        id = "clients";
-      }
-    ];
-  };
-  nginx =
-    { config, ... }:
-    {
-      age.generators.basic-auth = _: "true";
-      contracts.services.nginx = {
-        enable = true;
-        identity.static.user = "nginx";
-        inboxes.clients = { };
-        secrets.htpasswd.value.derived = {
-          generator = "basic-auth";
-          from = config.contracts.services.nginx.inboxes.clients.refs;
-        };
-      };
-    };
+    nodes;
 in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
@@ -409,131 +391,32 @@ in
       };
     };
 
-  testInboxCopyTakesTheEncryptedFileOfTheSecretSentFromAnotherNode = {
-    expr =
-      secretOf "influxdb_writers_metrics_telegraf_token"
-        (nodesOf {
-          metrics = [ writingTelegraf ];
-          store = [ influxdbWriters ];
-        }).store.config;
-    expected = {
-      owner = "root";
-      group = "influxdb2";
-      mode = "0440";
-      rekeyFile = ./generated/metrics/telegraf_token.age;
-      generator = null;
-    };
-  };
-
-  testInboxCopyOfASecretSentFromItsOwnNodeReadsThisConfiguration =
-    let
-      inherit
-        ((nodesOf {
-          store = [
-            writingTelegraf
-            influxdbWriters
-          ];
-        }).store
-        )
-        config
-        ;
-    in
-    {
-      expr = {
-        inherit (config.age.secrets.influxdb_writers_store_telegraf_token) rekeyFile;
-        inherit (config.contracts) failures;
-      };
-      expected = {
-        rekeyFile = ./generated/store/telegraf_token.age;
+  # Alpha's copy of its own token reads this configuration's entry.
+  testCopyOfEachReferenceTakesTheEncryptedFileFromTheSendersNode = {
+    expr = lib.mapAttrs (_: node: {
+      copies = lib.genAttrs [ "influxdb_alpha_telegraf_token" "influxdb_beta_telegraf_token" ] (
+        name: secretOf name node.config
+      );
+      inherit (node.config.contracts) failures;
+    }) handingTokens;
+    expected =
+      let
+        copyOf = node: {
+          owner = "root";
+          group = "influxdb2";
+          mode = "0440";
+          rekeyFile = ./generated + "/${node}/telegraf_token.age";
+          generator = null;
+        };
+      in
+      lib.genAttrs [ "alpha" "beta" ] (_: {
+        copies = {
+          influxdb_alpha_telegraf_token = copyOf "alpha";
+          influxdb_beta_telegraf_token = copyOf "beta";
+        };
         failures = [ ];
-      };
-    };
-
-  testFileSetOnTheBackendWinsOverAnInboxCopys = {
-    expr =
-      (nodesOf {
-        metrics = [ writingTelegraf ];
-        store = [
-          influxdbWriters
-          { age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile = ./agenix-rekey.nix; }
-        ];
-      }).store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
-    expected = ./agenix-rekey.nix;
+      });
   };
-
-  testDisabledReceivingContractInstallsNoCopies = {
-    expr =
-      builtins.attrNames
-        (nodesOf {
-          metrics = [ writingTelegraf ];
-          store = [
-            influxdbWriters
-            { contracts.services.influxdb.enable = lib.mkForce false; }
-          ];
-        }).store.config.age.secrets;
-    expected = [ ];
-  };
-
-  # The metrics node sets no secrets directories, so its token has no
-  # encrypted file.
-  testInboxCopyOfASecretWithoutAFileNamesTheSentSecret = {
-    expr = (storeWithMetrics configuration).contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile`."
-    ];
-  };
-
-  # The metrics node holds its contracts, but no secret backend.
-  testInboxCopyFromANodeWithoutTheAdapterFailsItsCheck = {
-    expr = (storeWithMetrics (modules: nixos.evaluate ([ contracts ] ++ modules))).contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
-    ];
-  };
-
-  # Each node holds a copy of the token the other sends it.
-  testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
-    let
-      nodes = nodesOf {
-        metrics = [
-          writingTelegraf
-          { contracts.services.telegraf.inboxes.outputs.copy = { }; }
-        ];
-        store = [
-          influxdbWriters
-          {
-            contracts.services.influxdb.secrets.token = {
-              value.generated = "alnum";
-              sendTo = [
-                {
-                  node = "metrics";
-                  service = "telegraf";
-                  id = "outputs";
-                }
-              ];
-            };
-          }
-        ];
-      };
-    in
-    {
-      expr = {
-        outputs = nodes.metrics.config.age.secrets.telegraf_outputs_store_influxdb_token.rekeyFile;
-        writers = nodes.store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
-        failures = map (node: node.config.contracts.failures) [
-          nodes.metrics
-          nodes.store
-        ];
-      };
-      expected = {
-        outputs = ./generated/store/influxdb_token.age;
-        writers = ./generated/metrics/telegraf_token.age;
-        failures = [
-          [ ]
-          [ ]
-        ];
-      };
-    };
 
   testGeneratorMakesTheValueFromTheSecretsItReferences = {
     expr =
@@ -581,28 +464,17 @@ in
     };
   };
 
-  # Each dependency is the sender's entry, read from its own node, which the
-  # proxy does not install.
-  testDerivedValueTakesTheEntriesOfAnInboxsRefsOnTheirNodes = {
+  # Each dependency is the sender's entry, read from its own node.
+  testDerivedValueOfReferencesTakesTheSendersEntriesOnTheirNodes = {
     expr =
       let
-        inherit
-          ((nodesOf {
-            alpha = [ sendingTelegraf ];
-            beta = [ sendingTelegraf ];
-            proxy = [ nginx ];
-          }).proxy
-          )
-          config
-          ;
+        inherit (handingTokens.alpha) config;
       in
       {
-        inherit (config.age.secrets.nginx_htpasswd.generator) script;
+        inherit (config.age.secrets.influxdb_htpasswd.generator) script;
         dependencies = map (dependency: {
           inherit (dependency) id rekeyFile;
-        }) config.age.secrets.nginx_htpasswd.generator.dependencies;
-        entries = builtins.attrNames config.age.secrets;
-        inherit (config.contracts) failures;
+        }) config.age.secrets.influxdb_htpasswd.generator.dependencies;
       };
     expected = {
       script = "basic-auth";
@@ -616,8 +488,6 @@ in
           rekeyFile = ./generated/beta/telegraf_token.age;
         }
       ];
-      entries = [ "nginx_htpasswd" ];
-      failures = [ ];
     };
   };
 
@@ -699,29 +569,6 @@ in
       ]).contracts.failures;
     expected = [
       "nixos-contracts: secret `influxdb.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
-    ];
-  };
-
-  testSecretSentFromANodeWithoutTheAdapterFailsACheck = {
-    expr =
-      (nodesOf {
-        metrics = [ sendingTelegraf ];
-        proxy = [
-          nginx
-          {
-            # The metrics node holds its contracts, but no secret backend.
-            contracts.nodes.metrics = lib.mkForce {
-              config = nixos.evaluate [
-                contracts
-                { contracts.node = "metrics"; }
-                sendingTelegraf
-              ];
-            };
-          }
-        ];
-      }).proxy.config.contracts.failures;
-    expected = [
-      "nixos-contracts: secret `nginx.htpasswd` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 

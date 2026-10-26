@@ -1,7 +1,7 @@
-# How a claim is named and placed, how a configuration's claims and
-# copies are listed, and how a reference `{ node; kind; service; id; }`
-# reads its node and claim, shared by the core's `contracts.lookup`, the
-# claim kinds and the adapters.
+# How a claim is named and placed, how a claim set's claims are listed,
+# and how a reference `{ node; kind; service; id; }` reads its node and
+# claim, shared by the core's `contracts.lookup`, the claim kinds and the
+# adapters.
 rec {
   /*
     What a name may contain, by what it names. A claim id may also contain
@@ -65,26 +65,6 @@ rec {
 
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
-
-  # The entries of an inbox's `received`, by node, service and then id, in
-  # a list.
-  receivedOf = inbox: builtins.concatMap claimsOf (builtins.attrValues inbox.received);
-
-  # The copies a configuration's inboxes hold, found through the inboxes of
-  # enabled contracts in its claim set. Each is a secret claim of its
-  # receiving service, placed by its `location`, so a backend installs it
-  # like an authored secret.
-  copiesOf =
-    config:
-    builtins.filter (copy: copy != null) (
-      map (entry: entry.copy) (
-        builtins.concatMap receivedOf (claimsOf config.contracts.claimSets.inboxes)
-      )
-    );
-
-  # The secrets a secret adapter installs alike: the claims of the
-  # configuration's secret claim set and the copies its inboxes hold.
-  secretsOf = config: claimsOf config.contracts.claimSets.secrets ++ copiesOf config;
 
   # A reference as messages name it.
   labelOf =

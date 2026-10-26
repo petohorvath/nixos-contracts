@@ -99,7 +99,6 @@ in
         database = "grafana_main";
         unit = null;
         label = "grafana/main";
-        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -119,7 +118,6 @@ in
         database = "vault";
         unit = "vaultwarden.service";
         label = "vaultwarden/main";
-        sendTo = [ ];
         ref = {
           node = null;
           kind = "databases";
@@ -591,7 +589,7 @@ in
     expectedError.msg = "tokens\\.t\\.location' .* already declared in .*mk-claim-kind\\.nix";
   };
 
-  testClaimTypeCannotDeclareTheSendTo = {
+  testClaimTypeMayDeclareASendTo = {
     expr =
       (evaluate [
         (mkClaimKind {
@@ -616,75 +614,7 @@ in
           };
         }
       ]).contracts.claimSets.tokens.a.t.sendTo;
-    expectedError.msg = "tokens\\.t\\.sendTo' .* already declared in .*mk-claim-kind\\.nix";
-  };
-
-  testClaimOfANewKindIsSentToAnInbox = {
-    expr =
-      builtins.attrNames
-        (evaluate [
-          databases
-          services
-          {
-            contracts = {
-              node = "db";
-              services.grafana.databases.main.sendTo = [
-                {
-                  node = "db";
-                  service = "backup";
-                  id = "databases";
-                }
-              ];
-              services.backup = {
-                enable = true;
-                identity.static.user = "backup";
-                inboxes.databases.kind = "databases";
-              };
-            };
-          }
-        ]).contracts.services.backup.inboxes.databases.received.db.grafana;
-    expected = [ "main" ];
-  };
-
-  testClaimOfAKindThatIsNotSendableIsSentNowhere = {
-    expr =
-      (evaluate [
-        (mkClaimKind {
-          name = "tokens";
-          description = "Tokens.";
-          sendable = false;
-          claim = _: { };
-        })
-        {
-          contracts.services.a = {
-            enable = true;
-            identity.static.user = "a";
-            tokens.t.sendTo = [ ];
-          };
-        }
-      ]).contracts.claimSets.tokens.a.t.id;
-    expectedError.msg = "tokens\\.t\\.sendTo' does not exist";
-  };
-
-  testInboxTakingAKindThatIsNotSendableFailsACheck = {
-    expr = failures [
-      (mkClaimKind {
-        name = "tokens";
-        description = "Tokens.";
-        sendable = false;
-        claim = _: { };
-      })
-      {
-        contracts.services.backup = {
-          enable = true;
-          identity.static.user = "backup";
-          inboxes.tokens.kind = "tokens";
-        };
-      }
-    ];
-    expected = [
-      "nixos-contracts: inboxes claim `backup.tokens`: it takes `tokens`, which no claim can be sent as."
-    ];
+    expected = "mine";
   };
 
   testLocationIsReadOnly = {
@@ -832,6 +762,33 @@ in
       ids = [ "b" ];
       limit = 3;
     };
+  };
+
+  testKindMayBeNamedInboxes = {
+    expr =
+      (evaluate [
+        (mkClaimKind {
+          name = "inboxes";
+          description = "Mailboxes the service delivers to.";
+          claim =
+            _:
+            { lib, ... }:
+            {
+              options.address = lib.mkOption {
+                type = lib.types.str;
+                description = "The mailbox's address.";
+              };
+            };
+        })
+        {
+          contracts.services.postfix = {
+            enable = true;
+            identity.static.user = "postfix";
+            inboxes.postmaster.address = "postmaster@example.test";
+          };
+        }
+      ]).contracts.claimSets.inboxes.postfix.postmaster.address;
+    expected = "postmaster@example.test";
   };
 
   testNodeSwitchesADefaultTagOfACustomKind = {

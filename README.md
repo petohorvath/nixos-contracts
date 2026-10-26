@@ -4,17 +4,17 @@ nixos-contracts is a Nix library that gives the services of one NixOS configurat
 
 ## Overview
 
-A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) a **secret** (a credential it reads, whose value a backend supplies) or an **inbox** (a place where claims of one kind arrive from any node, sent there by their own `sendTo`). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, nested by service and id, and reports clashes, such as two services listening on the same port, as failed checks. [GLOSSARY.md](GLOSSARY.md) defines these terms.
+A **contract** describes one service through its **identity** and its **claims**. A claim is the service's hold on one unit of something: a **bind** (a protocol, port and addresses it listens on), a **mount** (a path that must survive, under a storage **class**) or a **secret** (a credential it reads, whose value a backend supplies). A mount's or secret's owner and group follow from the service's identity unless the claim sets them. The library folds the claims of enabled contracts into one read-only **claim set** per kind, nested by service and id, and reports clashes, such as two services listening on the same port, as failed checks. [GLOSSARY.md](GLOSSARY.md) defines these terms.
 
-The set of claim kinds is open: binds, mounts, secrets and inboxes are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
+The set of claim kinds is open: binds, mounts and secrets are built with the same constructor, `lib.mkClaimKind`, that a project can use for a kind of its own.
 
-A contract only knows its own configuration. It names no network or firewall policy, and names another node only in a reference to a claim that node holds. Fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
+A contract only knows its own configuration. It names no network or firewall policy, and names another node only in a **reference** to a claim that node holds. The library carries nothing between nodes: a sender's claim `ref` travels in shared data the fleet already has, such as nixos-registry, and the receiver writes its own claims from it, such as a copy of a secret or a secret derived from several. Fleet-wide modules can be built on top of the claim sets. It also holds none of a service's own settings: the service module keeps those and wires the daemon from the contract.
 
 **Adapters** are opt-in NixOS modules that map one claim set onto one backend: preservation for mounts, agenix-rekey for secrets, and systemd credentials for delivering the secrets of a dynamic identity into its unit.
 
 ## Status
 
-Pre-release. The core, the four shipped claim kinds, the three adapters and the [examples](docs/examples.md) exist with their tests. Expect breaking changes before `v0.1.0`.
+Pre-release. The core, the three shipped claim kinds, the three adapters and the [examples](docs/examples.md) exist with their tests. Expect breaking changes before `v0.1.0`.
 
 ## Requirements
 
@@ -81,8 +81,9 @@ contracts.services.chrony.binds.ntp.addresses = [ "127.0.0.1" ];
 The resolved claims are then readable in one place:
 
 ```nix
-config.contracts.claimSets.mounts.chrony-state
-# => { service = "chrony"; id = "state"; name = "chrony-state";
+config.contracts.claimSets.mounts.chrony.state
+# => { service = "chrony"; id = "state"; location = [ "chrony" "state" ];
+#      name = null; ref = { node = null; kind = "mounts"; service = "chrony"; id = "state"; };
 #      path = "/var/lib/chrony"; class = "state"; type = "directory";
 #      mode = "0700"; owner = "chrony"; group = "chrony"; }
 ```

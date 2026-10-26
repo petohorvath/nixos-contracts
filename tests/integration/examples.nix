@@ -53,21 +53,29 @@
     };
   };
 
-  testSharedTokenExampleSendsTelegrafsTokenToAnInfluxdbInbox = {
+  testSharedTokenExampleCopiesEveryTelegrafTokenOnTheStore = {
     expr = examples.sharedToken.result;
     expected = {
-      copy = {
-        owner = "influxdb2";
-        group = "influxdb2";
-        mode = "0400";
-        rekeyFile = "metrics/telegraf_token.age";
-        generator = null;
+      copies = {
+        influxdb_metrics_telegraf_token = {
+          owner = "influxdb2";
+          group = "influxdb2";
+          mode = "0400";
+          rekeyFile = "metrics/telegraf_token.age";
+          generator = null;
+        };
+        influxdb_store_telegraf_token = {
+          owner = "influxdb2";
+          group = "influxdb2";
+          mode = "0400";
+          rekeyFile = "store/telegraf_token.age";
+          generator = null;
+        };
       };
       original = "metrics/telegraf_token.age";
-      copiesOwn = "store/telegraf_token.age";
       auths = {
-        metrics_telegraf_token = "/run/agenix/influxdb_writers_metrics_telegraf_token";
-        store_telegraf_token = "/run/agenix/influxdb_writers_store_telegraf_token";
+        metrics_telegraf_token = "/run/agenix/influxdb_metrics_telegraf_token";
+        store_telegraf_token = "/run/agenix/influxdb_store_telegraf_token";
       };
       failures = {
         metrics = [ ];
