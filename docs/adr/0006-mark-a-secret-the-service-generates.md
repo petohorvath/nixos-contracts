@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0007, ADR-0013 and ADR-0015
+status: superseded in part by ADR-0007, ADR-0013 and ADR-0016
 ---
 
 # Mark a secret the service generates

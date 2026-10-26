@@ -16,15 +16,11 @@ _Avoid_: Integration, unit, workload
 What a service effectively runs as: a static account, or a dynamic identity that systemd allocates for one named unit. Who owns the service's files follows from it.
 
 **Claim**:
-A service's declared hold on one unit of something the configuration provides or needs: a bind, a mount, a secret or an inbox. Two services cannot hold the same claim.
+A service's declared hold on one unit of something the configuration provides or needs: a bind, a mount or a secret. Two services cannot hold the same claim.
 _Avoid_: Resource, requirement, building block
 
 **Claim kind**:
-One kind of claim, such as binds, mounts, secrets or inboxes. The set of kinds is open: a new kind is defined the same way as the shipped ones.
-
-**Location**:
-The names that place a claim within its node: its service and id, or for a copy an inbox holds, the receiving service and inbox and the sent claim's node, service and id. A backend names its entry for a claim after it.
-_Avoid_: Address, path, key
+One kind of claim, such as binds, mounts or secrets. The set of kinds is open: a new kind is defined the same way as the shipped ones.
 
 **Claim name**:
 The name a claim goes by across the node collection, made of its node identity, service and id, such as `beta-influxdb_influxdb_data`. No two claims share one; a reference does not name a claim by it.
@@ -54,24 +50,12 @@ Where a secret's value comes from: provided by a person or another party, genera
 _Avoid_: Provenance, source
 
 **Copy**:
-A secret whose value is that of one other secret it references. A service holds one it writes itself, and an inbox holds one for each secret it receives.
+A secret whose value is that of one other secret it references, on its own node or another.
 _Avoid_: Duplicate, replica
 
 **Reference**:
 A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it. A copied or derived secret's `sources` are the references its value comes from.
 _Avoid_: Handle, link, dependency
-
-**Inbox**:
-A service's hold on a place where claims of one kind arrive from any node, its own included. It says what the service accepts, and for secrets, whether and how it holds a copy of each.
-_Avoid_: Receiver, mailbox, channel
-
-**Send**:
-A claim's naming of an inbox it goes to. The sending node writes nothing on the receiving node.
-_Avoid_: Contribution, offer, export
-
-**Send check**:
-An opt-in check that what each node sends does not depend on what its inboxes received.
-_Avoid_: Routing check
 
 **Node**:
 One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its node identity.
@@ -94,11 +78,11 @@ Handing a secret to a dynamic identity's unit, so its daemon reads it from where
 _Avoid_: Injection, mounting
 
 **Adapter**:
-An opt-in module that turns one claim kind's claims, including the copies its inboxes hold, into one backend's configuration, such as preservation or agenix-rekey.
+An opt-in module that turns one claim kind's claims into one backend's configuration, such as preservation or agenix-rekey.
 _Avoid_: Materialiser, consumer
 
 **Adapter slot**:
-The place where one adapter gives a claim kind the data it needs, such as the secret backend's location and generators. Only one adapter fills a slot, and a node writes none.
+The place where one adapter gives a claim kind the data it needs, such as where the secret backend installs a secret and which generators it provides. Only one adapter fills a slot, and a node writes none.
 _Avoid_: Rule, hook, setting
 
 **Check**:

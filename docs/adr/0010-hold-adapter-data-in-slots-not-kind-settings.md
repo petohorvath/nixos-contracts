@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0014
+status: superseded in part by ADR-0014 and ADR-0017
 ---
 
 # Hold adapter data in slots, not kind settings
