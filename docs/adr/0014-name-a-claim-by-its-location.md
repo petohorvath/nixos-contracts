@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0017
 ---
 
 # Name a claim by its location

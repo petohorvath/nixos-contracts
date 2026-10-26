@@ -1,19 +1,37 @@
-# How a claim is named and placed, how a configuration's claims and
-# copies are listed, and how a reference `{ node; kind; service; id; }`
-# reads its node and claim, shared by the core's `contracts.lookup`, the
-# claim kinds and the adapters.
+# How a claim is named, how a claim set's claims are listed, and how a
+# reference `{ node; kind; service; id; }` reads its node and claim, shared
+# by the core's `contracts.lookup`, the claim kinds and the adapters.
 rec {
   /*
-    `name` when it is a name, as service names, claim ids and node
-    identities must be: non-empty, of lowercase letters, digits and hyphens
-    only. Otherwise it fails, naming it as `describe name` does.
+    What a name may contain, by what it names. A claim id may also contain
+    `_`, a service name or node identity may not, so the first `_` of a
+    backend name `<service>_<id>` ends the service, and the first two of a
+    claim name `<node>_<service>_<id>` end the node and the service.
   */
+  nameRules =
+    let
+      lowercaseDigitsAndHyphens = {
+        pattern = "[a-z0-9-]+";
+        allowed = "lowercase letters, digits and hyphens";
+      };
+    in
+    {
+      service = lowercaseDigitsAndHyphens;
+      node = lowercaseDigitsAndHyphens;
+      id = {
+        pattern = "[a-z0-9_-]+";
+        allowed = "lowercase letters, digits, hyphens and `_`";
+      };
+    };
+
+  # `name` when it is non-empty and follows `rule`, one of `nameRules`.
+  # Otherwise it fails, naming it as `describe name` does.
   checkName =
-    describe: name:
-    if builtins.match "[a-z0-9-]+" name != null then
+    rule: describe: name:
+    if builtins.match rule.pattern name != null then
       name
     else
-      throw "nixos-contracts: ${describe name} may contain only lowercase letters, digits and hyphens.";
+      throw "nixos-contracts: ${describe name} may contain only ${rule.allowed}.";
 
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
@@ -27,48 +45,29 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
-  # A claim's location as messages name it, such as `influxdb.admin-token`.
-  locationLabelOf = builtins.concatStringsSep ".";
+  # A claim as messages name it, `<service>.<id>`, such as
+  # `influxdb.admin-token`.
+  claimLabelOf = { service, id, ... }: "${service}.${id}";
 
-  # The name a backend adapter gives its entry for a claim, such as
-  # `influxdb_admin-token`. No name of a location contains `_`, so no two
-  # locations make one name.
-  backendNameOf = builtins.concatStringsSep "_";
+  # The name a backend adapter gives its entry for a claim, `<service>_<id>`,
+  # such as `influxdb_admin-token`. No service name contains `_`, so the
+  # first `_` ends the service, and no two claims of a node make one name.
+  backendNameOf = { service, id, ... }: "${service}_${id}";
 
-  # Where the secret backend `backend` installs the secret at `location`,
-  # failing, naming the secret, while no backend adapter sets it.
+  # Where the secret backend `backend` installs the secret `secret`, failing,
+  # naming the secret, while no backend adapter sets it.
   backendPathOf =
-    backend: location:
+    backend: secret:
     if backend == null then
-      throw "nixos-contracts: secret `${locationLabelOf location}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+      throw "nixos-contracts: secret `${claimLabelOf secret}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
     else
-      backend.path location;
+      backend.path { inherit (secret) service id; };
 
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
 
-  # The entries of an inbox's `received`, by node, service and then id, in
-  # a list.
-  receivedOf = inbox: builtins.concatMap claimsOf (builtins.attrValues inbox.received);
-
-  # The copies a configuration's inboxes hold, found through the inboxes of
-  # enabled contracts in its claim set. Each is a secret claim of its
-  # receiving service, placed by its `location`, so a backend installs it
-  # like an authored secret.
-  copiesOf =
-    config:
-    builtins.filter (copy: copy != null) (
-      map (entry: entry.copy) (
-        builtins.concatMap receivedOf (claimsOf config.contracts.claimSets.inboxes)
-      )
-    );
-
-  # The secrets a secret adapter installs alike: the claims of the
-  # configuration's secret claim set and the copies its inboxes hold.
-  secretsOf = config: claimsOf config.contracts.claimSets.secrets ++ copiesOf config;
-
   # A reference as messages name it.
-  labelOf =
+  referenceLabelOf =
     reference:
     "${
       if reference.node == null then "<no node>" else reference.node

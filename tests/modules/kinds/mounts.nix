@@ -48,12 +48,7 @@ in
     expected = {
       service = "influxdb";
       id = "data";
-      location = [
-        "influxdb"
-        "data"
-      ];
       name = null;
-      sendTo = [ ];
       ref = {
         node = null;
         kind = "mounts";

@@ -29,8 +29,8 @@ let
       };
     };
   };
-  # The backend's directories, and a value set on agenix-rekey under the
-  # name of its claim's location.
+  # The backend's directories, and a value set on agenix-rekey under its
+  # claim's backend name `<service>_<id>`.
   values = {
     age = {
       rekey = {
@@ -65,18 +65,23 @@ let
   };
 
   # Configurations by node identity sharing one node collection, each with its
-  # own secrets directories under its name.
-  nodesOf = import ../../fixtures/nodes.nix {
-    evaluate = configuration;
-    modulesOf = node: [
-      {
-        age.rekey = {
-          secretsDir = ./. + "/${node}";
-          generatedSecretsDir = ./generated + "/${node}";
-        };
-      }
-    ];
-  };
+  # own secrets directories under its name, and with the adapter unless
+  # `withoutAdapter` names it.
+  nodesWithout =
+    withoutAdapter:
+    import ../../fixtures/nodes.nix {
+      evaluate = modules: evaluate (backends ++ modules);
+      modulesOf = node: [
+        (if builtins.elem node withoutAdapter then contracts else adapter)
+        {
+          age.rekey = {
+            secretsDir = ./. + "/${node}";
+            generatedSecretsDir = ./generated + "/${node}";
+          };
+        }
+      ];
+    };
+  nodesOf = nodesWithout [ ];
   # A telegraf node generating its token, and an influxdb node.
   telegraf.contracts.services.telegraf = {
     enable = true;
@@ -91,68 +96,53 @@ let
     };
   };
 
-  # Influxdb's `writers` inbox on the store node, holding a copy of each
-  # token it receives, and telegraf sending its token there.
-  writers = {
-    node = "store";
-    service = "influxdb";
-    id = "writers";
-  };
-  influxdbWriters = {
-    imports = [ (influxdb { }) ];
-    contracts.services.influxdb.inboxes.writers.copy = { };
-  };
-  writingTelegraf = {
-    imports = [ telegraf ];
-    contracts.services.telegraf.secrets.token.sendTo = [ writers ];
-  };
-  # The store node's configuration, sharing one node collection with a
-  # metrics node that `evaluateMetrics` evaluates, neither with secrets
-  # directories.
-  storeWithMetrics =
-    evaluateMetrics:
+  # The nodes `alpha` and `beta`, each running telegraf and an influxdb
+  # that holds one copy of every node's telegraf token, its id joining the
+  # reference's node, service and id with `_`, and an htpasswd derived
+  # from all of them. A `let`-bound list carries the tokens' `ref`s, as a
+  # fleet's shared data does. The nodes `withoutAdapter` names lack the
+  # adapter.
+  handingTokensWithout =
+    withoutAdapter:
     let
-      nodeOf = node: {
-        contracts = { inherit node nodes; };
-      };
-      nodes = {
-        metrics.config = evaluateMetrics [
-          (nodeOf "metrics")
-          writingTelegraf
+      tokens = map (node: nodes.${node}.config.contracts.services.telegraf.secrets.token.ref) [
+        "alpha"
+        "beta"
+      ];
+      receiving = {
+        imports = [
+          (influxdb (
+            lib.listToAttrs (
+              map (
+                reference:
+                lib.nameValuePair "${reference.node}_${reference.service}_${reference.id}" {
+                  value.copied = reference;
+                }
+              ) tokens
+            )
+            // {
+              htpasswd.value.derived = {
+                generator = "basic-auth";
+                from = tokens;
+              };
+            }
+          ))
         ];
-        store.config = configuration [
-          (nodeOf "store")
-          influxdbWriters
+        age.generators.basic-auth = _: "true";
+      };
+      nodes = nodesWithout withoutAdapter {
+        alpha = [
+          telegraf
+          receiving
+        ];
+        beta = [
+          telegraf
+          receiving
         ];
       };
     in
-    nodes.store.config;
-  # The telegraf token, sent to the clients inbox of nginx on the `proxy`
-  # node, and nginx deriving an htpasswd from what the inbox received.
-  sendingTelegraf = {
-    imports = [ telegraf ];
-    contracts.services.telegraf.secrets.token.sendTo = [
-      {
-        node = "proxy";
-        service = "nginx";
-        id = "clients";
-      }
-    ];
-  };
-  nginx =
-    { config, ... }:
-    {
-      age.generators.basic-auth = _: "true";
-      contracts.services.nginx = {
-        enable = true;
-        identity.static.user = "nginx";
-        inboxes.clients = { };
-        secrets.htpasswd.value.derived = {
-          generator = "basic-auth";
-          from = config.contracts.services.nginx.inboxes.clients.refs;
-        };
-      };
-    };
+    nodes;
+  handingTokens = handingTokensWithout [ ];
 in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
@@ -268,6 +258,35 @@ in
     };
   };
 
+  testSecretWithAnUnderscoreInItsIdKeepsItInItsNames = {
+    expr =
+      let
+        config = configuration [
+          {
+            age.rekey.secretsDir = ./.;
+            contracts = {
+              node = "beta";
+              services.openssh = {
+                enable = true;
+                identity.static.user = "root";
+                secrets.ssh_host_ed25519_key = { };
+              };
+            };
+          }
+        ];
+      in
+      {
+        inherit (config.contracts.claimSets.secrets.openssh.ssh_host_ed25519_key) name;
+        entries = builtins.attrNames config.age.secrets;
+        inherit (config.age.secrets.openssh_ssh_host_ed25519_key) rekeyFile;
+      };
+    expected = {
+      name = "beta_openssh_ssh_host_ed25519_key";
+      entries = [ "openssh_ssh_host_ed25519_key" ];
+      rekeyFile = ./openssh_ssh_host_ed25519_key.age;
+    };
+  };
+
   testValueSetOnTheBackendIsKept = {
     expr =
       (configuration [
@@ -380,187 +399,32 @@ in
       };
     };
 
-  testInboxCopyTakesTheEncryptedFileOfTheSecretSentFromAnotherNode = {
-    expr =
-      secretOf "influxdb_writers_metrics_telegraf_token"
-        (nodesOf {
-          metrics = [ writingTelegraf ];
-          store = [ influxdbWriters ];
-        }).store.config;
-    expected = {
-      owner = "root";
-      group = "influxdb2";
-      mode = "0440";
-      rekeyFile = ./generated/metrics/telegraf_token.age;
-      generator = null;
-    };
-  };
-
-  testInboxCopyOfASecretSentFromItsOwnNodeReadsThisConfiguration =
-    let
-      inherit
-        ((nodesOf {
-          store = [
-            writingTelegraf
-            influxdbWriters
-          ];
-        }).store
-        )
-        config
-        ;
-    in
-    {
-      expr = {
-        inherit (config.age.secrets.influxdb_writers_store_telegraf_token) rekeyFile;
-        inherit (config.contracts) failures;
-      };
-      expected = {
-        rekeyFile = ./generated/store/telegraf_token.age;
+  # Alpha's copy of its own token reads this configuration's entry.
+  testCopyOfEachReferenceTakesTheEncryptedFileFromTheSendersNode = {
+    expr = lib.mapAttrs (_: node: {
+      copies = lib.genAttrs [ "influxdb_alpha_telegraf_token" "influxdb_beta_telegraf_token" ] (
+        name: secretOf name node.config
+      );
+      inherit (node.config.contracts) failures;
+    }) handingTokens;
+    expected =
+      let
+        copyOf = node: {
+          owner = "root";
+          group = "influxdb2";
+          mode = "0440";
+          rekeyFile = ./generated + "/${node}/telegraf_token.age";
+          generator = null;
+        };
+      in
+      lib.genAttrs [ "alpha" "beta" ] (_: {
+        copies = {
+          influxdb_alpha_telegraf_token = copyOf "alpha";
+          influxdb_beta_telegraf_token = copyOf "beta";
+        };
         failures = [ ];
-      };
-    };
-
-  testFileSetOnTheBackendWinsOverAnInboxCopys = {
-    expr =
-      (nodesOf {
-        metrics = [ writingTelegraf ];
-        store = [
-          influxdbWriters
-          { age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile = ./agenix-rekey.nix; }
-        ];
-      }).store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
-    expected = ./agenix-rekey.nix;
+      });
   };
-
-  testDisabledReceivingContractInstallsNoCopies = {
-    expr =
-      builtins.attrNames
-        (nodesOf {
-          metrics = [ writingTelegraf ];
-          store = [
-            influxdbWriters
-            { contracts.services.influxdb.enable = lib.mkForce false; }
-          ];
-        }).store.config.age.secrets;
-    expected = [ ];
-  };
-
-  # The metrics node sets no secrets directories, so its token has no
-  # encrypted file.
-  testInboxCopyOfASecretWithoutAFileNamesTheSentSecret = {
-    expr = (storeWithMetrics configuration).contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: give it one on its node, or set `age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile`."
-    ];
-  };
-
-  # The metrics node holds its contracts, but no secret backend.
-  testInboxCopyFromANodeWithoutTheAdapterFailsItsCheck = {
-    expr = (storeWithMetrics (modules: nixos.evaluate ([ contracts ] ++ modules))).contracts.failures;
-    expected = [
-      "nixos-contracts: secret `influxdb.writers.metrics.telegraf.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
-    ];
-  };
-
-  # Each node holds a copy of the token the other sends it.
-  testNodesCopyingEachOthersSecretsEvaluateWithoutACycle =
-    let
-      nodes = nodesOf {
-        metrics = [
-          writingTelegraf
-          { contracts.services.telegraf.inboxes.outputs.copy = { }; }
-        ];
-        store = [
-          influxdbWriters
-          {
-            contracts.services.influxdb.secrets.token = {
-              value.generated = "alnum";
-              sendTo = [
-                {
-                  node = "metrics";
-                  service = "telegraf";
-                  id = "outputs";
-                }
-              ];
-            };
-          }
-        ];
-      };
-    in
-    {
-      expr = {
-        outputs = nodes.metrics.config.age.secrets.telegraf_outputs_store_influxdb_token.rekeyFile;
-        writers = nodes.store.config.age.secrets.influxdb_writers_metrics_telegraf_token.rekeyFile;
-        failures = map (node: node.config.contracts.failures) [
-          nodes.metrics
-          nodes.store
-        ];
-      };
-      expected = {
-        outputs = ./generated/store/influxdb_token.age;
-        writers = ./generated/metrics/telegraf_token.age;
-        failures = [
-          [ ]
-          [ ]
-        ];
-      };
-    };
-
-  # Telegraf on two nodes sends its token to influxdb's copying writers, one
-  # of them from influxdb's own node, and a third telegraf sends its token
-  # to nginx's clients, whose htpasswd derives from their refs.
-  testSendCheckChangesNoEntryAndNoCopyWithoutADependence =
-    let
-      # The values of a set of sets, in a list.
-      valuesOf = set: lib.concatMap builtins.attrValues (builtins.attrValues set);
-      copyPathsOf =
-        config:
-        lib.pipe config.contracts.claimSets.inboxes [
-          valuesOf
-          (lib.concatMap (inbox: lib.concatMap valuesOf (builtins.attrValues inbox.received)))
-          (map (entry: entry.copy))
-          (lib.filter (copy: copy != null))
-          (map (copy: copy.path))
-        ];
-      observe =
-        checkSends:
-        builtins.mapAttrs
-          (_: node: {
-            entries = builtins.mapAttrs (name: _: secretOf name node.config) node.config.age.secrets;
-            dependencies = map (dependency: {
-              inherit (dependency) id rekeyFile;
-            }) (node.config.age.secrets.nginx_htpasswd.generator.dependencies or [ ]);
-            copyPaths = copyPathsOf node.config;
-            inherit (node.config.contracts) failures;
-          })
-          (
-            nodesOf (
-              builtins.mapAttrs (_: modules: [ { contracts = { inherit checkSends; }; } ] ++ modules) {
-                metrics = [ writingTelegraf ];
-                store = [
-                  influxdbWriters
-                  writingTelegraf
-                ];
-                alpha = [ sendingTelegraf ];
-                proxy = [ nginx ];
-              }
-            )
-          );
-      observed = observe true;
-    in
-    {
-      expr = {
-        inherit observed;
-        storeCopyPaths = observed.store.copyPaths;
-      };
-      expected = {
-        observed = observe false;
-        storeCopyPaths = [
-          "/run/agenix/influxdb_writers_metrics_telegraf_token"
-          "/run/agenix/influxdb_writers_store_telegraf_token"
-        ];
-      };
-    };
 
   testGeneratorMakesTheValueFromTheSecretsItReferences = {
     expr =
@@ -608,28 +472,17 @@ in
     };
   };
 
-  # Each dependency is the sender's entry, read from its own node, which the
-  # proxy does not install.
-  testDerivedValueTakesTheEntriesOfAnInboxsRefsOnTheirNodes = {
+  # Each dependency is the sender's entry, read from its own node.
+  testDerivedValueOfReferencesTakesTheSendersEntriesOnTheirNodes = {
     expr =
       let
-        inherit
-          ((nodesOf {
-            alpha = [ sendingTelegraf ];
-            beta = [ sendingTelegraf ];
-            proxy = [ nginx ];
-          }).proxy
-          )
-          config
-          ;
+        inherit (handingTokens.alpha) config;
       in
       {
-        inherit (config.age.secrets.nginx_htpasswd.generator) script;
+        inherit (config.age.secrets.influxdb_htpasswd.generator) script;
         dependencies = map (dependency: {
           inherit (dependency) id rekeyFile;
-        }) config.age.secrets.nginx_htpasswd.generator.dependencies;
-        entries = builtins.attrNames config.age.secrets;
-        inherit (config.contracts) failures;
+        }) config.age.secrets.influxdb_htpasswd.generator.dependencies;
       };
     expected = {
       script = "basic-auth";
@@ -643,8 +496,6 @@ in
           rekeyFile = ./generated/beta/telegraf_token.age;
         }
       ];
-      entries = [ "nginx_htpasswd" ];
-      failures = [ ];
     };
   };
 
@@ -710,45 +561,12 @@ in
     };
   };
 
+  # Alpha's copy of beta's token and its htpasswd each reference beta.
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
-    expr =
-      (configuration [
-        (influxdb {
-          token.value.copied = metricsToken;
-        })
-        {
-          # The metrics node holds its contracts, but no secret backend.
-          contracts.nodes.metrics.config = nixos.evaluate [
-            contracts
-            telegraf
-          ];
-        }
-      ]).contracts.failures;
+    expr = (handingTokensWithout [ "beta" ]).alpha.config.contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
-    ];
-  };
-
-  testSecretSentFromANodeWithoutTheAdapterFailsACheck = {
-    expr =
-      (nodesOf {
-        metrics = [ sendingTelegraf ];
-        proxy = [
-          nginx
-          {
-            # The metrics node holds its contracts, but no secret backend.
-            contracts.nodes.metrics = lib.mkForce {
-              config = nixos.evaluate [
-                contracts
-                { contracts.node = "metrics"; }
-                sendingTelegraf
-              ];
-            };
-          }
-        ];
-      }).proxy.config.contracts.failures;
-    expected = [
-      "nixos-contracts: secret `nginx.htpasswd` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.beta_telegraf_token` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.htpasswd` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 
@@ -783,16 +601,16 @@ in
     ];
   };
 
-  testBackendPathNamesTheEntryByTheLocation = {
+  testBackendPathNamesTheEntryByServiceAndId = {
     expr =
       (configuration [
         services
         values
       ]).contracts.kinds.secrets.backend.path
-        [
-          "influxdb"
-          "admin-token"
-        ];
+        {
+          service = "influxdb";
+          id = "admin-token";
+        };
     expected = "/run/agenix/influxdb_admin-token";
   };
 
@@ -806,7 +624,7 @@ in
     expected = "/run/keys/kea";
   };
 
-  testEntriesAreNamedByTheLocationJoinedWithUnderscores = {
+  testEntriesAreNamedByServiceAndIdJoinedWithAnUnderscore = {
     expr =
       builtins.attrNames
         (configuration [

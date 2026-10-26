@@ -2,8 +2,8 @@
   Build a claim kind: a module that adds one kind of claim to every contract,
   folds the claims of enabled contracts into a read-only claim set by service
   and id, and checks that no two claims clash and that each passes the
-  kind's check rule. The shipped binds, mounts, secrets and inboxes are
-  built with this function, so a new kind gets the same treatment.
+  kind's check rule. The shipped binds, mounts and secrets are built with
+  this function, so a new kind gets the same treatment.
 
   # Inputs
 
@@ -26,13 +26,11 @@
     `unit` null for a static identity) and `config` the configuration's
     top-level `config`. Inside the submodule, the module argument `name` is
     the claim's id. A value that follows from the identity, such as a file
-    owner, is an option defaulting to it. The constructor declares five
-    read-only options on every claim, `service`, `id`, its `location`
-    `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
-    and on every claim of a sendable kind the writable `sendTo`, the
-    inboxes the claim is sent to, so a claim type cannot declare options
-    with these names. A claim id, like a service name, may contain only
-    lowercase letters, digits and hyphens.
+    owner, is an option defaulting to it. The constructor declares four
+    read-only options on every claim, `service`, `id`, its claim name
+    `name` and its reference `ref`, so a claim type cannot declare options
+    with these names. A claim id may contain only lowercase letters, digits,
+    hyphens and `_`.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -51,11 +49,6 @@
 
   `settings`
   : Optional. Option declarations placed under `contracts.kinds.<name>`.
-
-  `sendable`
-  : Optional, true by default. Whether a claim of the kind can be sent to
-    an inbox. Claims of a kind that is not sendable have no `sendTo`, and
-    an inbox taking the kind fails its check. Inboxes are not sendable.
 
   # Output
 
@@ -80,16 +73,16 @@
   clash ? null,
   check ? null,
   settings ? { },
-  sendable ? true,
 }:
 let
   kindName = name;
-  inherit (import ./references.nix) checkName locationLabelOf;
+  inherit (import ./references.nix) checkName claimLabelOf nameRules;
 
-  # A service name or claim id, failing when it is not a name, so `_` joins
-  # a location into a name no other location makes.
-  checkService = checkName (service: "service name `${service}`");
-  checkId = service: checkName (id: "${kindName} claim id `${id}` of service `${service}`");
+  # A service name or claim id, failing when it breaks its rule, so `_`
+  # joins a service and an id into a name no other pair makes.
+  checkService = checkName nameRules.service (service: "service name `${service}`");
+  checkId =
+    service: checkName nameRules.id (id: "${kindName} claim id `${id}` of service `${service}`");
 
   # A kind's claims sit beside the contract's own fields.
   reservedNames = [
@@ -125,7 +118,6 @@ else
   { config, lib, ... }:
   let
     topConfig = config;
-    contractTypes = import ./types.nix { inherit lib; };
 
     # The claims of enabled contracts, by service and id. Its keys come from
     # this configuration's contracts alone, and are checked as they are
@@ -171,7 +163,7 @@ else
         in
         {
           assertion = reason == null;
-          message = "${kindName} claims `${locationLabelOf pair.first.location}` and `${locationLabelOf pair.second.location}` clash: ${toString reason}.";
+          message = "${kindName} claims `${claimLabelOf pair.first}` and `${claimLabelOf pair.second}` clash: ${toString reason}.";
         }
       ) pairs
     );
@@ -181,7 +173,7 @@ else
     toReasons = reasons: if reasons == null then [ ] else lib.toList reasons;
 
     # The failed checks of one claim, given as `{ identity, claim }`, each
-    # naming the claim by its location.
+    # naming the claim by its service and id.
     checkAssertionsOf =
       arguments:
       lib.optionals (check != null) (
@@ -198,14 +190,12 @@ else
             toReasons
             (map (reason: {
               assertion = false;
-              message = "${kindName} claim `${locationLabelOf arguments.claim.location}`: ${reason}.";
+              message = "${kindName} claim `${claimLabelOf arguments.claim}`: ${reason}.";
             }))
           ]
       );
 
     checkAssertions = lib.concatMap checkAssertionsOf claims;
-
-    identityOf = service: resolveIdentity config.contracts.services.${service}.identity;
   in
   {
     options.contracts = {
@@ -244,20 +234,6 @@ else
                             default = checkId service name;
                             defaultText = lib.literalMD "the claim's attribute name";
                             description = "The claim's id within its contract.";
-                          };
-                          location = lib.mkOption {
-                            type = lib.types.listOf lib.types.str;
-                            readOnly = true;
-                            default = [
-                              config.service
-                              config.id
-                            ];
-                            defaultText = lib.literalMD "`[ <service> <id> ]`";
-                            description = ''
-                              The names that place the claim within its
-                              node, `[ <service> <id> ]`. A backend adapter
-                              names its entry by joining them with `_`.
-                            '';
                           };
                           name = lib.mkOption {
                             type = lib.types.nullOr lib.types.str;
@@ -299,17 +275,6 @@ else
                               while that is null.
                             '';
                           };
-                        }
-                        // lib.optionalAttrs sendable {
-                          sendTo = lib.mkOption {
-                            type = lib.types.listOf (contractTypes.referenceTo "inboxes");
-                            default = [ ];
-                            description = ''
-                              The inboxes the claim is sent to, each a
-                              reference `{ node; service; id; }`, on another
-                              node or on this one.
-                            '';
-                          };
                         };
                       }
                     ))
@@ -335,38 +300,6 @@ else
       };
 
       kinds.${kindName} = settings;
-
-      # The kind's claim type and check rule, for a claim a service holds
-      # outside the claim set, such as an inbox's copy, and whether its
-      # claims can be sent.
-      internal.kinds.${kindName} = lib.mkOption {
-        type = lib.types.raw;
-        internal = true;
-        readOnly = true;
-        default = {
-          inherit sendable;
-          claim =
-            service:
-            claim {
-              inherit service;
-              identity = identityOf service;
-              config = topConfig;
-            };
-          assertions =
-            service: claim:
-            checkAssertionsOf {
-              identity = identityOf service;
-              inherit claim;
-            };
-        };
-        defaultText = lib.literalMD "the kind's claim type, check rule and sendability";
-        description = ''
-          `claim service`, the submodule of one ${kindName} claim of a
-          service, `assertions service claim`, the failed checks of such a
-          claim, and `sendable`, whether a ${kindName} claim can be sent to
-          an inbox.
-        '';
-      };
     };
 
     # Forcing the claim set checks every id, so evaluating the checks fails

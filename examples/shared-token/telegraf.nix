@@ -1,5 +1,6 @@
 # A service module for a telegraf node: it generates the token it writes
-# metrics with. The node sends the token to the influxdb that stores them.
+# metrics with. The fleet carries the token's `ref` to the influxdb that
+# stores them.
 { contractsLib, ... }:
 {
   contracts.services.telegraf = contractsLib.mkDefaultContract {

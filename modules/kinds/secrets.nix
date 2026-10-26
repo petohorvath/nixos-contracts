@@ -8,8 +8,8 @@ let
   # value adds only its own rules.
   inherit (import ../references.nix)
     backendPathOf
-    labelOf
     lookup
+    referenceLabelOf
     ;
 
   # The references of a `copied` or `derived` value, in order, or none.
@@ -48,7 +48,7 @@ let
     config: reference:
     let
       result = lookup config reference;
-      references = "it references `${labelOf reference}`";
+      references = "it references `${referenceLabelOf reference}`";
     in
     if result.reason != null then
       "${references}: ${result.reason}"
@@ -104,9 +104,11 @@ in
           type = lib.types.functionTo lib.types.str;
           description = ''
             Where the backend installs a secret, as a function of its
-            `location`, such as `[ "influxdb" "admin-token" ]`. It must
-            answer for any location, including those of claims of disabled
-            contracts, which the backend does not install.
+            `{ service, id }`. It must answer for any service and id,
+            including those of claims of disabled contracts, which the
+            backend does not install. A backend names its entry for a
+            secret `<service>_<id>`, which no other claim of the node
+            shares, since no service name contains `_`.
           '';
         };
         generators = lib.mkOption {
@@ -133,7 +135,8 @@ in
         type = lib.types.functionTo lib.types.str;
         description = ''
           Where a unit reads a delivered secret, as a function of
-          `{ unit, location }`, where `location` is the secret's.
+          `{ unit, service, id }`, where `service` and `id` are the
+          secret's.
         '';
       };
     };
@@ -311,17 +314,17 @@ in
             if delivered then
               delivery.path {
                 inherit unit;
-                inherit (config) location;
+                inherit (config) service id;
               }
             else
-              backendPathOf backend config.location;
+              backendPathOf backend config;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the delivered credential for
             a dynamic identity when a delivery adapter is imported, else
             where the backend installs it, each as its slot's `path` answers
-            for the secret's location. Reading it without a backend adapter
-            fails.
+            for the secret's service and id. Reading it without a backend
+            adapter fails.
           '';
         };
       };

@@ -11,7 +11,10 @@ let
     descriptionClass = "noun";
     check = builtins.isString;
     merge =
-      loc: defs: references.checkName (node: "node identity `${node}`") (lib.mergeEqualOption loc defs);
+      loc: defs:
+      references.checkName references.nameRules.node (node: "node identity `${node}`") (
+        lib.mergeEqualOption loc defs
+      );
   };
   contractTypes = import ./types.nix { inherit lib; };
   identityType = contractTypes.tag {
@@ -115,7 +118,7 @@ in
         if result.reason == null then
           result.claim
         else
-          throw "nixos-contracts: cannot resolve `${references.labelOf reference}`: ${result.reason}";
+          throw "nixos-contracts: cannot resolve `${references.referenceLabelOf reference}`: ${result.reason}";
       defaultText = lib.literalMD "the claim `contracts.lookup` finds, or an error with its reason";
       description = ''
         A function of a reference returning the claim-set entry it names,

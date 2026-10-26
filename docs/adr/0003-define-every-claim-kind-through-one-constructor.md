@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0014 and ADR-0015
+status: superseded in part by ADR-0014
 ---
 
 # Define every claim kind through one constructor

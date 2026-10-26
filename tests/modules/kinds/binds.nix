@@ -22,12 +22,7 @@ in
     expected = {
       service = "web";
       id = "http";
-      location = [
-        "web"
-        "http"
-      ];
       name = null;
-      sendTo = [ ];
       ref = {
         node = null;
         kind = "binds";
