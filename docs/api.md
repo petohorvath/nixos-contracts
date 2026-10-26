@@ -34,7 +34,6 @@ contracts.claimSets.<kind>.<service>.<id>    read-only
 contracts.node                               this configuration's node identity
 contracts.nodes.<node>                       the node collection
 contracts.lookup, contracts.resolve          read-only, functions of a reference
-contracts.checkSends                         whether to check that sends don't depend on what arrived
 contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
@@ -79,14 +78,6 @@ Read-only functions of a [reference](#references) that find the claim it names, 
 ```nix
 port = (config.contracts.resolve backend.bind).port;
 ```
-
-### `contracts.checkSends`
-
-Whether to check that what this node sends doesn't depend on what its [inboxes](#inboxes) received (bool, default `false`). A claim whose `sendTo`, or whose existence, depends on an inbox's `received` or `refs` makes a cycle: the inbox reads the node's sends, which read the claim, which reads the inbox. Without the check, such a configuration fails to evaluate with `infinite recursion encountered`, naming no claim.
-
-With the check, the node is evaluated a second time with `extendModules`, with every inbox's `received` empty, and with it every `refs` and copy, and the node publishes the sends of that evaluation. A check fails for each claim that sends to other inboxes in the two evaluations, such as ``nixos-contracts: secrets claim `telegraf.token` sends to `store:inboxes.influxdb.writers` once its node has received claims, but to nothing before: whether a claim exists and where it is sent must not depend on an inbox's `received` or `refs`.`` When no send depends on what arrived, the sends, `received`, `refs` and copies of every node are those of the default mode, so the check changes nothing a configuration builds.
-
-Each node with the check is evaluated twice. On six nodes of the prototype, evaluation took about a third more CPU time. Turn it on where that cost is paid once, such as in CI, so a send that depends on what arrived is named before it ships, or while diagnosing an infinite recursion, and leave it off where evaluation time matters.
 
 ### `contracts.kinds.<kind>`
 
@@ -175,7 +166,7 @@ services.nginx.upstreams = lib.concatMapAttrs (
 ) config.contracts.services.nginx.inboxes.upstreams.received;
 ```
 
-Each node publishes what it sends, built from its own claim sets, and an inbox reads the sends meant for it from every node in [`contracts.nodes`](#contractsnodes) and from its own configuration. The sender writes nothing on the receiving node, and the receiver declares no option of its own for a relation. Only claims of enabled contracts are sent. Two nodes that send to each other evaluate without a cycle, as long as no claim's `sendTo` or existence reads what its node received. One that does recurses, and [`contracts.checkSends`](#contractschecksends) names it.
+Each node publishes what it sends, built from its own claim sets, and an inbox reads the sends meant for it from every node in [`contracts.nodes`](#contractsnodes) and from its own configuration. The sender writes nothing on the receiving node, and the receiver declares no option of its own for a relation. Only claims of enabled contracts are sent. Two nodes that send to each other evaluate without a cycle, as long as no claim's `sendTo` or existence reads what its node received. One that does fails to evaluate with `infinite recursion encountered`, naming no claim: the inbox reads the node's sends, which read the claim, which reads the inbox.
 
 `received` holds each claim sent to the inbox, by the sender's node, service and id, as `{ ref; claim; copy; }`:
 

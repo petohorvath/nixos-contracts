@@ -506,62 +506,6 @@ in
       };
     };
 
-  # Telegraf on two nodes sends its token to influxdb's copying writers, one
-  # of them from influxdb's own node, and a third telegraf sends its token
-  # to nginx's clients, whose htpasswd derives from their refs.
-  testSendCheckChangesNoEntryAndNoCopyWithoutADependence =
-    let
-      # The values of a set of sets, in a list.
-      valuesOf = set: lib.concatMap builtins.attrValues (builtins.attrValues set);
-      copyPathsOf =
-        config:
-        lib.pipe config.contracts.claimSets.inboxes [
-          valuesOf
-          (lib.concatMap (inbox: lib.concatMap valuesOf (builtins.attrValues inbox.received)))
-          (map (entry: entry.copy))
-          (lib.filter (copy: copy != null))
-          (map (copy: copy.path))
-        ];
-      observe =
-        checkSends:
-        builtins.mapAttrs
-          (_: node: {
-            entries = builtins.mapAttrs (name: _: secretOf name node.config) node.config.age.secrets;
-            dependencies = map (dependency: {
-              inherit (dependency) id rekeyFile;
-            }) (node.config.age.secrets.nginx_htpasswd.generator.dependencies or [ ]);
-            copyPaths = copyPathsOf node.config;
-            inherit (node.config.contracts) failures;
-          })
-          (
-            nodesOf (
-              builtins.mapAttrs (_: modules: [ { contracts = { inherit checkSends; }; } ] ++ modules) {
-                metrics = [ writingTelegraf ];
-                store = [
-                  influxdbWriters
-                  writingTelegraf
-                ];
-                alpha = [ sendingTelegraf ];
-                proxy = [ nginx ];
-              }
-            )
-          );
-      observed = observe true;
-    in
-    {
-      expr = {
-        inherit observed;
-        storeCopyPaths = observed.store.copyPaths;
-      };
-      expected = {
-        observed = observe false;
-        storeCopyPaths = [
-          "/run/agenix/influxdb_writers_metrics_telegraf_token"
-          "/run/agenix/influxdb_writers_store_telegraf_token"
-        ];
-      };
-    };
-
   testGeneratorMakesTheValueFromTheSecretsItReferences = {
     expr =
       let

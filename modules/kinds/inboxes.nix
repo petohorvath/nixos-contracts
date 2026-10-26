@@ -59,12 +59,8 @@ in
       );
 
       # An inbox receives only while its node has an identity, which every
-      # send names, and its contract is enabled, and never in the evaluation
-      # the send check reads the sends from.
-      receives =
-        node != null
-        && topConfig.contracts.services.${service}.enable
-        && !topConfig.contracts.internal.emptyInboxes;
+      # send names, and its contract is enabled.
+      receives = node != null && topConfig.contracts.services.${service}.enable;
 
       sends = lib.filter (
         send: send.to.service == service && send.to.id == name && send.ref.kind == inbox.kind
