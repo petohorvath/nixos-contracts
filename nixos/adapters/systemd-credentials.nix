@@ -1,10 +1,9 @@
 /*
   Deliver every secret of a dynamic-identity service into its unit with
   `LoadCredential=`, so the dynamic user reads it under
-  `/run/credentials/<unit>/<service>_<id>`, such as
-  `alloy_loki-password`. Loads from the path a
-  secret backend adapter sets in `contracts.kinds.secrets.backend`, so
-  import one beside it.
+  `/run/credentials/<unit>/<service>_<id>`, such as `alloy_loki-password`.
+  Loads from the path a secret backend adapter sets in
+  `contracts.kinds.secrets.backend`, so import one beside it.
 */
 { config, lib, ... }:
 let

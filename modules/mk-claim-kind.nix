@@ -29,8 +29,8 @@
     owner, is an option defaulting to it. The constructor declares four
     read-only options on every claim, `service`, `id`, its claim name
     `name` and its reference `ref`, so a claim type cannot declare options
-    with these names. A claim id
-    may contain only lowercase letters, digits, hyphens and `_`.
+    with these names. A claim id may contain only lowercase letters, digits,
+    hyphens and `_`.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
