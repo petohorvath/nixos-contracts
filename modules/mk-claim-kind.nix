@@ -31,8 +31,8 @@
     `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
     and on every claim of a sendable kind the writable `sendTo`, the
     inboxes the claim is sent to, so a claim type cannot declare options
-    with these names. A claim id, like a service name, may contain only
-    lowercase letters, digits and hyphens.
+    with these names. A claim id may contain only lowercase letters,
+    digits, hyphens and `_`.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -84,12 +84,13 @@
 }:
 let
   kindName = name;
-  inherit (import ./references.nix) checkName locationLabelOf;
+  inherit (import ./references.nix) checkName locationLabelOf nameRules;
 
-  # A service name or claim id, failing when it is not a name, so `_` joins
-  # a location into a name no other location makes.
-  checkService = checkName (service: "service name `${service}`");
-  checkId = service: checkName (id: "${kindName} claim id `${id}` of service `${service}`");
+  # A service name or claim id, failing when it breaks its rule, so `_`
+  # joins a service and an id into a name no other pair makes.
+  checkService = checkName nameRules.service (service: "service name `${service}`");
+  checkId =
+    service: checkName nameRules.id (id: "${kindName} claim id `${id}` of service `${service}`");
 
   # A kind's claims sit beside the contract's own fields.
   reservedNames = [

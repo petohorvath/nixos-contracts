@@ -697,7 +697,7 @@ in
     expectedError.msg = "databases\\.main\\.location' is read-only";
   };
 
-  testClaimIdsMayUseOnlyLowercaseLettersDigitsAndHyphens =
+  testClaimIdMayContainDigitsAndHyphens =
     let
       idOf =
         id:
@@ -717,19 +717,29 @@ in
       expected = "postgresql";
     };
 
-  testClaimIdWithAnUnderscoreFails = {
+  testClaimIdMayContainAnUnderscore = {
     expr =
-      (evaluate [
-        databases
-        {
-          contracts.services.grafana = {
-            enable = true;
-            identity.static.user = "grafana";
-            databases.main_db = { };
-          };
-        }
-      ]).contracts.claimSets.databases.grafana.main_db.engine;
-    expectedError.msg = "databases claim id `main_db` of service `grafana` may contain only lowercase letters, digits and hyphens";
+      let
+        claim =
+          (evaluate [
+            databases
+            {
+              contracts.node = "beta";
+              contracts.services.grafana = {
+                enable = true;
+                identity.static.user = "grafana";
+                databases.main_db_2 = { };
+              };
+            }
+          ]).contracts.claimSets.databases.grafana.main_db_2;
+      in
+      {
+        inherit (claim) id name;
+      };
+    expected = {
+      id = "main_db_2";
+      name = "beta_grafana_main_db_2";
+    };
   };
 
   testClaimIdWithAnUppercaseLetterFails = {
@@ -744,7 +754,7 @@ in
           };
         }
       ]).contracts.claimSets.databases;
-    expectedError.msg = "databases claim id `Main` of service `grafana` may contain only lowercase letters, digits and hyphens";
+    expectedError.msg = "databases claim id `Main` of service `grafana` may contain only lowercase letters, digits, hyphens and `_`";
   };
 
   testInvalidClaimIdFailsTheChecks = {
@@ -758,7 +768,37 @@ in
         };
       }
     ];
-    expectedError.msg = "databases claim id `main\\.db` of service `grafana` may contain only lowercase letters, digits and hyphens";
+    expectedError.msg = "databases claim id `main\\.db` of service `grafana` may contain only lowercase letters, digits, hyphens and `_`";
+  };
+
+  testClaimIdWithAColonFails = {
+    expr =
+      (evaluate [
+        databases
+        {
+          contracts.services.grafana = {
+            enable = true;
+            identity.static.user = "grafana";
+            databases."main:db" = { };
+          };
+        }
+      ]).contracts.claimSets.databases;
+    expectedError.msg = "databases claim id `main:db` of service `grafana` may contain only lowercase letters, digits, hyphens and `_`";
+  };
+
+  testClaimIdWithASlashFails = {
+    expr =
+      (evaluate [
+        databases
+        {
+          contracts.services.grafana = {
+            enable = true;
+            identity.static.user = "grafana";
+            databases."main/db" = { };
+          };
+        }
+      ]).contracts.claimSets.databases;
+    expectedError.msg = "databases claim id `main/db` of service `grafana` may contain only lowercase letters, digits, hyphens and `_`";
   };
 
   testKindMayTakeANameOfTheContractsRoot = {

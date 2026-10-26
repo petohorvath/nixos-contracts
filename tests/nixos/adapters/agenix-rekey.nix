@@ -268,6 +268,35 @@ in
     };
   };
 
+  testSecretWithAnUnderscoreInItsIdKeepsItInItsNames = {
+    expr =
+      let
+        config = configuration [
+          {
+            age.rekey.secretsDir = ./.;
+            contracts = {
+              node = "beta";
+              services.openssh = {
+                enable = true;
+                identity.static.user = "root";
+                secrets.ssh_host_ed25519_key = { };
+              };
+            };
+          }
+        ];
+      in
+      {
+        inherit (config.contracts.claimSets.secrets.openssh.ssh_host_ed25519_key) name;
+        entries = builtins.attrNames config.age.secrets;
+        inherit (config.age.secrets.openssh_ssh_host_ed25519_key) rekeyFile;
+      };
+    expected = {
+      name = "beta_openssh_ssh_host_ed25519_key";
+      entries = [ "openssh_ssh_host_ed25519_key" ];
+      rekeyFile = ./openssh_ssh_host_ed25519_key.age;
+    };
+  };
+
   testValueSetOnTheBackendIsKept = {
     expr =
       (configuration [

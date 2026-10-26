@@ -285,6 +285,11 @@ in
     expectedError.msg = "node identity `Beta` may contain only lowercase letters, digits and hyphens";
   };
 
+  testNodeIdentityWithAColonFails = {
+    expr = (evaluate [ { contracts.node = "beta:2"; } ]).contracts.node;
+    expectedError.msg = "node identity `beta:2` may contain only lowercase letters, digits and hyphens";
+  };
+
   testServiceNameWithAnUnderscoreFails = {
     expr =
       (evaluate [
@@ -309,6 +314,34 @@ in
       }
     ];
     expectedError.msg = "service name `Web` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testServiceNameWithADotFails = {
+    expr =
+      (evaluate [
+        {
+          contracts.services."web.proxy" = {
+            enable = true;
+            identity.static.user = "web";
+            binds.http.port = 8080;
+          };
+        }
+      ]).contracts.claimSets.binds;
+    expectedError.msg = "service name `web\\.proxy` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testServiceNameWithASlashFails = {
+    expr =
+      (evaluate [
+        {
+          contracts.services."web/proxy" = {
+            enable = true;
+            identity.static.user = "web";
+            binds.http.port = 8080;
+          };
+        }
+      ]).contracts.claimSets.binds;
+    expectedError.msg = "service name `web/proxy` may contain only lowercase letters, digits and hyphens";
   };
 
   testEmptyServiceNameFails = {
