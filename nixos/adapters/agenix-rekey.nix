@@ -94,9 +94,9 @@ in
         # take agenix's default path, which an entry keeps unless a node
         # overrides it.
         path =
-          { service, id }:
+          args:
           let
-            name = backendNameOf { inherit service id; };
+            name = backendNameOf args;
           in
           config.age.secrets.${name}.path or "${config.age.secretsDir}/${name}";
       };

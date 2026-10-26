@@ -38,12 +38,7 @@ in
 {
   config = {
     contracts.kinds.secrets.delivery.path =
-      {
-        unit,
-        service,
-        id,
-      }:
-      "/run/credentials/${unit}/${backendNameOf { inherit service id; }}";
+      args@{ unit, ... }: "/run/credentials/${unit}/${backendNameOf args}";
 
     systemd.services = lib.mkMerge (
       map (secret: {
