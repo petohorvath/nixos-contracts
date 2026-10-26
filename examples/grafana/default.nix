@@ -25,6 +25,7 @@ let
       {
         services.grafana.enable = true;
         age.rekey.generatedSecretsDir = ./secrets/generated;
+        contracts.node = "grafana";
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";
       }

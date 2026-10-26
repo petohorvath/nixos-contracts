@@ -24,6 +24,7 @@ let
       ./service.nix
       ./node.nix
       {
+        contracts.node = "influxdb";
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";
       }

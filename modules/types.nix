@@ -13,20 +13,14 @@ let
     };
 
   # A reference as every claim's `ref` holds it. It names a node, so it
-  # means the same claim on every node that reads it; only the `ref` of a
-  # claim whose configuration has no node identity names null.
+  # means the same claim on every node that reads it.
   mkReference =
     kind:
     lib.types.submodule {
       options = {
         node = lib.mkOption {
-          # Not `nullOr`, whose undefined value is null: a reference written
-          # without a node fails here rather than as a node-less claim.
-          type = lib.types.either lib.types.str (lib.types.enum [ null ]);
-          description = ''
-            The node holding the claim, by its node identity, or null for a
-            claim of a configuration without one, which no lookup resolves.
-          '';
+          type = lib.types.str;
+          description = "The node holding the claim, by its node identity.";
         };
         kind =
           if kind == null then

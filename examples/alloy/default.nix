@@ -26,6 +26,7 @@ let
         services.alloy.enable = true;
         example.alloy.loki.instances.main = "https://loki.example.test/loki/api/v1/push";
         age.rekey.generatedSecretsDir = ./secrets/generated;
+        contracts.node = "alloy";
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";
       }

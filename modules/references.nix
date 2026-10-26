@@ -37,12 +37,10 @@ rec {
 
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
-  # null for a node missing from it or a reference that names no node.
+  # null for a node missing from it.
   nodeConfigOrNull =
     config: reference:
-    if reference.node == null then
-      null
-    else if reference.node == config.contracts.node then
+    if reference.node == config.contracts.node then
       config
     else
       config.contracts.nodes.${reference.node}.config or null;
@@ -79,10 +77,7 @@ rec {
 
   # A reference as messages name it.
   referenceLabelOf =
-    reference:
-    "${
-      if reference.node == null then "<no node>" else reference.node
-    }:${reference.kind}.${reference.service}.${reference.id}";
+    reference: "${reference.node}:${reference.kind}.${reference.service}.${reference.id}";
 
   # `{ claim; reason; }`: the claim-set entry a reference names, or a null
   # claim and why it does not resolve.
@@ -97,11 +92,7 @@ rec {
         inherit reason;
       };
     in
-    # A claim's `ref` names no node while its configuration has no node
-    # identity; it must not resolve as this configuration's claim.
-    if reference.node == null then
-      fail "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`"
-    else if nodeConfig == null then
+    if nodeConfig == null then
       fail "node `${reference.node}` is not in `contracts.nodes`"
     else if !(nodeConfig ? contracts.claimSets) then
       fail "node `${reference.node}` imports no nixos-contracts module"

@@ -140,13 +140,13 @@ in
     expected = {
       service = "chrony";
       id = "key";
-      name = null;
+      name = "local_secrets_chrony_key";
       mode = "0440";
       owner = "root";
       group = "chrony";
       value.provided = { };
       ref = {
-        node = null;
+        node = "local";
         kind = "secrets";
         service = "chrony";
         id = "key";
@@ -681,37 +681,6 @@ in
     expected = [ "store_secrets_influxdb_origin" ];
   };
 
-  testReferenceWithoutANodeIdentityFailsItsCheck = {
-    expr = failures [
-      (store { origin.value.generated = "alnum"; })
-      (
-        { config, ... }:
-        {
-          contracts.services.influxdb.secrets.copy.value.copied =
-            config.contracts.services.influxdb.secrets.origin.ref;
-        }
-      )
-    ];
-    expected = [
-      "nixos-contracts: secrets claim `influxdb.copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
-    ];
-  };
-
-  testHandWrittenReferenceWithANullNodeFailsItsCheck = {
-    expr = failures [
-      onStore
-      (store {
-        origin.value.generated = "alnum";
-        copy.value.copied = storeSecret "origin" // {
-          node = null;
-        };
-      })
-    ];
-    expected = [
-      "nixos-contracts: secrets claim `influxdb.copy`: it references `<no node>:secrets.influxdb.origin`: it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`."
-    ];
-  };
-
   testReferenceToAnUnknownNodeFailsItsCheck = {
     expr =
       (nodesOf { store = [ (store { token.value.copied = remoteToken; }) ]; })
@@ -724,8 +693,14 @@ in
   testReferenceToANodeWithoutContractsFailsItsCheck = {
     expr = failures [
       (store { token.value.copied = remoteToken; })
-      # The metrics node imports no nixos-contracts module.
-      { contracts.nodes.metrics.config = { }; }
+      # The metrics node imports no nixos-contracts module. `local` names
+      # this configuration, whose entry is never read.
+      {
+        contracts.nodes = {
+          metrics.config = { };
+          local.config = { };
+        };
+      }
     ];
     expected = [
       "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`: node `metrics` imports no nixos-contracts module."

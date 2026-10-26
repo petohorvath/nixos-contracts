@@ -1,6 +1,11 @@
 { contracts, lib }:
 let
-  inherit (contracts) evaluate failures nodesOf;
+  inherit (contracts)
+    evaluate
+    evaluateWithoutNode
+    failures
+    nodesOf
+    ;
 
   # A web service listening on port 8080, and a reference to that bind.
   web = {
@@ -243,9 +248,9 @@ in
     expectedError.msg = "contracts\\.failures' is read-only";
   };
 
-  testNodeIdentityDefaultsToNull = {
-    expr = (evaluate [ ]).contracts.node;
-    expected = null;
+  testNodeIdentityIsRequired = {
+    expr = (evaluateWithoutNode [ ]).contracts.failures;
+    expectedError.msg = "contracts\\.node' was accessed but has no value defined";
   };
 
   testNodeIdentityMustBeInTheNodeCollection = {
@@ -474,7 +479,6 @@ in
     in
     {
       expr = {
-        noNode = reasonOf config (backend // { node = null; });
         unknownNode = reasonOf config (webHttp "nope");
         unknownKind = reasonOf config (backend // { kind = "databases"; });
         disabled = reasonOf config (backend // { service = "off"; });
@@ -487,7 +491,6 @@ in
         );
       };
       expected = {
-        noNode = "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`";
         unknownNode = "node `nope` is not in `contracts.nodes`";
         unknownKind = "node `backend` has no claim kind `databases`";
         disabled = "no enabled contract on `backend` holds it";
@@ -498,17 +501,6 @@ in
   testLookupOfANodeWithoutContracts = {
     expr = reasonOf (evaluate [ { contracts.nodes.bare.config = { }; } ]) (webHttp "bare");
     expected = "node `bare` imports no nixos-contracts module";
-  };
-
-  testANullNodeNeverResolvesInThisConfiguration = {
-    expr =
-      let
-        # Neither configuration has a node identity, so the reference's null
-        # node equals this configuration's.
-        config = evaluate [ web ];
-      in
-      reasonOf config config.contracts.services.web.binds.http.ref;
-    expected = "it names no node; a claim's `ref` names one only when its configuration sets `contracts.node`";
   };
 
   testLookupIsReadOnly = {

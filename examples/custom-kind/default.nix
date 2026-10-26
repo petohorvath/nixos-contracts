@@ -11,6 +11,7 @@ let
       modules = [
         exports.modules.generic.default
         databases
+        { contracts.node = "apps"; }
       ]
       ++ modules;
     }).config;

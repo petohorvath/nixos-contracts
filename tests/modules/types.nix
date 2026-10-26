@@ -58,4 +58,21 @@ in
     expr = (secretReferenceOf (removeAttrs token [ "node" ])).node;
     expectedError.msg = "token\\.node' was accessed but has no value defined";
   };
+
+  testReferenceNamesANonNullNode = {
+    expr =
+      (referenceOf (
+        token
+        // {
+          kind = "secrets";
+          node = null;
+        }
+      )).node;
+    expectedError.msg = "token\\.node' is not of type `string'";
+  };
+
+  testReferenceToOneKindNamesANonNullNode = {
+    expr = (secretReferenceOf (token // { node = null; })).node;
+    expectedError.msg = "token\\.node' is not of type `string'";
+  };
 }
