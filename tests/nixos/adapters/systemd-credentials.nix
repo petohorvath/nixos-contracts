@@ -57,26 +57,18 @@ in
     expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
 
-  # Chrony on the `time` node sends its key to alloy's `keys` inbox on the
-  # `edge` node, which holds a copy of it.
+  # Alloy on the `edge` node copies chrony's key on the `time` node, its
+  # id joining the reference's node, service and id with `_`.
   testDynamicIdentityCopyIsDeliveredIntoItsUnit =
     let
+      key = nodes.time.config.contracts.services.chrony.secrets.key.ref;
       nodes = nodesOf {
-        time = [
-          chrony
-          {
-            contracts.services.chrony.secrets.key.sendTo = [
-              {
-                node = "edge";
-                service = "alloy";
-                id = "keys";
-              }
-            ];
-          }
-        ];
+        time = [ chrony ];
         edge = [
           alloy
-          { contracts.services.alloy.inboxes.keys.copy = { }; }
+          {
+            contracts.services.alloy.secrets."${key.node}_${key.service}_${key.id}".value.copied = key;
+          }
         ];
       };
       inherit (nodes.edge) config;
@@ -84,15 +76,15 @@ in
     {
       expr = {
         inherit (config.systemd.services.alloy.serviceConfig) LoadCredential;
-        inherit (config.contracts.services.alloy.inboxes.keys.received.time.chrony.key.copy) path;
+        inherit (config.contracts.services.alloy.secrets.time_chrony_key) path;
         inherit (config.contracts) failures;
       };
       expected = {
         LoadCredential = [
-          "alloy_keys_time_chrony_key:/run/agenix/alloy_keys_time_chrony_key"
+          "alloy_time_chrony_key:/run/agenix/alloy_time_chrony_key"
           "alloy_password:/run/agenix/alloy_password"
         ];
-        path = "/run/credentials/alloy.service/alloy_keys_time_chrony_key";
+        path = "/run/credentials/alloy.service/alloy_time_chrony_key";
         failures = [ ];
       };
     };

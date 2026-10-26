@@ -1,4 +1,8 @@
-{ contracts, contractsLib }:
+{
+  contracts,
+  contractsLib,
+  lib,
+}:
 let
   inherit (contracts) evaluate failures nodesOf;
 
@@ -63,6 +67,62 @@ let
     service = "influxdb";
     inherit id;
   };
+
+  # Influxdb receiving `references` as a receiver writes its claims from
+  # shared data: one copy of each, its id joining the reference's own
+  # node, service and id with `_`, and an htpasswd derived from all.
+  receiving =
+    references:
+    store (
+      lib.listToAttrs (
+        map (
+          reference:
+          lib.nameValuePair "${reference.node}_${reference.service}_${reference.id}" {
+            value.copied = reference;
+          }
+        ) references
+      )
+      // {
+        htpasswd.value.derived = {
+          generator = "basic-auth";
+          from = references;
+        };
+      }
+    );
+  # Nodes by identity, telegraf on each of `senders` and influxdb on each
+  # of `receivers`, every receiver given the same `let`-bound list of
+  # references: each sender's telegraf token `ref`, and then `extra`.
+  handingTokens =
+    {
+      senders,
+      receivers,
+      extra ? [ ],
+    }:
+    let
+      tokens =
+        map (node: nodes.${node}.config.contracts.services.telegraf.secrets.token.ref) senders ++ extra;
+      nodes = nodesOf (
+        lib.genAttrs (lib.unique (senders ++ receivers)) (
+          node:
+          lib.optional (builtins.elem node senders) telegraf
+          ++ lib.optional (builtins.elem node receivers) (receiving tokens)
+        )
+      );
+    in
+    nodes;
+  # The claim names of a secret's sources.
+  sourceNamesOf = secret: map (source: source.claim.name) secret.sources;
+  # What a receiving node holds: the sources of each copy, by id, and of
+  # its derived htpasswd.
+  receivedBy =
+    node:
+    let
+      secrets = node.config.contracts.claimSets.secrets.influxdb;
+    in
+    {
+      copies = lib.mapAttrs (_: sourceNamesOf) (removeAttrs secrets [ "htpasswd" ]);
+      derived = sourceNamesOf secrets.htpasswd;
+    };
 in
 {
   testSecretDefaultsToAGroupReadableRootFile = {
@@ -83,7 +143,6 @@ in
       owner = "root";
       group = "chrony";
       value.provided = { };
-      sendTo = [ ];
       ref = {
         node = null;
         kind = "secrets";
@@ -683,6 +742,90 @@ in
         ];
       };
     };
+
+  # Each receiver copies its own node's token too, so each node references
+  # the other and itself.
+  testNodesHandingEachOtherReferencesHoldACopyOfEachAndDeriveFromAll = {
+    expr =
+      lib.mapAttrs (_: node: receivedBy node // { inherit (node.config.contracts) failures; })
+        (handingTokens {
+          senders = [
+            "alpha"
+            "beta"
+          ];
+          receivers = [
+            "alpha"
+            "beta"
+          ];
+        });
+    expected = lib.genAttrs [ "alpha" "beta" ] (_: {
+      copies = {
+        alpha_telegraf_token = [ "alpha_telegraf_token" ];
+        beta_telegraf_token = [ "beta_telegraf_token" ];
+      };
+      derived = [
+        "alpha_telegraf_token"
+        "beta_telegraf_token"
+      ];
+      failures = [ ];
+    });
+  };
+
+  testAddingASenderAddsACopyAndASourceWithoutChangingTheReceivingNode = {
+    expr =
+      map
+        (
+          senders:
+          receivedBy
+            (handingTokens {
+              inherit senders;
+              receivers = [ "store" ];
+            }).store
+        )
+        [
+          [ "alpha" ]
+          [
+            "alpha"
+            "beta"
+          ]
+        ];
+    expected = [
+      {
+        copies.alpha_telegraf_token = [ "alpha_telegraf_token" ];
+        derived = [ "alpha_telegraf_token" ];
+      }
+      {
+        copies = {
+          alpha_telegraf_token = [ "alpha_telegraf_token" ];
+          beta_telegraf_token = [ "beta_telegraf_token" ];
+        };
+        derived = [
+          "alpha_telegraf_token"
+          "beta_telegraf_token"
+        ];
+      }
+    ];
+  };
+
+  testReferenceNamingAMistypedNodeFailsTheReceiversCheck = {
+    expr =
+      (handingTokens {
+        senders = [ "alpha" ];
+        receivers = [ "alpha" ];
+        extra = [
+          {
+            node = "alhpa";
+            kind = "secrets";
+            service = "telegraf";
+            id = "token";
+          }
+        ];
+      }).alpha.config.contracts.failures;
+    expected = [
+      "nixos-contracts: secrets claim `influxdb.alhpa_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`."
+      "nixos-contracts: secrets claim `influxdb.htpasswd`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`."
+    ];
+  };
 
   testSecretSourcesIsReadOnly = {
     expr =

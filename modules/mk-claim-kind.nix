@@ -2,8 +2,8 @@
   Build a claim kind: a module that adds one kind of claim to every contract,
   folds the claims of enabled contracts into a read-only claim set by service
   and id, and checks that no two claims clash and that each passes the
-  kind's check rule. The shipped binds, mounts, secrets and inboxes are
-  built with this function, so a new kind gets the same treatment.
+  kind's check rule. The shipped binds, mounts and secrets are built with
+  this function, so a new kind gets the same treatment.
 
   # Inputs
 
@@ -29,10 +29,8 @@
     owner, is an option defaulting to it. The constructor declares five
     read-only options on every claim, `service`, `id`, its `location`
     `[ <service> <id> ]`, its claim name `name` and its reference `ref`,
-    and on every claim of a sendable kind the writable `sendTo`, the
-    inboxes the claim is sent to, so a claim type cannot declare options
-    with these names. A claim id may contain only lowercase letters,
-    digits, hyphens and `_`.
+    so a claim type cannot declare options with these names. A claim id
+    may contain only lowercase letters, digits, hyphens and `_`.
 
   `clash`
   : Optional. The kind's clash rule: a function of two claim-set entries
@@ -51,11 +49,6 @@
 
   `settings`
   : Optional. Option declarations placed under `contracts.kinds.<name>`.
-
-  `sendable`
-  : Optional, true by default. Whether a claim of the kind can be sent to
-    an inbox. Claims of a kind that is not sendable have no `sendTo`, and
-    an inbox taking the kind fails its check. Inboxes are not sendable.
 
   # Output
 
@@ -80,7 +73,6 @@
   clash ? null,
   check ? null,
   settings ? { },
-  sendable ? true,
 }:
 let
   kindName = name;
@@ -126,7 +118,6 @@ else
   { config, lib, ... }:
   let
     topConfig = config;
-    contractTypes = import ./types.nix { inherit lib; };
 
     # The claims of enabled contracts, by service and id. Its keys come from
     # this configuration's contracts alone, and are checked as they are
@@ -205,8 +196,6 @@ else
       );
 
     checkAssertions = lib.concatMap checkAssertionsOf claims;
-
-    identityOf = service: resolveIdentity config.contracts.services.${service}.identity;
   in
   {
     options.contracts = {
@@ -300,17 +289,6 @@ else
                               while that is null.
                             '';
                           };
-                        }
-                        // lib.optionalAttrs sendable {
-                          sendTo = lib.mkOption {
-                            type = lib.types.listOf (contractTypes.referenceTo "inboxes");
-                            default = [ ];
-                            description = ''
-                              The inboxes the claim is sent to, each a
-                              reference `{ node; service; id; }`, on another
-                              node or on this one.
-                            '';
-                          };
                         };
                       }
                     ))
@@ -336,38 +314,6 @@ else
       };
 
       kinds.${kindName} = settings;
-
-      # The kind's claim type and check rule, for a claim a service holds
-      # outside the claim set, such as an inbox's copy, and whether its
-      # claims can be sent.
-      internal.kinds.${kindName} = lib.mkOption {
-        type = lib.types.raw;
-        internal = true;
-        readOnly = true;
-        default = {
-          inherit sendable;
-          claim =
-            service:
-            claim {
-              inherit service;
-              identity = identityOf service;
-              config = topConfig;
-            };
-          assertions =
-            service: claim:
-            checkAssertionsOf {
-              identity = identityOf service;
-              inherit claim;
-            };
-        };
-        defaultText = lib.literalMD "the kind's claim type, check rule and sendability";
-        description = ''
-          `claim service`, the submodule of one ${kindName} claim of a
-          service, `assertions service claim`, the failed checks of such a
-          claim, and `sendable`, whether a ${kindName} claim can be sent to
-          an inbox.
-        '';
-      };
     };
 
     # Forcing the claim set checks every id, so evaluating the checks fails
