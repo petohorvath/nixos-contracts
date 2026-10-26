@@ -65,18 +65,23 @@ let
   };
 
   # Configurations by node identity sharing one node collection, each with its
-  # own secrets directories under its name.
-  nodesOf = import ../../fixtures/nodes.nix {
-    evaluate = configuration;
-    modulesOf = node: [
-      {
-        age.rekey = {
-          secretsDir = ./. + "/${node}";
-          generatedSecretsDir = ./generated + "/${node}";
-        };
-      }
-    ];
-  };
+  # own secrets directories under its name, and with the adapter unless
+  # `withoutAdapter` names it.
+  nodesWithout =
+    withoutAdapter:
+    import ../../fixtures/nodes.nix {
+      evaluate = modules: evaluate (backends ++ modules);
+      modulesOf = node: [
+        (if builtins.elem node withoutAdapter then contracts else adapter)
+        {
+          age.rekey = {
+            secretsDir = ./. + "/${node}";
+            generatedSecretsDir = ./generated + "/${node}";
+          };
+        }
+      ];
+    };
+  nodesOf = nodesWithout [ ];
   # A telegraf node generating its token, and an influxdb node.
   telegraf.contracts.services.telegraf = {
     enable = true;
@@ -95,8 +100,10 @@ let
   # that holds one copy of every node's telegraf token, its id joining the
   # reference's node, service and id with `_`, and an htpasswd derived
   # from all of them. A `let`-bound list carries the tokens' `ref`s, as a
-  # fleet's shared data does.
-  handingTokens =
+  # fleet's shared data does. The nodes `withoutAdapter` names lack the
+  # adapter.
+  handingTokensWithout =
+    withoutAdapter:
     let
       tokens = map (node: nodes.${node}.config.contracts.services.telegraf.secrets.token.ref) [
         "alpha"
@@ -123,7 +130,7 @@ let
         ];
         age.generators.basic-auth = _: "true";
       };
-      nodes = nodesOf {
+      nodes = nodesWithout withoutAdapter {
         alpha = [
           telegraf
           receiving
@@ -135,6 +142,7 @@ let
       };
     in
     nodes;
+  handingTokens = handingTokensWithout [ ];
 in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
@@ -553,22 +561,12 @@ in
     };
   };
 
+  # Alpha's copy of beta's token and its htpasswd each reference beta.
   testReferenceToANodeWithoutTheAdapterFailsItsCheck = {
-    expr =
-      (configuration [
-        (influxdb {
-          token.value.copied = metricsToken;
-        })
-        {
-          # The metrics node holds its contracts, but no secret backend.
-          contracts.nodes.metrics.config = nixos.evaluate [
-            contracts
-            telegraf
-          ];
-        }
-      ]).contracts.failures;
+    expr = (handingTokensWithout [ "beta" ]).alpha.config.contracts.failures;
     expected = [
-      "nixos-contracts: secret `influxdb.token` references `metrics:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.beta_telegraf_token` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
+      "nixos-contracts: secret `influxdb.htpasswd` references `beta:secrets.telegraf.token`, whose node has no `nixosModules.agenix-rekey`."
     ];
   };
 
