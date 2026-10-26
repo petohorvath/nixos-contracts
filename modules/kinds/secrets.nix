@@ -8,6 +8,7 @@ let
   # value adds only its own rules.
   inherit (import ../references.nix)
     backendPathOf
+    deliveryPathOf
     lookup
     referenceLabelOf
     ;
@@ -127,16 +128,16 @@ in
     delivery = mkAdapterSlot {
       message = "A configuration imports one delivery adapter, which sets `delivery`.";
       description = ''
-        The delivery of a dynamic identity's secrets into its unit. Set by
-        a delivery adapter, such as `nixosModules.systemd-credentials`;
-        null when none is imported. A node does not set it.
+        The delivery of secrets into the units they name. Set by a
+        delivery adapter, such as `nixosModules.systemd-credentials`; null
+        when none is imported, which fails the check of a delivered secret
+        and reading its `path`. A node does not set it.
       '';
       options.path = lib.mkOption {
         type = lib.types.functionTo lib.types.str;
         description = ''
           Where a unit reads a delivered secret, as a function of
-          `{ unit, service, id }`, where `service` and `id` are the
-          secret's.
+          `{ unit, service, id }`, the secret's `unit`, service and id.
         '';
       };
     };
@@ -150,14 +151,27 @@ in
       config,
     }:
     let
-      inherit (settings) backend;
+      inherit (settings) backend delivery;
       generator = claim.value.generated or claim.value.derived.generator or null;
+      deliveryReason =
+        if claim.delivered && delivery == null then
+          "it is delivered to `${claim.unit}`, but no delivery adapter is imported; import one such as `nixosModules.systemd-credentials`, or set its `unit` to null"
+        else
+          null;
       # A dynamic identity's user exists only while its unit runs, so it
-      # reads a secret the backend installs only through its shared group.
-      claimReason =
-        if identity.unit != null && !claim.delivered && claim.group != identity.group then
-          "its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group"
-        else if generator != null && backend != null && !builtins.elem generator backend.generators then
+      # reads a secret delivered to that unit, or one the backend installs
+      # through its shared group.
+      readReason =
+        if identity.unit == null then
+          null
+        else if claim.delivered && claim.unit != identity.unit then
+          "it is delivered to `${claim.unit}`, but its dynamic identity exists only in `${identity.unit}`; deliver it to `${identity.unit}`, or set its `unit` to null"
+        else if !claim.delivered && claim.group != identity.group then
+          "its dynamic identity cannot read it; deliver it to `${identity.unit}`, or give the identity a `sharedGroup` and the secret that group"
+        else
+          null;
+      generatorReason =
+        if generator != null && backend != null && !builtins.elem generator backend.generators then
           "the secret backend provides no generator `${generator}`"
           +
             lib.optionalString (backend.generators != [ ])
@@ -166,7 +180,12 @@ in
           null;
     in
     lib.filter (reason: reason != null) (
-      [ claimReason ] ++ map (referenceReason config) (referencesOf claim.value)
+      [
+        deliveryReason
+        readReason
+        generatorReason
+      ]
+      ++ map (referenceReason config) (referencesOf claim.value)
     );
 
   claim =
@@ -178,8 +197,6 @@ in
     { config, ... }:
     let
       inherit (topConfig.contracts.kinds.secrets) backend delivery;
-      inherit (identity) unit;
-      delivered = unit != null && delivery != null;
     in
     {
       options = {
@@ -198,9 +215,13 @@ in
         };
         group = lib.mkOption {
           type = lib.types.str;
-          default = lib.defaultTo "root" identity.group;
-          defaultText = lib.literalMD "the identity's group, or `root` when it has none";
-          description = "The group of the installed secret.";
+          default = if config.delivered then "root" else lib.defaultTo "root" identity.group;
+          defaultText = lib.literalMD "`root` for a delivered secret, else the identity's group, or `root` when it has none";
+          description = ''
+            The group of the installed secret. A delivered secret defaults
+            to `root`: only the delivery adapter reads the installed file,
+            not the other units of the identity's account.
+          '';
         };
         value = lib.mkOption {
           type = contractTypes.tag {
@@ -289,42 +310,38 @@ in
         };
         unit = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
-          readOnly = true;
-          default = unit;
+          default = identity.unit;
           defaultText = lib.literalMD "the dynamic identity's unit, or null";
           description = ''
-            The unit a dynamic identity's secret is delivered to, or null
-            for a static identity.
+            The unit the secret is delivered to, such as
+            `mastodon-init-dirs.service`, or null to read it where the
+            backend installs it. The module that hands the secret's `path`
+            to the daemon names the unit that reads it. A dynamic identity's
+            secret is delivered to the identity's unit or not at all.
           '';
+          example = "mastodon-init-dirs.service";
         };
         delivered = lib.mkOption {
           type = lib.types.bool;
           readOnly = true;
-          default = delivered;
-          defaultText = lib.literalMD "whether the identity is dynamic and a delivery adapter is imported";
+          default = config.unit != null;
+          defaultText = lib.literalMD "whether the secret names a unit";
           description = ''
-            Whether the secret is delivered into the dynamic identity's
-            unit, rather than read where the backend installs it.
+            Whether the secret is delivered to its `unit`, rather than read
+            where the backend installs it.
           '';
         };
         path = lib.mkOption {
           type = lib.types.str;
           readOnly = true;
-          default =
-            if delivered then
-              delivery.path {
-                inherit unit;
-                inherit (config) service id;
-              }
-            else
-              backendPathOf backend config;
+          default = if config.delivered then deliveryPathOf delivery config else backendPathOf backend config;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
-            Where the daemon reads the secret: the delivered credential for
-            a dynamic identity when a delivery adapter is imported, else
-            where the backend installs it, each as its slot's `path` answers
-            for the secret's service and id. Reading it without a backend
-            adapter fails.
+            Where the daemon reads the secret: the credential in its `unit`
+            for a delivered secret, else where the backend installs it, each
+            as its slot's `path` answers. Reading it fails without the
+            delivery adapter a delivered secret needs, or the backend adapter
+            every secret needs.
           '';
         };
       };

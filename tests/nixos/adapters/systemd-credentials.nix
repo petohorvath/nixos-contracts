@@ -100,6 +100,34 @@ in
     expected = "/run/credentials/alloy.service/alloy_password";
   };
 
+  # Chrony runs `chronyd.service` as its static account, which sets no
+  # `DynamicUser`; the `script` gives the unit the command another module
+  # would.
+  testStaticIdentitySecretIsLoadedIntoTheUnitItNames =
+    let
+      configuration = evaluate [
+        adapter
+        backend
+        chrony
+        {
+          contracts.services.chrony.secrets.key.unit = "chronyd.service";
+          systemd.services.chronyd.script = "true";
+        }
+      ];
+    in
+    {
+      expr = {
+        inherit (configuration.systemd.services.chronyd.serviceConfig) LoadCredential;
+        inherit (configuration.contracts.services.chrony.secrets.key) path;
+        inherit (configuration.contracts) failures;
+      };
+      expected = {
+        LoadCredential = [ "chrony_key:/run/agenix/chrony_key" ];
+        path = "/run/credentials/chronyd.service/chrony_key";
+        failures = [ ];
+      };
+    };
+
   testStaticIdentityKeepsTheBackendPath = {
     expr =
       let
@@ -150,7 +178,7 @@ in
       { contracts.services.alloy.identity.dynamic.unit = lib.mkForce "alloy-typo.service"; }
     ];
     expected = [
-      "nixos-contracts: dynamic identity unit `alloy-typo.service` is not a service defined in `systemd.services`."
+      "nixos-contracts: secrets are delivered to unit `alloy-typo.service`, which is not a service defined in `systemd.services`."
     ];
   };
 

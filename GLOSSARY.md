@@ -74,7 +74,7 @@ A named way to make a secret's value, such as `alnum` or `basic-auth`, alone or 
 _Avoid_: Generator script, provenance, source
 
 **Delivery**:
-Handing a secret to a dynamic identity's unit, so its daemon reads it from where the unit receives it rather than where the backend installs it. A delivery adapter provides it.
+Handing a secret to the unit that reads it, so its daemon reads it from where the unit receives it rather than where the backend installs it. The secret names the unit, by default a dynamic identity's own. A delivery adapter provides it.
 _Avoid_: Injection, mounting
 
 **Adapter**:

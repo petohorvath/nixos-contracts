@@ -65,6 +65,15 @@ rec {
     else
       backend.path { inherit (secret) service id; };
 
+  # Where the delivery `delivery` hands the secret `secret` to its unit,
+  # failing, naming the secret, while no delivery adapter sets it.
+  deliveryPathOf =
+    delivery: secret:
+    if delivery == null then
+      throw "nixos-contracts: secret `${claimLabelOf secret}` is delivered to `${secret.unit}` but has no path: import a delivery adapter such as `nixosModules.systemd-credentials`, which sets `contracts.kinds.secrets.delivery`, or set its `unit` to null"
+    else
+      delivery.path { inherit (secret) unit service id; };
+
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
 

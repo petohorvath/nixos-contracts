@@ -318,13 +318,13 @@ in
     expectedError.msg = "contracts\\.adapters\\.agenixRekey' does not exist";
   };
 
-  testDynamicIdentityWithoutDeliveryCannotReadItsSecret = {
+  testDynamicIdentitySecretWithoutADeliveryAdapterFailsItsCheck = {
     expr = failures [
       services
       values
     ];
     expected = [
-      "nixos-contracts: secrets claim `alloy.password`: its dynamic identity cannot read it; import a delivery adapter such as `nixosModules.systemd-credentials`, or give the identity a `sharedGroup` and the secret that group."
+      "nixos-contracts: secrets claim `alloy.password`: it is delivered to `alloy.service`, but no delivery adapter is imported; import one such as `nixosModules.systemd-credentials`, or set its `unit` to null."
     ];
   };
 
