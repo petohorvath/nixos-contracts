@@ -1,6 +1,6 @@
 { nixos, module }:
 let
-  inherit (nixos) evaluate;
+  inherit (nixos) evaluate evaluateWithoutNode;
 
   web = name: {
     contracts.services.${name} = {
@@ -28,6 +28,13 @@ in
         "nixos-contracts: binds claims `first.http` and `second.http` clash: both listen on tcp port 80, at `0.0.0.0` and `0.0.0.0`."
         (map (check: check.message) failedAssertions);
     expected = true;
+  };
+
+  # Reads `assertions` rather than `contracts.failures`, so forwarding the
+  # checks to NixOS is what fails.
+  testNixosModuleRequiresANodeIdentity = {
+    expr = map (check: check.assertion) (evaluateWithoutNode [ module ]).assertions;
+    expectedError.msg = "contracts\\.node' was accessed but has no value defined";
   };
 
   testNixosModuleWiresADaemonFromItsContract = {

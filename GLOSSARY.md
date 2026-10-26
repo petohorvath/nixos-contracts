@@ -66,7 +66,7 @@ The nodes a reference may name, each by its node identity, as one configuration 
 _Avoid_: Nodes list, peers
 
 **Node identity**:
-A node's name within its node collection, independent of its hostname.
+A node's name within its node collection, independent of its hostname. Every node has one, whether or not a reference names it.
 _Avoid_: Hostname, node name
 
 **Generator**:

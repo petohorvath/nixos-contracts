@@ -579,8 +579,15 @@ in
         })
         {
           # The metrics node sets no secrets directories, so its token has
-          # no encrypted file.
-          contracts.nodes.metrics.config = configuration [ telegraf ];
+          # no encrypted file. `local` names this configuration, whose entry
+          # is never read.
+          contracts.nodes = {
+            metrics.config = configuration [
+              telegraf
+              { contracts.node = "metrics"; }
+            ];
+            local.config = { };
+          };
         }
       ]).contracts.failures;
     expected = [

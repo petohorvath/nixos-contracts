@@ -51,6 +51,7 @@ let
 in
 {
   # Usually declared once per configuration, beside the adapters.
+  contracts.node = "beta";
   contracts.kinds.mounts.classes = [ "state" ];
 
   contracts.services.chrony = mkDefaultContract {
@@ -82,8 +83,8 @@ The resolved claims are then readable in one place:
 
 ```nix
 config.contracts.claimSets.mounts.chrony.state
-# => { service = "chrony"; id = "state"; name = null;
-#      ref = { node = null; kind = "mounts"; service = "chrony"; id = "state"; };
+# => { service = "chrony"; id = "state"; name = "beta_mounts_chrony_state";
+#      ref = { node = "beta"; kind = "mounts"; service = "chrony"; id = "state"; };
 #      path = "/var/lib/chrony"; class = "state"; type = "directory";
 #      mode = "0700"; owner = "chrony"; group = "chrony"; }
 ```

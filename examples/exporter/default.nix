@@ -18,6 +18,7 @@ let
       {
         services.chrony.enable = true;
         services.prometheus.exporters.chrony.enable = true;
+        contracts.node = "exporter";
         nixpkgs.hostPlatform = system;
         system.stateVersion = "26.05";
       }

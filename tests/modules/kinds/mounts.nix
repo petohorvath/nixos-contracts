@@ -48,9 +48,9 @@ in
     expected = {
       service = "influxdb";
       id = "data";
-      name = null;
+      name = "local_mounts_influxdb_data";
       ref = {
-        node = null;
+        node = "local";
         kind = "mounts";
         service = "influxdb";
         id = "data";

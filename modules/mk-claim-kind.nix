@@ -241,23 +241,19 @@ else
                             description = "The claim's id within its contract.";
                           };
                           name = lib.mkOption {
-                            type = lib.types.nullOr lib.types.str;
+                            type = lib.types.str;
                             readOnly = true;
-                            default =
-                              if topConfig.contracts.node == null then
-                                null
-                              else
-                                lib.concatStringsSep "_" [
-                                  topConfig.contracts.node
-                                  kindName
-                                  config.service
-                                  config.id
-                                ];
-                            defaultText = lib.literalMD "`<node>_<kind>_<service>_<id>`, or null without `contracts.node`";
+                            default = lib.concatStringsSep "_" [
+                              topConfig.contracts.node
+                              kindName
+                              config.service
+                              config.id
+                            ];
+                            defaultText = lib.literalMD "`<node>_<kind>_<service>_<id>`";
                             description = ''
                               The claim name, `<node>_<kind>_<service>_<id>`,
                               which no other claim of the node collection
-                              shares; null while `contracts.node` is null.
+                              shares.
                             '';
                           };
                           # Built from the node identity, kind, service
@@ -267,8 +263,6 @@ else
                             type = lib.types.raw;
                             readOnly = true;
                             default = {
-                              # Null while the configuration has no node
-                              # identity, which every lookup rejects.
                               inherit (topConfig.contracts) node;
                               kind = kindName;
                               inherit service;
@@ -277,8 +271,7 @@ else
                             defaultText = lib.literalMD "`{ node; kind; service; id; }`";
                             description = ''
                               The reference to this claim, naming
-                              `contracts.node`, which no lookup resolves
-                              while that is null.
+                              `contracts.node`.
                             '';
                           };
                         };

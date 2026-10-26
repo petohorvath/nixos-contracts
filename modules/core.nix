@@ -87,13 +87,12 @@ in
     };
 
     node = lib.mkOption {
-      type = lib.types.nullOr nodeIdentityType;
-      default = null;
+      type = nodeIdentityType;
       description = ''
         This configuration's node identity, its name in the node
-        collection, which every claim's `ref` names. While it is null, no
-        lookup resolves a claim's `ref`.
+        collection, which every claim's `ref` and `name` include.
       '';
+      example = "beta-influxdb";
     };
 
     lookup = lib.mkOption {
@@ -177,11 +176,13 @@ in
     };
   };
 
-  # A configuration without a node collection needs none to name itself.
-  config.contracts.assertions =
-    lib.optional (config.contracts.node != null && config.contracts.nodes != { })
-      {
-        assertion = config.contracts.nodes ? ${config.contracts.node};
-        message = "`contracts.node` is `${config.contracts.node}`, which is not in `contracts.nodes`.";
-      };
+  # Reading the node identity makes the checks fail without one, even in a
+  # configuration that reads no claim's `ref` or `name`. A configuration
+  # without a node collection needs none to name itself.
+  config.contracts.assertions = builtins.seq config.contracts.node (
+    lib.optional (config.contracts.nodes != { }) {
+      assertion = config.contracts.nodes ? ${config.contracts.node};
+      message = "`contracts.node` is `${config.contracts.node}`, which is not in `contracts.nodes`.";
+    }
+  );
 }

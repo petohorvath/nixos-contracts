@@ -38,7 +38,7 @@ contracts.services.<service>.enable          writable
 contracts.services.<service>.identity        writable, required
 contracts.services.<service>.<kind>.<id>     writable, one claim; service, id, name, ref read-only
 contracts.claimSets.<kind>.<service>.<id>    read-only
-contracts.node                               this configuration's node identity
+contracts.node                               this configuration's node identity, required
 contracts.nodes.<node>                       the node collection
 contracts.lookup, contracts.resolve          read-only, functions of a reference
 contracts.kinds.<kind>.*                     kind settings
@@ -72,7 +72,7 @@ A read-only attribute set of every enabled contract's claims of one kind, nested
 
 ### `contracts.node`
 
-This configuration's node identity, its name in the node collection (a [name](#names) or null, default `null`). Every claim's `ref` and `name` include it. While it is null, a `ref` names a null node, which no lookup resolves, and a claim's `name` is null, so a configuration whose claims are referenced, even by itself, sets it. A check fails when `contracts.nodes` is not empty and has no node of this name. A fleet sets it, for example [from nixos-cross-config](#node-identity-and-collection-from-nixos-cross-config).
+This configuration's node identity, its name in the node collection (a [name](#names), required). Every claim's `ref` and `name` include it. A configuration without one fails to evaluate its checks, with an error naming `contracts.node`, whether or not it uses references ([ADR 0020](adr/0020-require-a-node-identity.md)). A configuration outside a fleet still names itself, such as by its host name. A check fails when `contracts.nodes` is not empty and has no node of this name. A fleet sets it, for example [from nixos-cross-config](#node-identity-and-collection-from-nixos-cross-config).
 
 ### `contracts.nodes`
 
@@ -80,7 +80,7 @@ The node collection: the nodes a [reference](#references) may name, keyed by nod
 
 ### `contracts.lookup` and `contracts.resolve`
 
-Read-only functions of a [reference](#references) that find the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). `contracts.lookup reference` returns `{ claim; reason; }`: the claim-set entry and a null reason, or a null claim and why the reference names none. `contracts.resolve reference` returns the entry, or fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``. Both read the entry at `claimSets.<kind>.<service>.<id>` of the node the reference names. A reference names no claim when its node is null, is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
+Read-only functions of a [reference](#references) that find the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). `contracts.lookup reference` returns `{ claim; reason; }`: the claim-set entry and a null reason, or a null claim and why the reference names none. `contracts.resolve reference` returns the entry, or fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``. Both read the entry at `claimSets.<kind>.<service>.<id>` of the node the reference names. A reference names no claim when its node is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
 
 ```nix
 port = (config.contracts.resolve backend.bind).port;
@@ -104,7 +104,7 @@ Besides its kind's fields, every claim at `contracts.services.<service>.<kind>.<
 
 - `service`: the name of its service.
 - `id`: its id within the contract.
-- `name`: its claim name, `<node>_<kind>_<service>_<id>`, or null while `contracts.node` is null.
+- `name`: its claim name, `<node>_<kind>_<service>_<id>`.
 - `ref`: its [reference](#references), `{ node; kind; service; id; }`, with `contracts.node` as its node.
 
 A read-only field cannot be defined, so copying a whole claim into another contract fails; copy the kind's fields instead.
@@ -410,7 +410,7 @@ mkClaimKind {
 
 ### `lib.types.reference`
 
-The option type of a [reference](#references) of any kind, `{ node; kind; service; id; }`, all required: `node` a node identity, or null for the `ref` of a claim whose configuration has none, and the others strings. A claim's `ref` has this shape.
+The option type of a [reference](#references) of any kind, `{ node; kind; service; id; }`, all required strings, `node` a node identity. A claim's `ref` has this shape.
 
 ### `lib.types.referenceTo`
 

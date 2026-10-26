@@ -22,9 +22,9 @@ in
     expected = {
       service = "web";
       id = "http";
-      name = null;
+      name = "local_binds_web_http";
       ref = {
-        node = null;
+        node = "local";
         kind = "binds";
         service = "web";
         id = "http";

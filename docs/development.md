@@ -37,6 +37,8 @@ Tests come in two layers:
 - **Core tests** evaluate the generic module with a bare `lib.evalModules`, through [tests/fixtures/contracts.nix](../tests/fixtures/contracts.nix). They are fast, and they fail if the core starts reading a NixOS option, which keeps the generic module usable outside NixOS.
 - **NixOS tests** evaluate `nixosModules.default` and the adapters in NixOS configurations, without building them, through [tests/fixtures/nixos.nix](../tests/fixtures/nixos.nix). The adapter tests import the real backend modules from the root flake inputs `preservation`, `agenix` and `agenix-rekey`. Consumers never evaluate these inputs, but they appear in the lock graph, where a consumer can follow them to its own copies.
 
+Both fixtures name the evaluated node `local` at default priority, so a test that is not about node identities sets none, and their `evaluateWithoutNode` evaluates a configuration without one.
+
 The `evaluation` check runs nix-unit in the build sandbox, which cannot fetch, so [dev/checks.nix](../dev/checks.nix) passes every locked input, including agenix-rekey's own inputs, with `--override-input`. A new input, or a new input of agenix-rekey, needs an entry there.
 
 Failure cases use nix-unit's `expectedError` and match the option path or library message, not a complete error snapshot. Clash and check cases read `contracts.failures`.
