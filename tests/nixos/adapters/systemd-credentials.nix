@@ -2,6 +2,7 @@
   contractsLib,
   lib,
   nixos,
+  nodesWith,
   adapter,
   backends,
   backendAdapter,
@@ -27,20 +28,20 @@ let
       secrets.key = { };
     };
   };
-  backend.contracts.kinds.secrets.backend = {
+  backendSlot.contracts.kinds.secrets.backend = {
     path = { service, id }: "/run/agenix/${service}_${id}";
     generators = [ ];
   };
 
   # Configurations by node identity with the adapter and the backend,
   # sharing one node collection.
-  nodesOf = import ../../fixtures/nodes.nix {
+  nodesOf = nodesWith {
     evaluate =
       modules:
       evaluate (
         [
           adapter
-          backend
+          backendSlot
         ]
         ++ modules
       );
@@ -53,7 +54,7 @@ in
         adapter
         alloy
         chrony
-        backend
+        backendSlot
       ]).systemd.services.alloy.serviceConfig.LoadCredential;
     expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
@@ -93,7 +94,7 @@ in
       (evaluate [
         adapter
         alloy
-        backend
+        backendSlot
       ]).contracts.services.alloy.secrets.password.path;
     expected = "/run/credentials/alloy.service/alloy_password";
   };
@@ -105,7 +106,7 @@ in
     let
       configuration = evaluate [
         adapter
-        backend
+        backendSlot
         chrony
         {
           contracts.services.chrony.secrets.key.unit = "chronyd.service";
@@ -132,7 +133,7 @@ in
         configuration = evaluate [
           adapter
           chrony
-          backend
+          backendSlot
         ];
       in
       {
@@ -158,7 +159,7 @@ in
     expr =
       (evaluate [
         adapter
-        backend
+        backendSlot
       ]).contracts.kinds.secrets.delivery.path
         {
           unit = "alloy.service";
@@ -168,10 +169,10 @@ in
     expected = "/run/credentials/alloy.service/alloy_loki-password";
   };
 
-  testMistypedUnitIsRejected = {
+  testMistypedUnitFailsItsCheck = {
     expr = failures [
       adapter
-      backend
+      backendSlot
       alloy
       { contracts.services.alloy.identity.dynamic.unit = lib.mkForce "alloy-typo.service"; }
     ];
@@ -180,10 +181,10 @@ in
     ];
   };
 
-  testUnitWithoutDynamicUserIsRejected = {
+  testUnitWithoutDynamicUserFailsItsCheck = {
     expr = failures [
       adapter
-      backend
+      backendSlot
       alloy
       { systemd.services.alloy.serviceConfig.DynamicUser = lib.mkForce false; }
     ];

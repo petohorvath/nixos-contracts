@@ -58,16 +58,17 @@ let
   inherit (nodes.store) config;
   relative = path: lib.removePrefix "${toString ./secrets}/" (toString path);
   # The store's copies, by the name of their `age.secrets` entry.
-  copies = lib.mapAttrs' (
-    id: _: lib.nameValuePair "influxdb_${id}" config.age.secrets."influxdb_${id}"
-  ) (lib.filterAttrs (_: secret: secret.value ? copied) config.contracts.claimSets.secrets.influxdb);
+  copies = lib.pipe config.contracts.claimSets.secrets.influxdb [
+    (lib.filterAttrs (_: secret: secret.value ? copied))
+    (lib.mapAttrs' (id: _: lib.nameValuePair "influxdb_${id}" config.age.secrets."influxdb_${id}"))
+  ];
 in
 {
   inherit nodes;
 
   result = {
     copies = lib.mapAttrs (_: secret: {
-      inherit (secret) owner group mode;
+      inherit (secret) group mode owner;
       rekeyFile = relative secret.rekeyFile;
       generator = secret.generator.script or null;
     }) copies;

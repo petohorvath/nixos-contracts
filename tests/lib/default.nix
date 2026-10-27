@@ -214,7 +214,7 @@ in
     in
     {
       expr = lib.mapAttrs (_: secret: {
-        inherit (secret) owner mode;
+        inherit (secret) mode owner;
         source = map (source: source.claim.name) secret.sources;
       }) nodes.store.config.contracts.claimSets.secrets.influxdb;
       expected = {

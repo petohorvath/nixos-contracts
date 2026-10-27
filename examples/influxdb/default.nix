@@ -33,7 +33,7 @@ let
   inherit (node) config;
 
   secretOf = secret: {
-    inherit (secret) owner group mode;
+    inherit (secret) group mode owner;
     rekeyFile = if secret.rekeyFile != null then baseNameOf (toString secret.rekeyFile) else null;
     generator = secret.generator.script or null;
   };
@@ -49,9 +49,9 @@ in
     preserved = map (entry: {
       inherit (entry)
         directory
-        user
         group
         mode
+        user
         ;
     }) config.preservation.preserveAt."/persist/state".directories;
     secrets = lib.mapAttrs (_: secretOf) (

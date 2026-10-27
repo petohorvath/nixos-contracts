@@ -8,7 +8,7 @@ let
   inherit (contractsLib) claimsOf;
   mounts = claimsOf config.contracts.claimSets.mounts;
 
-  preserveEntry =
+  mkPreserveEntry =
     mount:
     let
       isFile = mount.type == "file";
@@ -43,7 +43,7 @@ in
       map (
         mount:
         lib.mkIf (cfg.roots ? ${mount.class}) {
-          ${cfg.roots.${mount.class}} = preserveEntry mount;
+          ${cfg.roots.${mount.class}} = mkPreserveEntry mount;
         }
       ) mounts
     );

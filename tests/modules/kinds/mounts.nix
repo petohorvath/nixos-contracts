@@ -30,7 +30,7 @@ let
         ]).contracts.services.svc.mounts.data;
     in
     {
-      inherit (claim) owner group;
+      inherit (claim) group owner;
     };
 in
 {

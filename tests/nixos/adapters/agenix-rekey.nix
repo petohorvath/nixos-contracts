@@ -2,7 +2,8 @@
   contractsLib,
   lib,
   nixos,
-  contracts,
+  nodesWith,
+  contractsModule,
   adapter,
   backends,
 }:
@@ -40,7 +41,7 @@ let
       secrets.alloy_password.rekeyFile = ./agenix-rekey.nix;
     };
   };
-  configuration = modules: evaluate (backends ++ [ adapter ] ++ modules);
+  evaluateWithAdapter = modules: evaluate (backends ++ [ adapter ] ++ modules);
   failures = modules: nixos.failures (backends ++ [ adapter ] ++ modules);
   secretOf = name: config: {
     inherit (config.age.secrets.${name}) group mode owner;
@@ -69,10 +70,10 @@ let
   # `withoutAdapter` names it.
   nodesWithout =
     withoutAdapter:
-    import ../../fixtures/nodes.nix {
+    nodesWith {
       evaluate = modules: evaluate (backends ++ modules);
       modulesOf = node: [
-        (if builtins.elem node withoutAdapter then contracts else adapter)
+        (if builtins.elem node withoutAdapter then contractsModule else adapter)
         {
           age.rekey = {
             secretsDir = ./. + "/${node}";
@@ -96,11 +97,13 @@ let
     };
   };
 
-  # The nodes `alpha` and `beta`, each running telegraf and an influxdb
-  # that holds one copy of every node's telegraf token, keyed by its claim
-  # name, and an htpasswd derived from all of them. A `let`-bound list
-  # carries the tokens' `ref`s, as a fleet's shared data does. The nodes
-  # `withoutAdapter` names lack the adapter.
+  /*
+    The nodes `alpha` and `beta`, each running telegraf and an influxdb
+    that holds one copy of every node's telegraf token, keyed by its claim
+    name, and an htpasswd derived from all of them. A `let`-bound list
+    carries the tokens' `ref`s, as a fleet's shared data does. The nodes
+    `withoutAdapter` names lack the adapter.
+  */
   handingTokensWithout =
     withoutAdapter:
     let
@@ -139,7 +142,7 @@ in
 {
   testGeneratorSetOnTheBackendWinsOverTheClaim = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
         { age.secrets.kea_ddns.generator.script = "hex"; }
@@ -150,7 +153,7 @@ in
   testAdapterProvidesTheBackendsGenerators = {
     expr =
       let
-        config = configuration [
+        config = evaluateWithAdapter [
           services
           values
           { age.generators.htpasswd = _: "true"; }
@@ -168,7 +171,7 @@ in
 
   testDependenciesSetOnTheBackendKeepTheClaimsGenerator = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
         { age.secrets.kea_ddns.generator.dependencies = [ ]; }
@@ -179,7 +182,7 @@ in
   testDependenciesSetOnTheBackendByNameAreKept = {
     expr =
       builtins.attrNames
-        (configuration [
+        (evaluateWithAdapter [
           services
           values
           (
@@ -196,7 +199,7 @@ in
 
   testNodeWritesProvidedOverADefaultGenerated = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         values
         {
           contracts.services.kea = contractsLib.mkDefaultContract {
@@ -223,7 +226,7 @@ in
   };
 
   testSecretTakesItsGeneratorFromTheClaim = {
-    expr = secretOf "kea_ddns" (configuration [
+    expr = secretOf "kea_ddns" (evaluateWithAdapter [
       services
       values
     ]);
@@ -237,7 +240,7 @@ in
   };
 
   testSecretWithoutAGeneratorFollowsTheBackendsSecretsDir = {
-    expr = secretOf "kea_token" (configuration [
+    expr = secretOf "kea_token" (evaluateWithAdapter [
       services
       values
     ]);
@@ -253,7 +256,7 @@ in
   testSecretWithAnUnderscoreInItsIdKeepsItInItsNames = {
     expr =
       let
-        config = configuration [
+        config = evaluateWithAdapter [
           {
             age.rekey.secretsDir = ./.;
             contracts = {
@@ -281,7 +284,7 @@ in
 
   testValueSetOnTheBackendIsKept = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
       ]).age.secrets.alloy_password.rekeyFile;
@@ -291,7 +294,7 @@ in
   testProvidedSecretsFileSetUnderItsBackendNameIsOnTheAdaptersEntry = {
     expr =
       let
-        config = configuration [
+        config = evaluateWithAdapter [
           keaWithoutValues
           (
             { config, ... }:
@@ -329,7 +332,7 @@ in
 
   testAdapterLeavesTheSecretsDirectoriesToTheBackend = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         keaWithoutValues
         # Another adapter's setting, so `contracts.adapters` exists.
         ({ lib, ... }: { options.contracts.adapters.other = lib.mkOption { default = null; }; })
@@ -349,7 +352,7 @@ in
   };
 
   testCopyTakesTheEncryptedFileOfTheSecretItReferences = {
-    expr = secretOf "kea_copy" (configuration [
+    expr = secretOf "kea_copy" (evaluateWithAdapter [
       services
       values
       (
@@ -535,7 +538,7 @@ in
           ;
       in
       {
-        inherit (config.age.secrets.influxdb_hashes.generator) script dependencies;
+        inherit (config.age.secrets.influxdb_hashes.generator) dependencies script;
         inherit (config.contracts) failures;
       };
     expected = {
@@ -593,7 +596,7 @@ in
 
   testCopyOfASecretWithoutAFileNamesTheSecretItReferences = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         (influxdb {
           token.value.copied = metricsToken;
         })
@@ -602,7 +605,7 @@ in
           # no encrypted file. `local` names this configuration, whose entry
           # is never read.
           contracts.nodes = {
-            metrics.config = configuration [
+            metrics.config = evaluateWithAdapter [
               telegraf
               { contracts.node = "metrics"; }
             ];
@@ -631,7 +634,7 @@ in
 
   testBackendPathNamesTheEntryByServiceAndId = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
       ]).contracts.kinds.secrets.backend.path
@@ -644,7 +647,7 @@ in
 
   testBackendPathFollowsAnEntrysOwnPath = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
         { age.secrets.kea_token.path = "/run/keys/kea"; }
@@ -655,7 +658,7 @@ in
   testEntriesAreNamedByServiceAndIdJoinedWithAnUnderscore = {
     expr =
       builtins.attrNames
-        (configuration [
+        (evaluateWithAdapter [
           services
           values
           {
@@ -676,7 +679,7 @@ in
 
   testClaimReadsTheInstalledPath = {
     expr =
-      (configuration [
+      (evaluateWithAdapter [
         services
         values
       ]).contracts.services.kea.secrets.token.path;

@@ -1,12 +1,9 @@
 # The arguments of `mkClaimKind` for binds: where a service accepts traffic.
 { lib, libnet }:
 let
-  inherit (libnet.withLib lib)
-    ip
-    port
-    portRange
-    types
-    ;
+  netLib = libnet.withLib lib;
+  inherit (netLib) ip port portRange;
+  netTypes = netLib.types;
 
   toPortRange =
     value:
@@ -70,8 +67,8 @@ in
     {
       options = {
         protocols = lib.mkOption {
-          type = lib.types.coercedTo types.transport (protocol: [ protocol ]) (
-            lib.types.listOf types.transport
+          type = lib.types.coercedTo netTypes.transport (protocol: [ protocol ]) (
+            lib.types.listOf netTypes.transport
           );
           default = [ "tcp" ];
           description = ''
@@ -80,7 +77,7 @@ in
           '';
         };
         port = lib.mkOption {
-          type = lib.types.either types.port types.portRange;
+          type = lib.types.either netTypes.port netTypes.portRange;
           description = ''
             The port the service listens on, or a range written as
             `"<from>-<to>"`.
@@ -88,7 +85,7 @@ in
           example = 8086;
         };
         addresses = lib.mkOption {
-          type = lib.types.coercedTo types.ip (address: [ address ]) (lib.types.listOf types.ip);
+          type = lib.types.coercedTo netTypes.ip (address: [ address ]) (lib.types.listOf netTypes.ip);
           default = [ "0.0.0.0" ];
           description = ''
             The addresses the service listens on. `0.0.0.0` and `::` listen

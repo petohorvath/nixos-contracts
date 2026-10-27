@@ -19,7 +19,7 @@ let
     nothing a project's own adapter cannot. The key keeps one copy of an
     adapter imported twice.
   */
-  withDefault = file: {
+  mkAdapterModule = file: {
     imports = [
       default
       (
@@ -38,7 +38,7 @@ let
 in
 {
   inherit default;
-  agenix-rekey = withDefault ./adapters/agenix-rekey.nix;
-  preservation = withDefault ./adapters/preservation.nix;
-  systemd-credentials = withDefault ./adapters/systemd-credentials.nix;
+  agenix-rekey = mkAdapterModule ./adapters/agenix-rekey.nix;
+  preservation = mkAdapterModule ./adapters/preservation.nix;
+  systemd-credentials = mkAdapterModule ./adapters/systemd-credentials.nix;
 }

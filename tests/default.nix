@@ -20,7 +20,8 @@ in
     # A shipped adapter receives the public library, so a parent path, which
     # leads out of its directory, reaches an internal helper. `...` is fine.
     if grep -rHnE --include='*.nix' '(^|[^.])\.\.([^.]|$)' nixos/adapters; then
-      echo "lint: a shipped adapter names a parent path; use the contractsLib it receives." >&2
+      echo "lint: a shipped adapter names a parent path;" \
+        "use the contractsLib it receives." >&2
       exit 1
     fi
   '';

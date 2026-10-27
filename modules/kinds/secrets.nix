@@ -24,7 +24,7 @@ let
 
   # Only a provided or generated secret resolves, so two copies referencing
   # each other fail their checks instead of recursing.
-  resolves =
+  isResolvable =
     result: result.reason == null && (result.claim.value ? provided || result.claim.value ? generated);
 
   # A `sources` entry: a reference with the claim it resolves to, or a null
@@ -36,12 +36,12 @@ let
     in
     {
       inherit (reference)
-        node
-        kind
-        service
         id
+        kind
+        node
+        service
         ;
-      claim = if resolves result then result.claim else null;
+      claim = if isResolvable result then result.claim else null;
     };
 
   # Why a reference does not resolve, or null when it does.
@@ -53,18 +53,18 @@ let
     in
     if result.reason != null then
       "${references}: ${result.reason}"
-    else if !resolves result then
+    else if !isResolvable result then
       "${references}, which is copied or derived itself; reference a provided or generated secret"
     else
       null;
 
   # `types.unique` turns into `types.uniq`, losing its message, when the
   # module system substitutes the submodules of an option it wraps.
-  uniqueWithSubmodules =
+  mkUniqueType =
     message: type:
     lib.types.unique { inherit message; } type
     // {
-      substSubModules = modules: uniqueWithSubmodules message (type.substSubModules modules);
+      substSubModules = modules: mkUniqueType message (type.substSubModules modules);
     };
 
   # A slot holds the data of one adapter, or null when none is imported. A
@@ -77,7 +77,7 @@ let
       description,
     }:
     lib.mkOption {
-      type = uniqueWithSubmodules message (lib.types.nullOr (lib.types.submodule { inherit options; }));
+      type = mkUniqueType message (lib.types.nullOr (lib.types.submodule { inherit options; }));
       default = null;
       inherit description;
     };
@@ -191,7 +191,7 @@ in
   claim =
     { identity, config, ... }:
     let
-      # Read before the claim's own `config` shadows the top-level one.
+      # Bound before the claim's own `config` shadows the top-level one.
       topConfig = config;
     in
     { config, ... }:

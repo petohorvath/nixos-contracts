@@ -1,7 +1,9 @@
-# How a claim is named, how a claim set's claims are listed, and how a
-# reference `{ node; kind; service; id; }` reads its node and claim, shared
-# by the core's `contracts.resolve` and `contracts.resolveService`, the claim
-# kinds and the adapters.
+/*
+  How a claim is named, how a claim set's claims are listed, and how a
+  reference `{ node; kind; service; id; }` reads its node and claim, shared
+  by the core's `contracts.resolve` and `contracts.resolveService`, the claim
+  kinds and the adapters.
+*/
 rec {
   /*
     What a name may contain, by what it names. A claim id may also contain
@@ -94,7 +96,7 @@ rec {
     if backend == null then
       throw "nixos-contracts: secret `${claimLabelOf secret}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
     else
-      backend.path { inherit (secret) service id; };
+      backend.path { inherit (secret) id service; };
 
   # Where the delivery `delivery` hands the secret `secret` to its unit,
   # failing, naming the secret, while no delivery adapter sets it.
@@ -103,7 +105,7 @@ rec {
     if delivery == null then
       throw "nixos-contracts: secret `${claimLabelOf secret}` is delivered to `${secret.unit}` but has no path: import a delivery adapter such as `nixosModules.systemd-credentials`, which sets `contracts.kinds.secrets.delivery`, or set its `unit` to null"
     else
-      delivery.path { inherit (secret) unit service id; };
+      delivery.path { inherit (secret) id service unit; };
 
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
@@ -240,7 +242,7 @@ rec {
 
   # The values of `fields`, each failing with the message
   # `nixos-contracts: cannot resolve <label>: <reason>`, and the reason.
-  unresolved =
+  mkUnresolved =
     label: fields: reason:
     let
       error = throw "nixos-contracts: cannot resolve ${label}: ${reason}";
@@ -292,7 +294,7 @@ rec {
       nameProblem = referenceNameProblemOf reference;
       found = claimSetOf config reference;
       entry = found.claimSet.${reference.service}.${reference.id} or null;
-      fail = unresolved "`${referenceLabelOf reference}`" [
+      fail = mkUnresolved "`${referenceLabelOf reference}`" [
         "claim"
         "config"
       ];
@@ -327,7 +329,7 @@ rec {
       nameProblem = nameProblemOfFields serviceFields selection;
       found = claimSetOf config selection;
       enabled = found.config.contracts.services.${selection.service}.enable or false;
-      fail = unresolved "service `${serviceLabelOf selection}`" [
+      fail = mkUnresolved "service `${serviceLabelOf selection}`" [
         "claims"
         "config"
       ];

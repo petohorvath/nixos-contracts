@@ -1,8 +1,10 @@
-# Evaluate NixOS configurations without building them. `evaluate` returns the
-# `config` of a node named `local`, unless a module names another, and
-# `evaluateWithoutNode` that of a configuration with no node identity.
-# `failures` reads this library's failed checks, since NixOS's own
-# assertions fail without a bootloader.
+/*
+  Evaluate NixOS configurations without building them. `evaluate` returns the
+  `config` of a node named `local`, unless a module names another, and
+  `evaluateWithoutNode` that of a configuration with no node identity.
+  `failures` reads this library's failed checks, since NixOS's own
+  assertions fail without a bootloader.
+*/
 { nixpkgs, system }:
 let
   inherit (nixpkgs) lib;

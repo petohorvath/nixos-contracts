@@ -9,38 +9,38 @@ let
 
   # A string following `rule`, one of `nameRules`, so a reference with a
   # name no claim can carry fails where it is written.
-  nameType =
+  mkNameType =
     rule:
     lib.types.strMatching rule.pattern
     // {
       description = "string of ${rule.allowed}";
     };
 
-  requiredName =
+  mkNameOption =
     rule: description:
     lib.mkOption {
-      type = nameType rule;
+      type = mkNameType rule;
       inherit description;
     };
 
   # A reference as every claim's `ref` holds it. It names a node, so it
   # means the same claim on every node that reads it.
-  referenceType =
+  mkReferenceType =
     kind:
     lib.types.submodule {
       options = {
-        node = requiredName nameRules.node "The node holding the claim, by its node identity.";
+        node = mkNameOption nameRules.node "The node holding the claim, by its node identity.";
         kind =
           if kind == null then
-            requiredName nameRules.kind "The claim's kind, such as `secrets`."
+            mkNameOption nameRules.kind "The claim's kind, such as `secrets`."
           else
             lib.mkOption {
               type = lib.types.enum [ kind ];
               default = kind;
               description = "The claim's kind, which must be `${kind}`.";
             };
-        service = requiredName nameRules.service "The claim's service.";
-        id = requiredName nameRules.id "The claim's id within its contract.";
+        service = mkNameOption nameRules.service "The claim's service.";
+        id = mkNameOption nameRules.id "The claim's id within its contract.";
       };
     };
 
@@ -156,7 +156,7 @@ in
   /**
     A reference to a claim of any kind: `{ node; kind; service; id; }`.
   */
-  reference = referenceType null;
+  reference = mkReferenceType null;
 
   /**
     A reference to a claim of one kind: `{ node; service; id; }`, its
@@ -173,7 +173,7 @@ in
   referenceTo =
     kind:
     if builtins.isString kind then
-      referenceType (checkName nameRules.kind describeName.kind kind)
+      mkReferenceType (checkName nameRules.kind describeName.kind kind)
     else
       throw "nixos-contracts: `types.referenceTo` takes a kind's name; use `types.reference` for any kind";
 
