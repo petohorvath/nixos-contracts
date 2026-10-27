@@ -18,9 +18,6 @@ let
 
   secrets = claimsOf config.contracts.claimSets.secrets;
 
-  # The generator of a `generated` or `derived` value, or null.
-  generatorOf = secret: secret.value.generated or secret.value.derived.generator or null;
-
   isCopy = secret: secret.value ? copied;
 
   # The backend entry a source names, or null when the core rejected its
@@ -70,8 +67,8 @@ in
         secret:
         lib.nameValuePair (backendNameOf secret) {
           inherit (secret) group mode owner;
-          generator = lib.mkIf (generatorOf secret != null) {
-            script = lib.mkDefault (generatorOf secret);
+          generator = lib.mkIf (secret.generator != null) {
+            script = lib.mkDefault secret.generator;
             dependencies = lib.mkIf (secret.sources != [ ]) (
               lib.filter (entry: entry != null) (map entryOrNull secret.sources)
             );

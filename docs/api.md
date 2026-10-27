@@ -200,6 +200,7 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 | `group`       | a group name                                                          | derived  |
 | `value`       | a [tag](#libtypestag): `provided`, `generated`, `copied` or `derived` | provided |
 | `sources`     | read-only, each reference of the value with its resolved claim        | derived  |
+| `generator`   | read-only, the generator of a `generated` or `derived` value, or null | derived  |
 | `unit`        | the unit the secret is delivered to, or null                          | derived  |
 | `delivered`   | read-only, whether the secret names a `unit`                          | derived  |
 | `backendPath` | read-only, where the backend installs the secret                      | derived  |
@@ -211,6 +212,8 @@ A secret holds no value. Its `value` says where the value comes from, as one of 
 - `generated = "<generator>"`: the service makes its own value with the named generator, such as `alnum`. A backend adapter turns the generator into the backend's own.
 - `copied = <reference>`: the secret is a copy of the one secret the reference names. It reads the same value, owned, installed and delivered as its own claim says.
 - `derived = { generator; from; }`: the generator makes the value from the secrets `from` references, in order. `from` defaults to `[ ]`, for a generator that needs no other secret.
+
+A secret's `generator` is the generator its value names, whichever of `generated` and `derived` names it, or null for a `provided` or `copied` value, so a backend adapter reads it rather than the tags.
 
 ```nix
 secrets.admin-password.value.generated = "alnum";

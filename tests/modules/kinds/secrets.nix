@@ -144,6 +144,7 @@ in
         id = "key";
       };
       sources = [ ];
+      generator = null;
       unit = null;
       delivered = false;
       backendPath = "/run/agenix/chrony_key";
@@ -229,6 +230,27 @@ in
       generator = "basic-auth";
       from = [ ];
     };
+  };
+
+  testProvidedSecretHasNoGenerator = {
+    expr = (secretOf [ ] { static.user = "svc"; } { }).generator;
+    expected = null;
+  };
+
+  testGeneratedSecretHasItsValuesGenerator = {
+    expr = (secretOf [ ] { static.user = "svc"; } { value.generated = "alnum"; }).generator;
+    expected = "alnum";
+  };
+
+  testCopiedSecretHasNoGenerator = {
+    expr = (secretOf [ ] { static.user = "svc"; } { value.copied = remoteToken; }).generator;
+    expected = null;
+  };
+
+  testDerivedSecretHasItsValuesGenerator = {
+    expr =
+      (secretOf [ ] { static.user = "svc"; } { value.derived.generator = "basic-auth"; }).generator;
+    expected = "basic-auth";
   };
 
   testNodeWritesProvidedOverADefaultGenerated = {
@@ -394,9 +416,13 @@ in
     expected = [ ];
   };
 
-  testSecretRejectsAGenerator = {
-    expr = (secretOf [ ] { static.user = "svc"; } { generator = "alnum"; }).mode;
-    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.generator' does not exist";
+  testSecretGeneratorIsReadOnly = {
+    expr =
+      (evaluate [
+        (service "svc" { static.user = "svc"; } oneSecret)
+        { contracts.services.svc.secrets.key.generator = "alnum"; }
+      ]).contracts.services.svc.secrets.key.generator;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.generator' is read-only";
   };
 
   testSecretPathWithoutABackendFails = {
