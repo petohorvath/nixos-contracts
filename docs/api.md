@@ -174,16 +174,17 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 `contracts.services.<service>.secrets.<id>`: a runtime credential the service needs.
 
-| Field       | Type                                                                  | Default  |
-| ----------- | --------------------------------------------------------------------- | -------- |
-| `mode`      | a mode string                                                         | `"0440"` |
-| `owner`     | an account name                                                       | `"root"` |
-| `group`     | a group name                                                          | derived  |
-| `value`     | a [tag](#libtypestag): `provided`, `generated`, `copied` or `derived` | provided |
-| `sources`   | read-only, each reference of the value with its resolved claim        | derived  |
-| `unit`      | the unit the secret is delivered to, or null                          | derived  |
-| `delivered` | read-only, whether the secret names a `unit`                          | derived  |
-| `path`      | read-only, where the daemon reads the secret                          | derived  |
+| Field         | Type                                                                  | Default  |
+| ------------- | --------------------------------------------------------------------- | -------- |
+| `mode`        | a mode string                                                         | `"0440"` |
+| `owner`       | an account name                                                       | `"root"` |
+| `group`       | a group name                                                          | derived  |
+| `value`       | a [tag](#libtypestag): `provided`, `generated`, `copied` or `derived` | provided |
+| `sources`     | read-only, each reference of the value with its resolved claim        | derived  |
+| `unit`        | the unit the secret is delivered to, or null                          | derived  |
+| `delivered`   | read-only, whether the secret names a `unit`                          | derived  |
+| `backendPath` | read-only, where the backend installs the secret                      | derived  |
+| `path`        | read-only, where the daemon reads the secret                          | derived  |
 
 A secret holds no value. Its `value` says where the value comes from, as one of four tags ([ADR 0013](adr/0013-settle-a-tag-by-the-priority-of-its-definitions.md)):
 
@@ -229,7 +230,7 @@ contracts.kinds.secrets.delivery = {
 };
 ```
 
-- `backend.path` (function of `{ service, id }`): where the secret backend installs a secret. It must answer for any service and id, including those of claims of disabled contracts, which the backend does not install, since a service module may read a claim's `path` regardless.
+- `backend.path` (function of `{ service, id }`): where the secret backend installs a secret. It must answer for any service and id, including those of claims of disabled contracts, which the backend does not install, since a service module may read a claim's `path` or `backendPath` regardless.
 - `backend.generators` (list of strings): the generators a `generated` or `derived` value may name. A check fails for a claim whose generator is not in it, and lists the ones the backend provides. While `backend` is null, the generator is not checked.
 - `delivery.path` (function of `{ unit, service, id }`): where a unit reads a delivered secret, given the secret's `unit`, service and id.
 
@@ -247,7 +248,7 @@ contracts.services.grafana = contractsLib.mkDefaultContract {
 contracts.services.alloy.secrets.loki-password.unit = null;
 ```
 
-A secret is `delivered` when its `unit` is not null, whichever adapters are imported. Its `path` is then what `delivery.path` answers for its unit, service and id; otherwise it is what `backend.path` answers for its service and id. A secret has no path while `backend` is null, or while `delivery` is null for a delivered secret, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs the adapters imported.
+A secret is `delivered` when its `unit` is not null, whichever adapters are imported. Its `path` is then what `delivery.path` answers for its unit, service and id; otherwise it is what `backend.path` answers for its service and id. Every secret's `backendPath` is what `backend.path` answers for its service and id, so it equals `path` for an undelivered secret and is where the backend installs a delivered one. A secret has no path while `backend` is null, or while `delivery` is null for a delivered secret, so reading one fails with an error naming the missing adapter, as does serialising `contracts.claimSets.secrets`, and a service module that wires a daemon from `path` needs the adapters imported. Reading `backendPath` while `backend` is null fails the same way.
 
 The backend still installs a delivered secret, and the delivery adapter loads it from there, so a delivered secret's `group` defaults to `root` and the account's other units cannot read the installed file.
 
@@ -330,7 +331,7 @@ A derived secret with references defines its entry's `generator.dependencies` as
 
 ### `nixosModules.systemd-credentials`
 
-For every delivered secret in `contracts.claimSets.secrets`, copies included, adds `<service>_<id>:<backend path>` to the `LoadCredential=` of the secret's `unit`, naming the credential `<service>_<id>`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>_<id>`. It loads from the path `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
+For every delivered secret in `contracts.claimSets.secrets`, copies included, adds `<service>_<id>:<backendPath>` to the `LoadCredential=` of the secret's `unit`, naming the credential `<service>_<id>`, such as `alloy_loki-password`, and sets the `contracts.kinds.secrets.delivery` slot so the claim's `path` becomes `/run/credentials/<unit>/<service>_<id>`. It loads from the secret's `backendPath`, which `contracts.kinds.secrets.backend` gives, so it needs a backend adapter such as `nixosModules.agenix-rekey` beside it. It has no settings.
 
 Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a unit a secret is delivered to does not end in `.service` or is not defined by another module, and when a dynamic identity's unit does not set `DynamicUser`. The units of static identities need not set it. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 

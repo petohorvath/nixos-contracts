@@ -331,10 +331,22 @@ in
             where the backend installs it.
           '';
         };
+        backendPath = lib.mkOption {
+          type = lib.types.str;
+          readOnly = true;
+          default = backendPathOf backend config;
+          defaultText = lib.literalMD "the path set by the backend adapter";
+          description = ''
+            Where the backend installs the secret, as the backend slot's
+            `path` answers. It equals `path` for an undelivered secret; a
+            delivery adapter loads a delivered secret from it. Reading it
+            fails without a backend adapter.
+          '';
+        };
         path = lib.mkOption {
           type = lib.types.str;
           readOnly = true;
-          default = if config.delivered then deliveryPathOf delivery config else backendPathOf backend config;
+          default = if config.delivered then deliveryPathOf delivery config else config.backendPath;
           defaultText = lib.literalMD "the path set by the delivery or backend adapter";
           description = ''
             Where the daemon reads the secret: the credential in its `unit`

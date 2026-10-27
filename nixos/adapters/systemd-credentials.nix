@@ -2,14 +2,12 @@
   Deliver every delivered secret into the unit it names with
   `LoadCredential=`, so the unit reads it under
   `/run/credentials/<unit>/<service>_<id>`, such as `alloy_loki-password`.
-  Loads from the path a secret backend adapter sets in
-  `contracts.kinds.secrets.backend`, so import one beside it.
+  Loads from each secret's `backendPath`, which a secret backend adapter
+  sets, so import one beside it.
 */
 { config, lib, ... }:
 let
-  inherit (config.contracts.kinds.secrets) backend;
   inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf;
-  inherit (import ../../modules/references.nix) backendPathOf;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 
@@ -49,7 +47,7 @@ in
     systemd.services = lib.mkMerge (
       map (secret: {
         ${toServiceName secret.unit}.serviceConfig.LoadCredential = [
-          "${backendNameOf secret}:${backendPathOf backend secret}"
+          "${backendNameOf secret}:${secret.backendPath}"
         ];
       }) delivered
     );
