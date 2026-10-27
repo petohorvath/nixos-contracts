@@ -14,7 +14,6 @@
 { config, lib, ... }:
 let
   inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf labels;
-  inherit (import ../../modules/references.nix) nodeConfigOrNull;
 
   secrets = claimsOf config.contracts.claimSets.secrets;
 
@@ -30,7 +29,7 @@ let
     if reference.claim == null then
       null
     else
-      (nodeConfigOrNull config reference).age.secrets.${backendNameOf reference.claim} or null;
+      (config.contracts.resolve reference).config.age.secrets.${backendNameOf reference.claim} or null;
 
   # The entry of the one secret a copy references, or null.
   copiedEntryOrNull = secret: entryOrNull (lib.head secret.sources);

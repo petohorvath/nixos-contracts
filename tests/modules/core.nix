@@ -21,7 +21,7 @@ let
     service = "web";
     id = "http";
   };
-  reasonOf = config: reference: (config.contracts.lookup reference).reason;
+  reasonOf = config: reference: (config.contracts.resolve reference).reason;
   identityOf = modules: (evaluate modules).contracts.services.chrony.identity;
 in
 {
@@ -397,7 +397,7 @@ in
           }
         ];
       in
-      config.contracts.resolve config.contracts.services.web.binds.http-alt.ref
+      (config.contracts.resolve config.contracts.services.web.binds.http-alt.ref).claim
       == config.contracts.claimSets.binds.web.http-alt;
     expected = true;
   };
@@ -410,7 +410,7 @@ in
           { contracts.node = "here"; }
         ];
       in
-      (config.contracts.resolve config.contracts.services.web.binds.http.ref).port;
+      (config.contracts.resolve config.contracts.services.web.binds.http.ref).claim.port;
     expected = 8080;
   };
 
@@ -422,19 +422,60 @@ in
           proxy = [ ];
         }).proxy.config.contracts.resolve
           (webHttp "backend")
-      ).port;
+      ).claim.port;
     expected = 8080;
   };
 
-  testResolveFailsWithTheReason = {
-    expr = ((evaluate [ web ]).contracts.resolve (webHttp "backend")).port;
+  testResolveReturnsTheConfigurationOfThisNode = {
+    expr =
+      let
+        config = evaluate [
+          web
+          { contracts.node = "here"; }
+        ];
+      in
+      (config.contracts.resolve config.contracts.services.web.binds.http.ref).config.contracts.node;
+    expected = "here";
+  };
+
+  testResolveReturnsTheConfigurationOfAnotherNode = {
+    expr =
+      (
+        (nodesOf {
+          backend = [ web ];
+          proxy = [ ];
+        }).proxy.config.contracts.resolve
+          (webHttp "backend")
+      ).config.contracts.node;
+    expected = "backend";
+  };
+
+  testResolveReturnsTheReasonWithoutFailing = {
+    expr = ((evaluate [ web ]).contracts.resolve (webHttp "backend")).reason;
+    expected = "node `backend` is not in `contracts.nodes`";
+  };
+
+  testReadingTheClaimOfAnUnresolvedReferenceFails = {
+    expr = ((evaluate [ web ]).contracts.resolve (webHttp "backend")).claim.port;
     expectedError.msg = "nixos-contracts: cannot resolve `backend:binds\\.web\\.http`: node `backend` is not in `contracts\\.nodes`";
   };
 
-  testLookupReturnsTheClaimAndNoReason = {
+  testReadingTheConfigurationOfAnUnresolvedReferenceFails = {
+    expr =
+      (
+        (nodesOf {
+          backend = [ ];
+          proxy = [ ];
+        }).proxy.config.contracts.resolve
+          (webHttp "backend")
+      ).config.contracts.node;
+    expectedError.msg = "nixos-contracts: cannot resolve `backend:binds\\.web\\.http`: no enabled contract on `backend` holds it";
+  };
+
+  testResolveReturnsTheClaimAndNoReason = {
     expr =
       let
-        result = (nodesOf { backend = [ web ]; }).backend.config.contracts.lookup (webHttp "backend");
+        result = (nodesOf { backend = [ web ]; }).backend.config.contracts.resolve (webHttp "backend");
       in
       {
         inherit (result.claim) service id name;
@@ -448,7 +489,7 @@ in
     };
   };
 
-  testLookupReasons =
+  testResolveReasons =
     let
       nodes = nodesOf {
         backend = [
@@ -462,7 +503,7 @@ in
               };
               # `chrony-exporter` + `metrics` and `chrony` +
               # `exporter-metrics` join into one name with `-`; the
-              # lookup tells them apart.
+              # `contracts.resolve` tells them apart.
               chrony-exporter = {
                 enable = true;
                 identity.static.user = "chrony";
@@ -498,14 +539,29 @@ in
       };
     };
 
-  testLookupOfANodeWithoutContracts = {
+  testResolveOfANodeWithoutContracts = {
     expr = reasonOf (evaluate [ { contracts.nodes.bare.config = { }; } ]) (webHttp "bare");
     expected = "node `bare` imports no nixos-contracts module";
   };
 
-  testLookupIsReadOnly = {
-    expr = (evaluate [ { contracts.lookup = _: { }; } ]).contracts.lookup;
-    expectedError.msg = "contracts\\.lookup' is read-only";
+  testReadingTheClaimOfANodeWithoutContractsFails = {
+    expr =
+      ((evaluate [ { contracts.nodes.bare.config = { }; } ]).contracts.resolve (webHttp "bare"))
+      .claim.port;
+    expectedError.msg = "nixos-contracts: cannot resolve `bare:binds\\.web\\.http`: node `bare` imports no nixos-contracts module";
+  };
+
+  testReadingTheConfigurationForAnUnknownKindFails = {
+    expr =
+      ((nodesOf { backend = [ web ]; }).backend.config.contracts.resolve (
+        webHttp "backend" // { kind = "databases"; }
+      )).config.contracts.node;
+    expectedError.msg = "nixos-contracts: cannot resolve `backend:databases\\.web\\.http`: node `backend` has no claim kind `databases`";
+  };
+
+  testLookupIsNotAnOption = {
+    expr = (evaluate [ { contracts.lookup = _: { }; } ]).contracts.node;
+    expectedError.msg = "contracts\\.lookup' does not exist";
   };
 
   testResolveIsReadOnly = {

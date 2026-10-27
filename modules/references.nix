@@ -1,6 +1,6 @@
 # How a claim is named, how a claim set's claims are listed, and how a
 # reference `{ node; kind; service; id; }` reads its node and claim, shared
-# by the core's `contracts.lookup`, the claim kinds and the adapters.
+# by the core's `contracts.resolve`, the claim kinds and the adapters.
 rec {
   /*
     What a name may contain, by what it names. A claim id may also contain
@@ -92,18 +92,28 @@ rec {
   referenceLabelOf =
     reference: "${reference.node}:${reference.kind}.${reference.service}.${reference.id}";
 
-  # `{ claim; reason; }`: the claim-set entry a reference names, or a null
-  # claim and why it does not resolve.
-  lookup =
+  /*
+    `{ claim; config; reason; }`: the claim-set entry a reference names, the
+    configuration of the node that holds it and a null reason, or why the
+    reference names no claim. Reading `claim` or `config` then fails with
+    the reason; reading `reason` never does.
+  */
+  resolve =
     config: reference:
     let
       nodeConfig = nodeConfigOrNull config reference;
       claimSets = nodeConfig.contracts.claimSets;
       entry = claimSets.${reference.kind}.${reference.service}.${reference.id} or null;
-      fail = reason: {
-        claim = null;
-        inherit reason;
-      };
+      fail =
+        reason:
+        let
+          error = throw "nixos-contracts: cannot resolve `${referenceLabelOf reference}`: ${reason}";
+        in
+        {
+          claim = error;
+          config = error;
+          inherit reason;
+        };
     in
     if nodeConfig == null then
       fail "node `${reference.node}` is not in `contracts.nodes`"
@@ -116,6 +126,7 @@ rec {
     else
       {
         claim = entry;
+        config = nodeConfig;
         reason = null;
       };
 }
