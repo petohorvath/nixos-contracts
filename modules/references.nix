@@ -26,14 +26,33 @@ rec {
       };
     };
 
-  # `name` when it is non-empty and follows `rule`, one of `nameRules`.
-  # Otherwise it fails, naming it as `describe name` does.
-  checkName =
+  # How messages name a name, by what it names, so the claim constructor,
+  # the core and a reference's checks name it alike.
+  describeName = {
+    node = node: "node identity `${node}`";
+    kind = kind: "claim kind name `${kind}`";
+    service = service: "service name `${service}`";
+    id =
+      kind: service: id:
+      "${kind} claim id `${id}` of service `${service}`";
+  };
+
+  # Why `name` breaks `rule`, one of `nameRules`, naming it as
+  # `describe name` does, or null when it is non-empty and follows it.
+  nameProblemOf =
     rule: describe: name:
     if builtins.match rule.pattern name != null then
-      name
+      null
     else
-      throw "nixos-contracts: ${describe name} may contain only ${rule.allowed}.";
+      "${describe name} may contain only ${rule.allowed}";
+
+  # `name` when it follows `rule`, failing with its problem otherwise.
+  checkName =
+    rule: describe: name:
+    let
+      problem = nameProblemOf rule describe name;
+    in
+    if problem == null then name else throw "nixos-contracts: ${problem}.";
 
   # The configuration a reference reads: this configuration when the
   # reference names `contracts.node`, else the node collection's entry, or
@@ -92,15 +111,101 @@ rec {
   referenceLabelOf =
     reference: "${reference.node}:${reference.kind}.${reference.service}.${reference.id}";
 
+  # The fields of a reference, each a string.
+  referenceFields = [
+    "node"
+    "kind"
+    "service"
+    "id"
+  ];
+
+  # A reference as messages name it, `?` standing for a field it lacks or
+  # that is not a string, so even a malformed reference can be named.
+  partialReferenceLabelOf =
+    reference:
+    referenceLabelOf (
+      builtins.listToAttrs (
+        map (field: {
+          name = field;
+          value = if builtins.isString (reference.${field} or null) then reference.${field} else "?";
+        }) referenceFields
+      )
+    );
+
+  # `reference` when it is an attribute set with a string at each of
+  # `referenceFields` and nothing else. Otherwise it fails, naming it.
+  checkReferenceFields =
+    reference:
+    let
+      fail =
+        problem: throw "nixos-contracts: reference `${partialReferenceLabelOf reference}` ${problem}";
+      missing = builtins.filter (field: !(reference ? ${field})) referenceFields;
+      unknown = builtins.filter (field: !(builtins.elem field referenceFields)) (
+        builtins.attrNames reference
+      );
+      notStrings = builtins.filter (field: !(builtins.isString reference.${field})) referenceFields;
+    in
+    if !(builtins.isAttrs reference) then
+      throw "nixos-contracts: a reference is an attribute set `{ node; kind; service; id; }`, not a ${builtins.typeOf reference}"
+    else if missing != [ ] then
+      fail "has no `${builtins.head missing}`"
+    else if unknown != [ ] then
+      fail "has an unknown field `${builtins.head unknown}`"
+    else if notStrings != [ ] then
+      fail "has a `${builtins.head notStrings}` that is not a string"
+    else
+      reference;
+
+  # Why a reference with every field names no claim of any node: the
+  # first of its node identity, kind name, service name and id that breaks
+  # its name rule, as the claim constructor names it, or null.
+  referenceNameProblemOf =
+    reference:
+    let
+      problems = builtins.filter (problem: problem != null) [
+        (nameProblemOf nameRules.node describeName.node reference.node)
+        (nameProblemOf nameRules.kind describeName.kind reference.kind)
+        (nameProblemOf nameRules.service describeName.service reference.service)
+        (nameProblemOf nameRules.id (describeName.id reference.kind reference.service) reference.id)
+      ];
+    in
+    if problems == [ ] then null else builtins.head problems;
+
+  # The reference to the claim of kind `kind` that `fields`,
+  # `{ node; service; id; }`, name, failing, naming it, when it is malformed.
+  mkReference =
+    kind: fields:
+    let
+      reference = checkReferenceFields (
+        if !(builtins.isAttrs fields) then
+          fields
+        else if fields ? kind then
+          throw "nixos-contracts: reference `${
+            partialReferenceLabelOf (fields // { inherit kind; })
+          }` has an unknown field `kind`: `mkReference` takes the kind as its first argument"
+        else
+          fields // { inherit kind; }
+      );
+      problem = referenceNameProblemOf reference;
+    in
+    if problem == null then
+      reference
+    else
+      throw "nixos-contracts: reference `${referenceLabelOf reference}`: ${problem}.";
+
   /*
     `{ claim; config; reason; }`: the claim-set entry a reference names, the
     configuration of the node that holds it and a null reason, or why the
     reference names no claim. Reading `claim` or `config` then fails with
-    the reason; reading `reason` never does.
+    the reason; reading `reason` never does, but a reference missing a
+    field or holding an unknown one fails on resolving, since it cannot be
+    named.
   */
   resolve =
-    config: reference:
+    config: unchecked:
     let
+      reference = checkReferenceFields unchecked;
+      nameProblem = referenceNameProblemOf reference;
       nodeConfig = nodeConfigOrNull config reference;
       claimSets = nodeConfig.contracts.claimSets;
       entry = claimSets.${reference.kind}.${reference.service}.${reference.id} or null;
@@ -115,7 +220,9 @@ rec {
           inherit reason;
         };
     in
-    if nodeConfig == null then
+    if nameProblem != null then
+      fail nameProblem
+    else if nodeConfig == null then
       fail "node `${reference.node}` is not in `contracts.nodes`"
     else if !(nodeConfig ? contracts.claimSets) then
       fail "node `${reference.node}` imports no nixos-contracts module"

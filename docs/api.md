@@ -80,7 +80,7 @@ The node collection: the nodes a [reference](#references) may name, keyed by nod
 
 ### `contracts.resolve`
 
-A read-only function of a [reference](#references) that finds the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md), [ADR 0021](adr/0021-resolve-a-reference-through-one-function.md)). `contracts.resolve reference` returns `{ claim; config; reason; }`: the entry at `claimSets.<kind>.<service>.<id>` of the node the reference names, that node's evaluated configuration (this configuration for a reference that names `contracts.node`) and a null reason, or the reason the reference names no claim. A reference names no claim when its node is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. Reading `claim` or `config` while `reason` is set fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``; reading `reason` never fails, so a check reads the reason and a module the claim from the same result. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
+A read-only function of a [reference](#references) that finds the claim it names, of any kind ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md), [ADR 0021](adr/0021-resolve-a-reference-through-one-function.md)). `contracts.resolve reference` returns `{ claim; config; reason; }`: the entry at `claimSets.<kind>.<service>.<id>` of the node the reference names, that node's evaluated configuration (this configuration for a reference that names `contracts.node`) and a null reason, or the reason the reference names no claim. A reference names no claim when its node identity, kind name, service name or id breaks its [name rule](#names), giving a reason such as ``service name `web_proxy` may contain only lowercase letters, digits and hyphens``, when its node is missing from `contracts.nodes`, imports no nixos-contracts module or has no such claim kind, or when no enabled contract on it holds the claim. Reading `claim` or `config` while `reason` is set fails with ``nixos-contracts: cannot resolve `<node>:<kind>.<service>.<id>`: <reason>``; reading `reason` never fails, so a check reads the reason and a module the claim from the same result. A value that is not an attribute set, or that misses one of `node`, `kind`, `service` and `id` or holds any other field, cannot be named, so resolving it fails with a message naming the reference, such as ``nixos-contracts: reference `metrics:?.telegraf.token` has no `kind` ``. A module reading another node's claim, such as the port of a backend's bind, resolves its reference rather than reading that node's contracts:
 
 ```nix
 port = (config.contracts.resolve backend.bind).claim.port;
@@ -136,7 +136,13 @@ secrets.htpasswd.value.derived.from = [ config.contracts.services.alloy.secrets.
 
 nixos-contracts carries no reference between nodes. A node relates to another through references carried in shared data the fleet chooses, as [Relating nodes](#relating-nodes) shows, so no node writes into another node's options.
 
-A field that takes references of one kind, such as a secret's `value.copied`, has the type [`lib.types.referenceTo`](#libtypesreferenceto) of that kind, so a reference written by hand omits `kind`, and one of another kind fails as a type error at its definition.
+A field that takes references of one kind, such as a secret's `value.copied`, has the type [`lib.types.referenceTo`](#libtypesreferenceto) of that kind, so a reference written by hand omits `kind`, and one of another kind fails as a type error at its definition. A reference whose node identity, kind name, service name or id breaks its [name rule](#names) names no claim, so it fails as a type error at its definition too.
+
+A reference built in code, outside a typed field, comes from [`lib.mkReference`](#libmkreference), which takes the kind first and checks the reference as a typed field does:
+
+```nix
+value.copied = contractsLib.mkReference "secrets" { node = "metrics"; service = "telegraf"; id = "token"; };
+```
 
 ### Binds
 
@@ -466,13 +472,24 @@ mkClaimKind {
 }
 ```
 
+### `lib.mkReference`
+
+`mkReference kind { node; service; id; }` is the [reference](#references) to the claim of kind `kind` that the node, service and id name, so a reference written as a literal never writes `kind`. It equals the `ref` of the claim it names, and the value a [`lib.types.referenceTo`](#libtypesreferenceto) field of `kind` holds:
+
+```nix
+mkReference "secrets" { node = "metrics"; service = "telegraf"; id = "token"; }
+# => { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; }
+```
+
+It fails with a message naming the reference on a missing field, on any field other than `node`, `service` and `id`, including `kind`, and on a node identity, kind name, service name or id that breaks its [name rule](#names), with the message the claim constructor gives for that name, such as ``nixos-contracts: reference `metrics:api_tokens.telegraf.token`: claim kind name `api_tokens` may contain only lowercase letters, digits and hyphens.``
+
 ### `lib.types.reference`
 
-The option type of a [reference](#references) of any kind, `{ node; kind; service; id; }`, all required strings, `node` a node identity. A claim's `ref` has this shape.
+The option type of a [reference](#references) of any kind, `{ node; kind; service; id; }`, all required strings, each following its [name rule](#names), so a reference with an invalid name fails as a type error at its definition. A claim's `ref` has this shape.
 
 ### `lib.types.referenceTo`
 
-`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. A secret's `value.copied` and `value.derived.from` take `referenceTo "secrets"`. A service module whose own settings carry references, such as the writer tokens a fleet's shared data provides, types the setting with it, so the value it receives is already a reference of the kind it uses, and one of another kind fails where it is written:
+`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. Its other names follow their [name rules](#names) as in `lib.types.reference`, and a `kind` that breaks the kind name rule fails as the type is built. A secret's `value.copied` and `value.derived.from` take `referenceTo "secrets"`. A service module whose own settings carry references, such as the writer tokens a fleet's shared data provides, types the setting with it, so the value it receives is already a reference of the kind it uses, and one of another kind fails where it is written:
 
 ```nix
 options.example.influxdb.writers = lib.mkOption {

@@ -22,14 +22,15 @@ let
 
   isCopy = secret: secret.value ? copied;
 
-  # The backend entry a reference names, or null when the core rejected the
+  # The backend entry a source names, or null when the core rejected its
   # reference or its node has no entry for it.
   entryOrNull =
-    reference:
-    if reference.claim == null then
+    source:
+    if source.claim == null then
       null
     else
-      (config.contracts.resolve reference).config.age.secrets.${backendNameOf reference.claim} or null;
+      (config.contracts.resolve (removeAttrs source [ "claim" ]))
+      .config.age.secrets.${backendNameOf source.claim} or null;
 
   # The entry of the one secret a copy references, or null.
   copiedEntryOrNull = secret: entryOrNull (lib.head secret.sources);

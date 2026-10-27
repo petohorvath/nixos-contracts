@@ -54,6 +54,11 @@ in
     expectedError.msg = "nixos-contracts: `types\\.referenceTo` takes a kind's name";
   };
 
+  testReferenceToAnInvalidKindNameFails = {
+    expr = contractsLib.types.referenceTo "api_tokens";
+    expectedError.msg = "nixos-contracts: claim kind name `api_tokens` may contain only lowercase letters, digits and hyphens";
+  };
+
   testReferenceNeedsANode = {
     expr = (secretReferenceOf (removeAttrs token [ "node" ])).node;
     expectedError.msg = "token\\.node' was accessed but has no value defined";
@@ -68,11 +73,21 @@ in
           node = null;
         }
       )).node;
-    expectedError.msg = "token\\.node' is not of type `string'";
+    expectedError.msg = "token\\.node' is not of type `string of lowercase letters, digits and hyphens'";
   };
 
   testReferenceToOneKindNamesANonNullNode = {
     expr = (secretReferenceOf (token // { node = null; })).node;
-    expectedError.msg = "token\\.node' is not of type `string'";
+    expectedError.msg = "token\\.node' is not of type `string of lowercase letters, digits and hyphens'";
+  };
+
+  testReferenceWithAnInvalidNameIsATypeError = {
+    expr = (referenceOf (token // { kind = "api_tokens"; })).kind;
+    expectedError.msg = "token\\.kind' is not of type `string of lowercase letters, digits and hyphens'";
+  };
+
+  testReferenceToOneKindWithAnInvalidIdIsATypeError = {
+    expr = (secretReferenceOf (token // { id = "admin.token"; })).id;
+    expectedError.msg = "token\\.id' is not of type `string of lowercase letters, digits, hyphens and `_`'";
   };
 }

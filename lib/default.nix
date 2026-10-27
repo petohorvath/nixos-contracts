@@ -12,6 +12,7 @@ let
     claimLabelOf
     claimNameOf
     claimsOf
+    mkReference
     referenceLabelOf
     ;
 in
@@ -103,6 +104,23 @@ in
   };
 
   mkClaimKind = import ../modules/mk-claim-kind.nix;
+
+  /**
+    The reference to a claim of the kind `kind` from its node, service and
+    id, so a reference written as a literal never writes `kind`. It equals
+    the `ref` of the claim it names, and the value a
+    `types.referenceTo kind` field holds. It fails, naming the reference,
+    on a missing or unknown field, and on a node identity, kind name,
+    service name or id that breaks its name rule.
+
+    # Example
+
+    ```nix
+    mkReference "secrets" { node = "metrics"; service = "telegraf"; id = "token"; }
+    # => { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; }
+    ```
+  */
+  inherit mkReference;
   mkDefaultContract = import ./mk-default-contract.nix { inherit lib; };
   types = import ../modules/types.nix { inherit lib; };
 }

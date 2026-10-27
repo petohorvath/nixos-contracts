@@ -11,6 +11,7 @@ let
     claimsOf
     copiesOf
     labels
+    mkReference
     ;
 
   telegraf.contracts.services.telegraf = {
@@ -249,4 +250,72 @@ in
       failures = [ ];
     });
   };
+
+  testMkReferenceEqualsTheRefOfTheClaimItNames =
+    let
+      nodes = nodesOf {
+        metrics = [ telegraf ];
+        store = [ ];
+      };
+      token = mkReference "secrets" {
+        node = "metrics";
+        service = "telegraf";
+        id = "token";
+      };
+    in
+    {
+      expr = {
+        equalsRef = token == nodes.metrics.config.contracts.services.telegraf.secrets.token.ref;
+        resolved = (nodes.store.config.contracts.resolve token).claim.name;
+      };
+      expected = {
+        equalsRef = true;
+        resolved = "metrics_secrets_telegraf_token";
+      };
+    };
+
+  mkReferenceFails =
+    let
+      token = {
+        node = "metrics";
+        service = "telegraf";
+        id = "token";
+      };
+      lowercase = "may contain only lowercase letters, digits and hyphens\\.";
+    in
+    {
+      testOnMissingField = {
+        expr = mkReference "secrets" (removeAttrs token [ "service" ]);
+        expectedError.msg = "nixos-contracts: reference `metrics:secrets\\.\\?\\.token` has no `service`";
+      };
+      testOnAValueThatIsNotAnAttributeSet = {
+        expr = mkReference "secrets" "metrics_secrets_telegraf_token";
+        expectedError.msg = "nixos-contracts: a reference is an attribute set `\\{ node; kind; service; id; }`, not a string";
+      };
+
+      testOnUnknownField = {
+        expr = mkReference "secrets" (token // { path = "/run/token"; });
+        expectedError.msg = "nixos-contracts: reference `metrics:secrets\\.telegraf\\.token` has an unknown field `path`";
+      };
+      testOnKindField = {
+        expr = mkReference "secrets" (token // { kind = "secrets"; });
+        expectedError.msg = "nixos-contracts: reference `metrics:secrets\\.telegraf\\.token` has an unknown field `kind`";
+      };
+      testOnInvalidNode = {
+        expr = mkReference "secrets" (token // { node = "Metrics"; });
+        expectedError.msg = "nixos-contracts: reference `Metrics:secrets\\.telegraf\\.token`: node identity `Metrics` ${lowercase}";
+      };
+      testOnInvalidKind = {
+        expr = mkReference "api_tokens" token;
+        expectedError.msg = "nixos-contracts: reference `metrics:api_tokens\\.telegraf\\.token`: claim kind name `api_tokens` ${lowercase}";
+      };
+      testOnInvalidService = {
+        expr = mkReference "secrets" (token // { service = "web_proxy"; });
+        expectedError.msg = "nixos-contracts: reference `metrics:secrets\\.web_proxy\\.token`: service name `web_proxy` ${lowercase}";
+      };
+      testOnInvalidId = {
+        expr = mkReference "secrets" (token // { id = "admin.token"; });
+        expectedError.msg = "nixos-contracts: reference `metrics:secrets\\.telegraf\\.admin\\.token`: secrets claim id `admin\\.token` of service `telegraf` may contain only lowercase letters, digits, hyphens and `_`\\.";
+      };
+    };
 }

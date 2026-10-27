@@ -22,6 +22,7 @@ in
       "labels"
       "mkClaimKind"
       "mkDefaultContract"
+      "mkReference"
       "types"
     ];
   };
