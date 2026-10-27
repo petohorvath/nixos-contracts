@@ -579,6 +579,212 @@ in
     expectedError.msg = "nixos-contracts: cannot resolve `local:Binds\\.web\\.http`: claim kind name `Binds` may contain only";
   };
 
+  testResolveServiceFindsTheServicesClaimsOnAnotherNode = {
+    expr =
+      let
+        result =
+          (nodesOf {
+            backend = [
+              web
+              { contracts.services.web.binds.http-alt.port = 8081; }
+            ];
+            proxy = [ ];
+          }).proxy.config.contracts.resolveService
+            {
+              node = "backend";
+              kind = "binds";
+              service = "web";
+            };
+      in
+      {
+        ports = builtins.mapAttrs (_: claim: claim.port) result.claims;
+        node = result.config.contracts.node;
+        inherit (result) reason;
+      };
+    expected = {
+      ports = {
+        http = 8080;
+        http-alt = 8081;
+      };
+      node = "backend";
+      reason = null;
+    };
+  };
+
+  testResolveServiceFindsTheServicesClaimsOnThisNode = {
+    expr =
+      let
+        result = (evaluate [ web ]).contracts.resolveService {
+          node = "local";
+          kind = "binds";
+          service = "web";
+        };
+      in
+      {
+        ports = builtins.mapAttrs (_: claim: claim.port) result.claims;
+        node = result.config.contracts.node;
+        inherit (result) reason;
+      };
+    expected = {
+      ports.http = 8080;
+      node = "local";
+      reason = null;
+    };
+  };
+
+  testResolveServiceReasons =
+    let
+      inherit
+        ((nodesOf {
+          backend = [
+            web
+            {
+              contracts.services.off = {
+                identity.static.user = "off";
+                binds.http.port = 9090;
+              };
+            }
+          ];
+          proxy = [
+            { contracts.nodes.bare.config = { }; }
+          ];
+        }).proxy
+        )
+        config
+        ;
+      reasonOf =
+        node: kind: service:
+        (config.contracts.resolveService { inherit node kind service; }).reason;
+    in
+    {
+      expr = {
+        unknownNode = reasonOf "nope" "binds" "web";
+        bare = reasonOf "bare" "binds" "web";
+        unknownKind = reasonOf "backend" "databases" "web";
+        unknownService = reasonOf "backend" "binds" "db";
+        disabled = reasonOf "backend" "binds" "off";
+      };
+      expected = {
+        unknownNode = "node `nope` is not in `contracts.nodes`";
+        bare = "node `bare` imports no nixos-contracts module";
+        unknownKind = "node `backend` has no claim kind `databases`";
+        unknownService = "no enabled contract on `backend` describes service `db`";
+        disabled = "no enabled contract on `backend` describes service `off`";
+      };
+    };
+
+  testReadingTheClaimsOfAnUnresolvedServiceFails = {
+    expr =
+      ((evaluate [ web ]).contracts.resolveService {
+        node = "local";
+        kind = "binds";
+        service = "db";
+      }).claims;
+    expectedError.msg = "nixos-contracts: cannot resolve service `local:binds\\.db`: no enabled contract on `local` describes service `db`";
+  };
+
+  testReadingTheConfigurationOfAnUnresolvedServiceFails = {
+    expr =
+      ((evaluate [ web ]).contracts.resolveService {
+        node = "backend";
+        kind = "binds";
+        service = "web";
+      }).config.contracts.node;
+    expectedError.msg = "nixos-contracts: cannot resolve service `backend:binds\\.web`: node `backend` is not in `contracts\\.nodes`";
+  };
+
+  testResolveServiceOfAnEnabledContractWithoutClaimsOfTheKindFindsNone = {
+    expr =
+      let
+        result = (evaluate [ web ]).contracts.resolveService {
+          node = "local";
+          kind = "mounts";
+          service = "web";
+        };
+      in
+      {
+        inherit (result) claims reason;
+      };
+    expected = {
+      claims = { };
+      reason = null;
+    };
+  };
+
+  testResolveServiceWithAnInvalidNameGivesTheNameRule = {
+    expr =
+      ((evaluate [ web ]).contracts.resolveService {
+        node = "local";
+        kind = "binds";
+        service = "web_proxy";
+      }).reason;
+    expected = "service name `web_proxy` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testResolveServiceWithoutAKindFails = {
+    expr =
+      ((evaluate [ web ]).contracts.resolveService {
+        node = "local";
+        service = "web";
+      }).reason;
+    expectedError.msg = "nixos-contracts: service `local:\\?\\.web` has no `kind`";
+  };
+
+  testResolveServiceWithAnIdFails = {
+    expr = ((evaluate [ web ]).contracts.resolveService (webHttp "local")).reason;
+    expectedError.msg = "nixos-contracts: service `local:binds\\.web` has an unknown field `id`";
+  };
+
+  testResolveServiceOfAStringFails = {
+    expr = ((evaluate [ web ]).contracts.resolveService "web").reason;
+    expectedError.msg = "nixos-contracts: `contracts\\.resolveService` takes an attribute set `\\{ node; kind; service; }`, not a string";
+  };
+
+  testResolveServiceIsReadOnly = {
+    expr = (evaluate [ { contracts.resolveService = _: { }; } ]).contracts.resolveService;
+    expectedError.msg = "contracts\\.resolveService' is read-only";
+  };
+
+  testNodesResolvingEachOthersServicesDoNotRecurse =
+    let
+      # A probe listening one port above the other node's web, a claim
+      # whose value, not its id, reads what it resolved.
+      probing = other: port: [
+        { contracts.services.web.binds.http.port = lib.mkForce port; }
+        (
+          { config, ... }:
+          {
+            contracts.services.probe = {
+              enable = true;
+              identity.static.user = "probe";
+              binds.http.port =
+                (config.contracts.resolveService {
+                  node = other;
+                  kind = "binds";
+                  service = "web";
+                }).claims.http.port
+                + 1;
+            };
+          }
+        )
+      ];
+      nodes = nodesOf {
+        alpha = [ web ] ++ probing "beta" 8080;
+        beta = [ web ] ++ probing "alpha" 9090;
+      };
+      probePortOf = node: nodes.${node}.config.contracts.claimSets.binds.probe.http.port;
+    in
+    {
+      expr = {
+        alpha = probePortOf "alpha";
+        beta = probePortOf "beta";
+      };
+      expected = {
+        alpha = 9091;
+        beta = 8081;
+      };
+    };
+
   testLookupIsNotAnOption = {
     expr = (evaluate [ { contracts.lookup = _: { }; } ]).contracts.node;
     expectedError.msg = "contracts\\.lookup' does not exist";
