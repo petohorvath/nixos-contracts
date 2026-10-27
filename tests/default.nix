@@ -17,6 +17,12 @@ in
   lint = runSourceCheck "lint" [ pkgs.statix pkgs.deadnix ] ''
     statix check .
     deadnix --fail .
+    # A shipped adapter receives the public library, so a parent path, which
+    # leads out of its directory, reaches an internal helper. `...` is fine.
+    if grep -rHnE --include='*.nix' '(^|[^.])\.\.([^.]|$)' nixos/adapters; then
+      echo "lint: a shipped adapter names a parent path; use the contractsLib it receives." >&2
+      exit 1
+    fi
   '';
   workflows = runSourceCheck "workflows" [ pkgs.actionlint ] ''
     shopt -s nullglob

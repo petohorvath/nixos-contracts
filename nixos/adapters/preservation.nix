@@ -1,10 +1,11 @@
 # Persist every mount with preservation, under the root mapped to its class.
 # Requires the preservation NixOS module; `nixosModules.preservation` also
 # imports `nixosModules.default`.
+contractsLib:
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.preservation;
-  inherit (import ../../lib { inherit lib; }) claimsOf;
+  inherit (contractsLib) claimsOf;
   mounts = claimsOf config.contracts.claimSets.mounts;
 
   preserveEntry =

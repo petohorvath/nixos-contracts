@@ -147,4 +147,17 @@ in
       "nixos-contracts: mount class `cache` has no preservation root in `contracts.adapters.preservation.roots`."
     ];
   };
+
+  testAdapterImportedTwiceAddsEachMountOnce = {
+    expr =
+      map (entry: entry.directory)
+        (evaluate [
+          backend
+          adapter
+          adapter
+          influxdb
+          roots
+        ]).preservation.preserveAt."/persist/cache".directories;
+    expected = [ "/var/cache/influxdb" ];
+  };
 }

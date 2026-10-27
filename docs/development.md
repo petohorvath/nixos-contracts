@@ -21,7 +21,7 @@ nix fmt --no-update-lock-file
 nix flake check --no-update-lock-file
 ```
 
-The checks are `evaluation` (the nix-unit suite), `formatting`, `lint` (statix and deadnix), and `workflows` (actionlint). To run the suite, or one suite within it, and report each case:
+The checks are `evaluation` (the nix-unit suite), `formatting`, `lint` (statix, deadnix, and a rule that a shipped adapter names no parent path, since it receives the public library), and `workflows` (actionlint). To run the suite, or one suite within it, and report each case:
 
 ```sh
 nix run --inputs-from . nixpkgs#nix-unit -- --flake .#tests.x86_64-linux
