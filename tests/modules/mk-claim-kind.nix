@@ -218,7 +218,7 @@ in
           { contracts.node = "db"; }
         ];
       in
-      (config.contracts.resolve config.contracts.services.vaultwarden.databases.main.ref).database;
+      (config.contracts.resolve config.contracts.services.vaultwarden.databases.main.ref).claim.database;
     expected = "vault";
   };
 

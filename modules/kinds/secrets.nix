@@ -4,12 +4,11 @@
 let
   contractTypes = import ../types.nix { inherit lib; };
   referenceType = contractTypes.referenceTo "secrets";
-  # References resolve through the lookup every kind shares; a secret's
-  # value adds only its own rules.
+  # References resolve through `contracts.resolve`, as for every kind; a
+  # secret's value adds only its own rules.
   inherit (import ../references.nix)
     backendPathOf
     deliveryPathOf
-    lookup
     referenceLabelOf
     ;
 
@@ -25,14 +24,15 @@ let
 
   # Only a provided or generated secret resolves, so two copies referencing
   # each other fail their checks instead of recursing.
-  resolves = claim: claim != null && (claim.value ? provided || claim.value ? generated);
+  resolves =
+    result: result.reason == null && (result.claim.value ? provided || result.claim.value ? generated);
 
   # A `sources` entry: a reference with the claim it resolves to, or a null
   # claim when a check rejects it.
   toSource =
     config: reference:
     let
-      inherit (lookup config reference) claim;
+      result = config.contracts.resolve reference;
     in
     {
       inherit (reference)
@@ -41,19 +41,19 @@ let
         service
         id
         ;
-      claim = if resolves claim then claim else null;
+      claim = if resolves result then result.claim else null;
     };
 
   # Why a reference does not resolve, or null when it does.
   referenceReason =
     config: reference:
     let
-      result = lookup config reference;
+      result = config.contracts.resolve reference;
       references = "it references `${referenceLabelOf reference}`";
     in
     if result.reason != null then
       "${references}: ${result.reason}"
-    else if !resolves result.claim then
+    else if !resolves result then
       "${references}, which is copied or derived itself; reference a provided or generated secret"
     else
       null;

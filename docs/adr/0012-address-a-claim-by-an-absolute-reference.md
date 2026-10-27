@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0013, ADR-0014, ADR-0016 and ADR-0020
+status: superseded in part by ADR-0013, ADR-0014, ADR-0016, ADR-0020 and ADR-0021
 ---
 
 # Address a claim by an absolute reference

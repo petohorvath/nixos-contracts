@@ -95,33 +95,16 @@ in
       example = "beta-influxdb";
     };
 
-    lookup = lib.mkOption {
-      type = lib.types.raw;
-      readOnly = true;
-      default = references.lookup config;
-      defaultText = lib.literalMD "the lookup of a reference in this configuration or `contracts.nodes`";
-      description = ''
-        A function of a reference returning `{ claim; reason; }`: the
-        claim-set entry it names, or a null claim and why not.
-      '';
-    };
-
     resolve = lib.mkOption {
       type = lib.types.raw;
       readOnly = true;
-      default =
-        reference:
-        let
-          result = config.contracts.lookup reference;
-        in
-        if result.reason == null then
-          result.claim
-        else
-          throw "nixos-contracts: cannot resolve `${references.referenceLabelOf reference}`: ${result.reason}";
-      defaultText = lib.literalMD "the claim `contracts.lookup` finds, or an error with its reason";
+      default = references.resolve config;
+      defaultText = lib.literalMD "the resolution of a reference in this configuration or `contracts.nodes`";
       description = ''
-        A function of a reference returning the claim-set entry it names,
-        failing with the reason when it names none.
+        A function of a reference returning `{ claim; config; reason; }`:
+        the claim-set entry it names, the configuration of the node that
+        holds it and a null reason, or why it names no claim. Reading
+        `claim` or `config` then fails with the reason.
       '';
     };
 
