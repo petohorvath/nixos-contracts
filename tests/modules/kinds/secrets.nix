@@ -147,6 +147,7 @@ in
       sources = [ ];
       unit = null;
       delivered = false;
+      backendPath = "/run/agenix/chrony_key";
       path = "/run/agenix/chrony_key";
     };
   };
@@ -391,6 +392,33 @@ in
 
   testSecretPathWithoutABackendFails = {
     expr = (secretOf [ ] { static.user = "svc"; } { }).path;
+    expectedError.msg = "nixos-contracts: secret `svc\\.key` has no path: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.backend`";
+  };
+
+  testSecretBackendPathIsWhereTheBackendInstallsIt = {
+    expr =
+      let
+        undelivered = secretOf [ rules ] { static.user = "svc"; } { };
+        delivered = secretOf [ rules ] { static.user = "svc"; } { unit = "svc.service"; };
+      in
+      {
+        undelivered = { inherit (undelivered) path backendPath; };
+        delivered = { inherit (delivered) path backendPath; };
+      };
+    expected = {
+      undelivered = {
+        path = "/run/agenix/svc_key";
+        backendPath = "/run/agenix/svc_key";
+      };
+      delivered = {
+        path = "/run/credentials/svc.service/svc_key";
+        backendPath = "/run/agenix/svc_key";
+      };
+    };
+  };
+
+  testSecretBackendPathWithoutABackendFails = {
+    expr = (secretOf [ ] { static.user = "svc"; } { }).backendPath;
     expectedError.msg = "nixos-contracts: secret `svc\\.key` has no path: import a secret backend adapter such as `nixosModules\\.agenix-rekey`, which sets `contracts\\.kinds\\.secrets\\.backend`";
   };
 
