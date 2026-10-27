@@ -48,7 +48,7 @@ let
     influxdb
     roots
   ];
-  pick = entry: { inherit (entry) user group mode; };
+  pick = entry: { inherit (entry) group mode user; };
 in
 {
   testMountsLandUnderTheirClassRoot = {

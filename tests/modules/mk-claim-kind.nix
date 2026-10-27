@@ -241,7 +241,7 @@ in
     expr =
       lib.mapAttrs
         (_: contract: {
-          inherit (contract.databases.main) unit label;
+          inherit (contract.databases.main) label unit;
         })
         (evaluate [
           databases
@@ -637,7 +637,7 @@ in
 
   testClaimIdMayContainDigitsAndHyphens =
     let
-      idOf =
+      engineOf =
         id:
         (evaluate [
           databases
@@ -651,7 +651,7 @@ in
         ]).contracts.claimSets.databases.grafana.${id}.engine;
     in
     {
-      expr = idOf "main-2";
+      expr = engineOf "main-2";
       expected = "postgresql";
     };
 
@@ -695,7 +695,7 @@ in
     expectedError.msg = "databases claim id `Main` of service `grafana` may contain only lowercase letters, digits, hyphens and `_`";
   };
 
-  testInvalidClaimIdFailsTheChecks = {
+  testClaimIdWithADotFails = {
     expr = failures [
       databases
       {
@@ -846,7 +846,7 @@ in
     expected.remote.host = "backup.example";
   };
 
-  testEnableKindNameIsRejected = {
+  testEnableKindNameFails = {
     expr = mkClaimKind {
       name = "enable";
       description = "Clashes with the contract's enable.";
@@ -875,7 +875,7 @@ in
     expected = "beta_tokens-2_a_t";
   };
 
-  testKindNameWithAnUnderscoreIsRejected = {
+  testKindNameWithAnUnderscoreFails = {
     expr = mkClaimKind {
       name = "api_tokens";
       description = "Tokens.";
@@ -884,7 +884,7 @@ in
     expectedError.msg = "claim kind name `api_tokens` may contain only lowercase letters, digits and hyphens";
   };
 
-  testKindNameWithAnUppercaseLetterIsRejected = {
+  testKindNameWithAnUppercaseLetterFails = {
     expr = mkClaimKind {
       name = "Tokens";
       description = "Tokens.";
@@ -893,7 +893,7 @@ in
     expectedError.msg = "claim kind name `Tokens` may contain only lowercase letters, digits and hyphens";
   };
 
-  testIdentityKindNameIsRejected = {
+  testIdentityKindNameFails = {
     expr = mkClaimKind {
       name = "identity";
       description = "Clashes with the contract's identity.";

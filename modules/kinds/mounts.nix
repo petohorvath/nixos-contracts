@@ -34,8 +34,8 @@ in
   claim =
     { identity, config, ... }:
     let
-      # Read before the claim's own `config` shadows the top-level one.
-      inherit (config.contracts.kinds.mounts) classes;
+      # Bound before the claim's own `config` shadows the top-level one.
+      topConfig = config;
     in
     { config, ... }:
     {
@@ -49,7 +49,7 @@ in
           example = "/var/lib/influxdb2";
         };
         class = lib.mkOption {
-          type = lib.types.enum classes;
+          type = lib.types.enum topConfig.contracts.kinds.mounts.classes;
           description = ''
             The class of storage the path belongs to, one of
             `contracts.kinds.mounts.classes`.

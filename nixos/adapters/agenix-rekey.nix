@@ -37,12 +37,12 @@ let
   copiedEntryOrNull = secret: entryOrNull (lib.head secret.sources);
 
   # A reference the core resolved, on a node without this adapter.
-  backendAssertion = secret: reference: {
+  mkBackendAssertion = secret: reference: {
     assertion = reference.claim == null || entryOrNull reference != null;
     message = "secret `${labels.claim secret}` references `${labels.reference reference}`, whose node has no `nixosModules.agenix-rekey`.";
   };
 
-  fileAssertion =
+  mkFileAssertion =
     secret:
     let
       name = backendNameOf secret;
@@ -105,10 +105,10 @@ in
         reports.
       */
       assertions =
-        map fileAssertion (
+        map mkFileAssertion (
           lib.filter (secret: !(isCopy secret) || copiedEntryOrNull secret != null) secrets
         )
-        ++ lib.concatMap (secret: map (backendAssertion secret) secret.sources) secrets;
+        ++ lib.concatMap (secret: map (mkBackendAssertion secret) secret.sources) secrets;
     };
   };
 }

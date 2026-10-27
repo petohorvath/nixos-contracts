@@ -34,18 +34,18 @@ let
       claim = (configWithSecret [ ] identity secret).contracts.services.svc.secrets.key;
     in
     {
-      inherit (claim) owner group;
+      inherit (claim) group owner;
     };
   # A backend and a delivery naming a secret `<service>_<id>`, as the
   # shipped adapters do. Their paths take no other arguments, so a slot
   # passed anything else fails.
   backendPath = { service, id }: "/run/agenix/${service}_${id}";
-  backend.contracts.kinds.secrets.backend = {
+  backendSlot.contracts.kinds.secrets.backend = {
     path = backendPath;
     generators = [ ];
   };
-  rules = {
-    imports = [ backend ];
+  slots = {
+    imports = [ backendSlot ];
     contracts.kinds.secrets.delivery.path =
       {
         unit,
@@ -109,7 +109,6 @@ let
       );
     in
     nodes;
-  # The claim names of a secret's sources.
   sourceNamesOf = secret: map (source: source.claim.name) secret.sources;
   # What a receiving node holds: the sources of each copy, by id, and of
   # its derived htpasswd.
@@ -127,7 +126,7 @@ in
   testSecretDefaultsToAGroupReadableRootFile = {
     expr =
       (evaluate [
-        backend
+        backendSlot
         (service "chrony" { static.user = "chrony"; } oneSecret)
       ]).contracts.claimSets.secrets.chrony.key;
     expected = {
@@ -304,7 +303,7 @@ in
           (generating "hex")
         ];
         noneProvided = failures [
-          backend
+          backendSlot
           (generating "alnum")
         ];
         withoutABackend = failures [ (generating "alnm") ];
@@ -408,12 +407,12 @@ in
   testSecretBackendPathIsWhereTheBackendInstallsIt = {
     expr =
       let
-        undelivered = secretOf [ rules ] { static.user = "svc"; } { };
-        delivered = secretOf [ rules ] { static.user = "svc"; } { unit = "svc.service"; };
+        undelivered = secretOf [ slots ] { static.user = "svc"; } { };
+        delivered = secretOf [ slots ] { static.user = "svc"; } { unit = "svc.service"; };
       in
       {
-        undelivered = { inherit (undelivered) path backendPath; };
-        delivered = { inherit (delivered) path backendPath; };
+        undelivered = { inherit (undelivered) backendPath path; };
+        delivered = { inherit (delivered) backendPath path; };
       };
     expected = {
       undelivered = {
@@ -433,17 +432,17 @@ in
   };
 
   testStaticIdentityReadsTheBackendPath = {
-    expr = (secretOf [ rules ] { static.user = "svc"; } { }).path;
+    expr = (secretOf [ slots ] { static.user = "svc"; } { }).path;
     expected = "/run/agenix/svc_key";
   };
 
   testStaticIdentitySecretNamingAUnitReadsTheDeliveredCredential = {
     expr =
       let
-        secret = secretOf [ rules ] { static.user = "mastodon"; } { unit = "mastodon-init-dirs.service"; };
+        secret = secretOf [ slots ] { static.user = "mastodon"; } { unit = "mastodon-init-dirs.service"; };
       in
       {
-        inherit (secret) unit delivered path;
+        inherit (secret) delivered path unit;
       };
     expected = {
       unit = "mastodon-init-dirs.service";
@@ -458,28 +457,28 @@ in
   };
 
   testDynamicIdentityReadsTheDeliveredCredential = {
-    expr = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).path;
+    expr = (secretOf [ slots ] { dynamic.unit = "svc.service"; } { }).path;
     expected = "/run/credentials/svc.service/svc_key";
   };
 
   testUndeliveredDynamicIdentitySecretReadsTheBackendPath = {
-    expr = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { unit = null; }).path;
+    expr = (secretOf [ slots ] { dynamic.unit = "svc.service"; } { unit = null; }).path;
     expected = "/run/agenix/svc_key";
   };
 
   testDeliveredSecretWithoutADeliveryAdapterHasNoPath = {
-    expr = (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).path;
+    expr = (secretOf [ backendSlot ] { dynamic.unit = "svc.service"; } { }).path;
     expectedError.msg = "nixos-contracts: secret `svc\\.key` is delivered to `svc\\.service` but has no path: import a delivery adapter such as `nixosModules\\.systemd-credentials`";
   };
 
   testDeliveredSecretWithoutADeliveryAdapterFailsItsCheck = {
     expr = {
       dynamic = failures [
-        backend
+        backendSlot
         (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
       ];
       static = failures [
-        backend
+        backendSlot
         (service "svc" { static.user = "svc"; } { key.unit = "svc.service"; })
       ];
     };
@@ -495,7 +494,7 @@ in
 
   testDynamicIdentitySecretDeliveredToAnotherUnitFailsItsCheck = {
     expr = failures [
-      rules
+      slots
       (service "svc" { dynamic.unit = "svc.service"; } { key.unit = "other.service"; })
     ];
     expected = [
@@ -505,12 +504,12 @@ in
 
   testSecretIsDeliveredWhenItNamesAUnit = {
     expr = {
-      dynamic = (secretOf [ rules ] { dynamic.unit = "svc.service"; } { }).delivered;
+      dynamic = (secretOf [ slots ] { dynamic.unit = "svc.service"; } { }).delivered;
       dynamicWithoutADeliveryAdapter =
-        (secretOf [ backend ] { dynamic.unit = "svc.service"; } { }).delivered;
+        (secretOf [ backendSlot ] { dynamic.unit = "svc.service"; } { }).delivered;
       dynamicUndelivered =
-        (secretOf [ rules ] { dynamic.unit = "svc.service"; } { unit = null; }).delivered;
-      static = (secretOf [ rules ] { static.user = "svc"; } { }).delivered;
+        (secretOf [ slots ] { dynamic.unit = "svc.service"; } { unit = null; }).delivered;
+      static = (secretOf [ slots ] { static.user = "svc"; } { }).delivered;
     };
     expected = {
       dynamic = true;
@@ -528,7 +527,7 @@ in
     {
       expr = {
         installed = failures [
-          backend
+          backendSlot
           undelivered
         ];
         withoutABackend = failures [ undelivered ];
@@ -542,7 +541,7 @@ in
   testReadableSecretsPassTheCheck = {
     expr = {
       sharedGroup = failures [
-        backend
+        backendSlot
         (service "svc" {
           dynamic = {
             unit = "svc.service";
@@ -551,15 +550,15 @@ in
         } { key.unit = null; })
       ];
       delivered = failures [
-        rules
+        slots
         (service "svc" { dynamic.unit = "svc.service"; } oneSecret)
       ];
       static = failures [
-        backend
+        backendSlot
         (service "svc" { static.user = "svc"; } oneSecret)
       ];
       staticDelivered = failures [
-        rules
+        slots
         (service "svc" { static.user = "svc"; } { key.unit = "svc.service"; })
       ];
     };
@@ -574,7 +573,7 @@ in
   testSecondBackendFails = {
     expr =
       (secretOf [
-        backend
+        backendSlot
         {
           contracts.kinds.secrets.backend = {
             path = { service, id }: "/run/secrets/${service}_${id}";
@@ -588,7 +587,7 @@ in
   testSecondDeliveryFails = {
     expr =
       (secretOf [
-        rules
+        slots
         {
           contracts.kinds.secrets.delivery.path =
             {
@@ -605,7 +604,7 @@ in
   testNodeForcesTheWholeBackend = {
     expr =
       (secretOf [
-        backend
+        backendSlot
         (
           { lib, ... }:
           {
@@ -622,7 +621,7 @@ in
   testNodeCannotForceOnlyTheBackendPath = {
     expr =
       (secretOf [
-        backend
+        backendSlot
         (
           { lib, ... }:
           {
@@ -934,7 +933,7 @@ in
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.sources' is read-only";
   };
 
-  testSecretRejectsFrom = {
+  testSecretRejectsATopLevelFrom = {
     expr = (secretOf [ ] { static.user = "svc"; } { from = [ remoteToken ]; }).mode;
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.from' does not exist";
   };

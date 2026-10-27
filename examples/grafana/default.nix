@@ -41,7 +41,7 @@ in
       inherit (config.services.grafana.settings.security) admin_password secret_key;
     };
     loadCredential = config.systemd.services.grafana.serviceConfig.LoadCredential;
-    installed = lib.mapAttrs (_: secret: { inherit (secret) owner group mode; }) (
+    installed = lib.mapAttrs (_: secret: { inherit (secret) group mode owner; }) (
       lib.getAttrs [ "grafana_admin-password" "grafana_secret-key" ] config.age.secrets
     );
     inherit (config.contracts) failures;

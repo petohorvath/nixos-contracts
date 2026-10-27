@@ -478,7 +478,7 @@ in
         result = (nodesOf { backend = [ web ]; }).backend.config.contracts.resolve (webHttp "backend");
       in
       {
-        inherit (result.claim) service id name;
+        inherit (result.claim) id name service;
         inherit (result) reason;
       };
     expected = {
@@ -489,7 +489,7 @@ in
     };
   };
 
-  testResolveReasons =
+  testResolveGivesTheReasonForEachUnresolvedReference =
     let
       nodes = nodesOf {
         backend = [
@@ -539,7 +539,7 @@ in
       };
     };
 
-  testResolveOfANodeWithoutContracts = {
+  testResolveOfANodeWithoutContractsSaysItImportsNoModule = {
     expr = reasonOf (evaluate [ { contracts.nodes.bare.config = { }; } ]) (webHttp "bare");
     expected = "node `bare` imports no nixos-contracts module";
   };
@@ -632,7 +632,7 @@ in
     };
   };
 
-  testResolveServiceReasons =
+  testResolveServiceGivesTheReasonForEachUnresolvedService =
     let
       inherit
         ((nodesOf {
@@ -652,17 +652,17 @@ in
         )
         config
         ;
-      reasonOf =
+      serviceReasonOf =
         node: kind: service:
-        (config.contracts.resolveService { inherit node kind service; }).reason;
+        (config.contracts.resolveService { inherit kind node service; }).reason;
     in
     {
       expr = {
-        unknownNode = reasonOf "nope" "binds" "web";
-        bare = reasonOf "bare" "binds" "web";
-        unknownKind = reasonOf "backend" "databases" "web";
-        unknownService = reasonOf "backend" "binds" "db";
-        disabled = reasonOf "backend" "binds" "off";
+        unknownNode = serviceReasonOf "nope" "binds" "web";
+        bare = serviceReasonOf "bare" "binds" "web";
+        unknownKind = serviceReasonOf "backend" "databases" "web";
+        unknownService = serviceReasonOf "backend" "binds" "db";
+        disabled = serviceReasonOf "backend" "binds" "off";
       };
       expected = {
         unknownNode = "node `nope` is not in `contracts.nodes`";

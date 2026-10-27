@@ -9,6 +9,7 @@ let
   };
   contractsLib = self.lib;
   nixos = import ./fixtures/nixos.nix { inherit nixpkgs system; };
+  nodesWith = import ./fixtures/nodes.nix;
   exports = { inherit (self) lib modules nixosModules; };
   backends = {
     preservation = inputs.preservation.nixosModules.default;
@@ -19,6 +20,14 @@ let
     backends.agenix
     backends.agenix-rekey
   ];
+  exampleArgs = {
+    inherit
+      backends
+      exports
+      nixpkgs
+      system
+      ;
+  };
 in
 {
   flake = import ./flake.nix {
@@ -47,38 +56,10 @@ in
   };
   integration.examples = import ./integration/examples.nix {
     examples = {
-      influxdb = import ../examples/influxdb {
-        inherit
-          backends
-          exports
-          nixpkgs
-          system
-          ;
-      };
-      alloy = import ../examples/alloy {
-        inherit
-          backends
-          exports
-          nixpkgs
-          system
-          ;
-      };
-      grafana = import ../examples/grafana {
-        inherit
-          backends
-          exports
-          nixpkgs
-          system
-          ;
-      };
-      sharedToken = import ../examples/shared-token {
-        inherit
-          backends
-          exports
-          nixpkgs
-          system
-          ;
-      };
+      influxdb = import ../examples/influxdb exampleArgs;
+      alloy = import ../examples/alloy exampleArgs;
+      grafana = import ../examples/grafana exampleArgs;
+      sharedToken = import ../examples/shared-token exampleArgs;
       exporter = import ../examples/exporter { inherit exports nixpkgs system; };
       customKind = import ../examples/custom-kind { inherit exports lib; };
     };
@@ -95,13 +76,23 @@ in
         backend = backends.preservation;
       };
       agenixRekey = import ./nixos/adapters/agenix-rekey.nix {
-        inherit contractsLib lib nixos;
-        contracts = self.nixosModules.default;
+        inherit
+          contractsLib
+          lib
+          nixos
+          nodesWith
+          ;
+        contractsModule = self.nixosModules.default;
         adapter = self.nixosModules.agenix-rekey;
         backends = agenixRekeyBackends;
       };
       systemdCredentials = import ./nixos/adapters/systemd-credentials.nix {
-        inherit contractsLib lib nixos;
+        inherit
+          contractsLib
+          lib
+          nixos
+          nodesWith
+          ;
         adapter = self.nixosModules.systemd-credentials;
         backends = agenixRekeyBackends;
         backendAdapter = self.nixosModules.agenix-rekey;

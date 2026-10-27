@@ -151,7 +151,7 @@ else
         let
           identity = resolveIdentity config.contracts.services.${service}.identity;
         in
-        map (claim: { inherit identity claim; }) (lib.attrValues serviceClaims)
+        map (claim: { inherit claim identity; }) (lib.attrValues serviceClaims)
       ) claimSet
     );
 
@@ -184,7 +184,7 @@ else
 
     # The failed checks of one claim, given as `{ identity, claim }`, each
     # naming the claim by its service and id.
-    checkAssertionsOf =
+    mkCheckAssertions =
       arguments:
       lib.optionals (check != null) (
         lib.pipe
@@ -205,7 +205,7 @@ else
           ]
       );
 
-    checkAssertions = lib.concatMap checkAssertionsOf claims;
+    checkAssertions = lib.concatMap mkCheckAssertions claims;
   in
   {
     options.contracts = {
@@ -251,7 +251,7 @@ else
                             default = claimNameOf {
                               inherit (topConfig.contracts) node;
                               kind = kindName;
-                              inherit (config) service id;
+                              inherit (config) id service;
                             };
                             defaultText = lib.literalMD "`<node>_<kind>_<service>_<id>`";
                             description = ''

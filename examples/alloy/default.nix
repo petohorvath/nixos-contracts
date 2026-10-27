@@ -44,9 +44,9 @@ in
     loadCredential = config.systemd.services.alloy.serviceConfig.LoadCredential;
     installed = {
       inherit (secret)
-        owner
         group
         mode
+        owner
         path
         ;
       generator = secret.generator.script;
