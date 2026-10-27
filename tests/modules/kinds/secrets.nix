@@ -75,19 +75,12 @@ let
   };
 
   # Influxdb receiving `references` as a receiver writes its claims from
-  # shared data: one copy of each, its id joining the reference's own
-  # node, kind, service and id with `_`, and an htpasswd derived from all.
+  # shared data: one copy of each, keyed by its claim name, and an
+  # htpasswd derived from all.
   receiving =
     references:
     store (
-      lib.listToAttrs (
-        map (
-          reference:
-          lib.nameValuePair "${reference.node}_${reference.kind}_${reference.service}_${reference.id}" {
-            value.copied = reference;
-          }
-        ) references
-      )
+      contractsLib.copiesOf references
       // {
         htpasswd.value.derived = {
           generator = "basic-auth";

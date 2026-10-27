@@ -25,8 +25,11 @@ in
     inherit lib;
     flake = self;
   };
-  lib.mkDefaultContract = import ./lib/mk-default-contract.nix {
-    inherit contracts contractsLib lib;
+  lib = {
+    default = import ./lib/default.nix { inherit contracts contractsLib lib; };
+    mkDefaultContract = import ./lib/mk-default-contract.nix {
+      inherit contracts contractsLib lib;
+    };
   };
   modules = {
     default = import ./modules/default.nix {
@@ -98,7 +101,7 @@ in
         backends = agenixRekeyBackends;
       };
       systemdCredentials = import ./nixos/adapters/systemd-credentials.nix {
-        inherit lib nixos;
+        inherit contractsLib lib nixos;
         adapter = self.nixosModules.systemd-credentials;
         backends = agenixRekeyBackends;
         backendAdapter = self.nixosModules.agenix-rekey;

@@ -14,11 +14,7 @@
 let
   cfg = config.example.influxdb;
   contract = config.contracts.services.influxdb;
-
-  # A copy's id joins the reference's own fields with `_`, which gives the
-  # writer token's claim name. Resolving the reference to choose the id
-  # would make this claim set read the writer's node.
-  copyIdOf = writer: "${writer.node}_${writer.kind}_${writer.service}_${writer.id}";
+  inherit (contractsLib) claimNameOf copiesOf;
 in
 {
   options.example.influxdb.writers = lib.mkOption {
@@ -34,21 +30,20 @@ in
     contracts.services.influxdb = contractsLib.mkDefaultContract {
       inherit (config.services.influxdb2) enable;
       identity.static.user = "influxdb2";
-      secrets = {
-        admin-password.value.generated = "alnum";
-        admin-token.value.generated = "alnum";
-      }
-      # A copy of each writer's token, which influxdb alone reads.
-      // lib.listToAttrs (
-        map (
-          writer:
-          lib.nameValuePair (copyIdOf writer) {
-            value.copied = writer;
-            owner = "influxdb2";
-            mode = "0400";
-          }
-        ) cfg.writers
-      );
+      secrets = lib.mkMerge [
+        {
+          admin-password.value.generated = "alnum";
+          admin-token.value.generated = "alnum";
+        }
+        # A copy of each writer's token, keyed by the token's claim name,
+        # which influxdb alone reads. The keys come from the references
+        # alone, so this claim set never reads the writer's node.
+        (copiesOf cfg.writers)
+        (lib.genAttrs (map claimNameOf cfg.writers) (_: {
+          owner = "influxdb2";
+          mode = "0400";
+        }))
+      ];
     };
 
     services.influxdb2.provision = {
@@ -64,9 +59,9 @@ in
       organizations.main.auths = lib.listToAttrs (
         map (
           writer:
-          lib.nameValuePair (copyIdOf writer) {
+          lib.nameValuePair (claimNameOf writer) {
             writeBuckets = [ "metrics" ];
-            tokenFile = contract.secrets.${copyIdOf writer}.path;
+            tokenFile = contract.secrets.${claimNameOf writer}.path;
           }
         ) cfg.writers
       );

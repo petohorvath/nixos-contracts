@@ -266,22 +266,29 @@ nixos-contracts carries nothing between nodes ([ADR 0016](adr/0016-leave-carryin
 ```nix
 # On the store: a copy of each writer's token, `writers` being a list of
 # `lib.types.referenceTo "secrets"` values read from shared data
-contracts.services.influxdb.secrets = lib.listToAttrs (map (ref:
-  lib.nameValuePair "${ref.node}_${ref.kind}_${ref.service}_${ref.id}" { value.copied = ref; }
-) writers);
+contracts.services.influxdb.secrets = contractsLib.copiesOf writers;
+
+# Or the same copies, each with its own owner and mode, merged by claim name
+contracts.services.influxdb.secrets = lib.mkMerge [
+  (contractsLib.copiesOf writers)
+  (lib.genAttrs (map contractsLib.claimNameOf writers) (_: {
+    owner = "influxdb2";
+    mode = "0400";
+  }))
+];
 
 # On the proxy: an htpasswd with one line per client, in a stable order
 contracts.services.nginx.secrets.htpasswd.value.derived = {
   generator = "basic-auth";
-  from = lib.sortOn (ref: "${ref.node}_${ref.kind}_${ref.service}_${ref.id}") clients;
+  from = lib.sortOn contractsLib.claimNameOf clients;
 };
 ```
 
 A copy is an ordinary secret of the receiving service. It is in `contracts.claimSets.secrets`, its `owner` and `group` default from the receiving identity, it passes the secrets kind's checks, and every adapter installs and delivers it like any other secret. The receiving daemon reads it at its `path`. A sender added on another node adds a copy or a source, with no change on the receiving node.
 
-A copy's id joins the reference's own `node`, `kind`, `service` and `id` with `_`, which gives the sent claim's `name`, so no two references give one id (see [Names](#names)). A receiver does not resolve a reference to choose an id. The keys of its claim set would then read the sender's claim set, and two receivers that each did so would recurse into each other. A receiver resolves references only in the values it builds, as `sources` does.
+A copy's id is the sent claim's `name`, which [`lib.claimNameOf`](#libclaimnameof) builds from the reference's own `node`, `kind`, `service` and `id`, so no two references give one id (see [Names](#names)). A receiver does not resolve a reference to choose an id. The keys of its claim set would then read the sender's claim set, and two receivers that each did so would recurse into each other. A receiver resolves references only in the values it builds, as `sources` does.
 
-A receiver gets the references in the order its shared data gives them. Where the order shows in what it builds, such as the lines of an htpasswd, it sorts them, for example by the claim `name` their joined fields give.
+A receiver gets the references in the order its shared data gives them. Where the order shows in what it builds, such as the lines of an htpasswd, it sorts them, for example by their claim names through `claimNameOf`.
 
 The receiver's checks report a reference that does not resolve, naming the reference and the reason, such as ``nixos-contracts: secrets claim `influxdb.alhpa_secrets_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`.`` A copy of a secret that is copied or derived itself fails as any copy does. A reference of another kind fails as a type error where it is written, in a field typed [`lib.types.referenceTo`](#libtypesreferenceto). Nothing reports a missing or disabled receiver, since the core does not know who reads a reference.
 
@@ -326,6 +333,24 @@ For every delivered secret in `contracts.claimSets.secrets`, copies included, ad
 Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a unit a secret is delivered to does not end in `.service` or is not defined by another module, and when a dynamic identity's unit does not set `DynamicUser`. The units of static identities need not set it. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
+
+### `lib.claimNameOf`
+
+`claimNameOf reference` is the `name` of the claim a [reference](#references) names, `<node>_<kind>_<service>_<id>`. It is built from the reference alone and never resolves it, so a receiver can key the claims it builds from references with it without reading the sender's claim set. Every claim's `name` is built the same way:
+
+```nix
+contractsLib.claimNameOf { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; }
+# => "metrics_secrets_telegraf_token"
+```
+
+### `lib.copiesOf`
+
+`copiesOf references` is a [copy](#relating-nodes) of each referenced secret, for a contract's `secrets`: one claim per reference, keyed by its claim name, with `value.copied` set to the reference. A receiver that gives each copy further fields, such as an owner and mode, defines them under the same keys in a second definition, which the module system merges into each copy:
+
+```nix
+contractsLib.copiesOf [ { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; } ]
+# => { metrics_secrets_telegraf_token.value.copied = { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; }; }
+```
 
 ### `lib.mkDefaultContract`
 
@@ -422,9 +447,7 @@ options.example.influxdb.writers = lib.mkOption {
   default = [ ];
 };
 
-config.contracts.services.influxdb.secrets = lib.listToAttrs (map (ref:
-  lib.nameValuePair "${ref.node}_${ref.kind}_${ref.service}_${ref.id}" { value.copied = ref; }
-) config.example.influxdb.writers);
+config.contracts.services.influxdb.secrets = contractsLib.copiesOf config.example.influxdb.writers;
 ```
 
 A registry field that carries references across a fleet, such as a nixos-registry field, takes the same type.
