@@ -11,9 +11,10 @@
   entry on its node. Requires the agenix and agenix-rekey NixOS modules;
   `nixosModules.agenix-rekey` also imports `nixosModules.default`.
 */
+contractsLib:
 { config, lib, ... }:
 let
-  inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf labels;
+  inherit (contractsLib) backendNameOf claimsOf labels;
 
   secrets = claimsOf config.contracts.claimSets.secrets;
 

@@ -5,9 +5,10 @@
   Loads from each secret's `backendPath`, which a secret backend adapter
   sets, so import one beside it.
 */
+contractsLib:
 { config, lib, ... }:
 let
-  inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf;
+  inherit (contractsLib) backendNameOf claimsOf;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 

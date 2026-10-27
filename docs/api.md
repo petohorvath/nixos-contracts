@@ -331,7 +331,18 @@ A delivered secret's group is `root`, and an undelivered one's is the identity's
 
 An adapter maps one claim set onto one backend. Importing it turns it on, and it requires its backend's NixOS module, since it defines that backend's options. Adapter checks join `contracts.assertions`, and their failures `contracts.failures`.
 
-The shipped adapters list their claims with [`lib.claimsOf`](#libclaimsof), name their entries with [`lib.backendNameOf`](#libbackendnameof) and label their messages with [`lib.labels`](#liblabels), so an adapter written outside this library gives the same names and messages through the same functions.
+The shipped adapters use only the public library and the options this reference documents, so an adapter written outside this library can do anything a shipped one does. Each adapter file is a function of the library, `contractsLib`, which `nixosModules` applies, and names no parent path, so it imports nothing else of this repository; the `lint` check fails, naming the file, when one does. Between them they use:
+
+- [`lib.claimsOf`](#libclaimsof), to list the claims of their kind;
+- [`lib.backendNameOf`](#libbackendnameof), to name their entries `<service>_<id>`;
+- [`lib.labels`](#liblabels), to label claims and references in their messages as the core does;
+- [`contracts.claimSets.<kind>`](#contractsclaimsetskind), the claims they install, with the fields of [their kind](#claim-kinds), such as a mount's `path`, `class` and `owner`, or a secret's `value`, `sources`, `unit`, `delivered` and `backendPath`;
+- [`contracts.resolve`](#contractsresolve), whose `config` gives the configuration of the node a secret's source is on;
+- a contract's `identity`, to tell a dynamic identity's secrets;
+- the [secret adapter slots](#secrets) `contracts.kinds.secrets.backend` and `contracts.kinds.secrets.delivery`, which they fill;
+- [`contracts.assertions`](#contractsassertions), to which they add their checks.
+
+A project's adapter gets the same library from the flake's `lib` output, as a module argument such as `specialArgs.contractsLib`, or by importing the library directory by path with the configuration's `lib`, as [`lib.mkDefaultContract`](#libmkdefaultcontract) shows.
 
 ### `nixosModules.preservation`
 
