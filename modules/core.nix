@@ -108,6 +108,20 @@ in
       '';
     };
 
+    resolveService = lib.mkOption {
+      type = lib.types.raw;
+      readOnly = true;
+      default = references.resolveService config;
+      defaultText = lib.literalMD "the resolution of a service's claims of one kind in this configuration or `contracts.nodes`";
+      description = ''
+        A function of `{ node; kind; service; }` returning
+        `{ claims; config; reason; }`: the service's claims of the kind on
+        the node, by id, the configuration of the node and a null reason,
+        or why the service holds none. Reading `claims` or `config` then
+        fails with the reason.
+      '';
+    };
+
     nodes = lib.mkOption {
       type = lib.types.lazyAttrsOf lib.types.raw;
       default = { };

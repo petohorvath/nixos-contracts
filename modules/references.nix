@@ -1,6 +1,7 @@
 # How a claim is named, how a claim set's claims are listed, and how a
 # reference `{ node; kind; service; id; }` reads its node and claim, shared
-# by the core's `contracts.resolve`, the claim kinds and the adapters.
+# by the core's `contracts.resolve` and `contracts.resolveService`, the claim
+# kinds and the adapters.
 rec {
   /*
     What a name may contain, by what it names. A claim id may also contain
@@ -119,34 +120,54 @@ rec {
     "id"
   ];
 
-  # A reference as messages name it, `?` standing for a field it lacks or
-  # that is not a string, so even a malformed reference can be named.
-  partialReferenceLabelOf =
-    reference:
-    referenceLabelOf (
+  # The fields of the service selection `{ node; kind; service; }` that
+  # `contracts.resolveService` takes, each a string.
+  serviceFields = [
+    "node"
+    "kind"
+    "service"
+  ];
+
+  # A service selection as messages name it.
+  serviceLabelOf = selection: "${selection.node}:${selection.kind}.${selection.service}";
+
+  # `value` as `labelOf` names a value of `fields`, `?` standing for a field
+  # it lacks or that is not a string, so even a malformed value can be named.
+  partialLabelOf =
+    fields: labelOf: value:
+    labelOf (
       builtins.listToAttrs (
         map (field: {
           name = field;
-          value = if builtins.isString (reference.${field} or null) then reference.${field} else "?";
-        }) referenceFields
+          value = if builtins.isString (value.${field} or null) then value.${field} else "?";
+        }) fields
       )
     );
 
-  # `reference` when it is an attribute set with a string at each of
-  # `referenceFields` and nothing else. Otherwise it fails, naming it.
-  checkReferenceFields =
-    reference:
+  partialReferenceLabelOf = partialLabelOf referenceFields referenceLabelOf;
+
+  # `value` when it is an attribute set with a string at each of `fields`
+  # and nothing else. Otherwise it fails, naming it as `what` and `labelOf`
+  # do, or saying it is not `shape` when it is not an attribute set.
+  checkFields =
+    {
+      what,
+      fields,
+      labelOf,
+      shape,
+    }:
+    value:
     let
       fail =
-        problem: throw "nixos-contracts: reference `${partialReferenceLabelOf reference}` ${problem}";
-      missing = builtins.filter (field: !(reference ? ${field})) referenceFields;
-      unknown = builtins.filter (field: !(builtins.elem field referenceFields)) (
-        builtins.attrNames reference
-      );
-      notStrings = builtins.filter (field: !(builtins.isString reference.${field})) referenceFields;
+        problem: throw "nixos-contracts: ${what} `${partialLabelOf fields labelOf value}` ${problem}";
+      missing = builtins.filter (field: !(value ? ${field})) fields;
+      unknown = builtins.filter (field: !(builtins.elem field fields)) (builtins.attrNames value);
+      notStrings = builtins.filter (field: !(builtins.isString value.${field})) fields;
     in
-    if !(builtins.isAttrs reference) then
-      throw "nixos-contracts: a reference is an attribute set `{ node; kind; service; id; }`, not a ${builtins.typeOf reference}"
+    if !(builtins.isAttrs value) then
+      throw "nixos-contracts: ${shape} `{ ${
+        builtins.concatStringsSep " " (map (field: "${field};") fields)
+      } }`, not a ${builtins.typeOf value}"
     else if missing != [ ] then
       fail "has no `${builtins.head missing}`"
     else if unknown != [ ] then
@@ -154,22 +175,46 @@ rec {
     else if notStrings != [ ] then
       fail "has a `${builtins.head notStrings}` that is not a string"
     else
-      reference;
+      value;
+
+  # `reference` when it is an attribute set with a string at each of
+  # `referenceFields` and nothing else. Otherwise it fails, naming it.
+  checkReferenceFields = checkFields {
+    what = "reference";
+    fields = referenceFields;
+    labelOf = referenceLabelOf;
+    shape = "a reference is an attribute set";
+  };
+
+  # A service selection when it has a string at each of `serviceFields` and
+  # nothing else. Otherwise it fails, naming it.
+  checkServiceFields = checkFields {
+    what = "service";
+    fields = serviceFields;
+    labelOf = serviceLabelOf;
+    shape = "`contracts.resolveService` takes an attribute set";
+  };
+
+  # Why a value of `fields` names nothing on any node: the first of its
+  # names that breaks its name rule, as the claim constructor names it, or
+  # null.
+  nameProblemOfFields =
+    fields: value:
+    let
+      problemOf =
+        field:
+        if field == "id" then
+          nameProblemOf nameRules.id (describeName.id value.kind value.service) value.id
+        else
+          nameProblemOf nameRules.${field} describeName.${field} value.${field};
+      problems = builtins.filter (problem: problem != null) (map problemOf fields);
+    in
+    if problems == [ ] then null else builtins.head problems;
 
   # Why a reference with every field names no claim of any node: the
   # first of its node identity, kind name, service name and id that breaks
   # its name rule, as the claim constructor names it, or null.
-  referenceNameProblemOf =
-    reference:
-    let
-      problems = builtins.filter (problem: problem != null) [
-        (nameProblemOf nameRules.node describeName.node reference.node)
-        (nameProblemOf nameRules.kind describeName.kind reference.kind)
-        (nameProblemOf nameRules.service describeName.service reference.service)
-        (nameProblemOf nameRules.id (describeName.id reference.kind reference.service) reference.id)
-      ];
-    in
-    if problems == [ ] then null else builtins.head problems;
+  referenceNameProblemOf = nameProblemOfFields referenceFields;
 
   # The reference to the claim of kind `kind` that `fields`,
   # `{ node; service; id; }`, name, failing, naming it, when it is malformed.
@@ -193,6 +238,45 @@ rec {
     else
       throw "nixos-contracts: reference `${referenceLabelOf reference}`: ${problem}.";
 
+  # The values of `fields`, each failing with the message
+  # `nixos-contracts: cannot resolve <label>: <reason>`, and the reason.
+  unresolved =
+    label: fields: reason:
+    let
+      error = throw "nixos-contracts: cannot resolve ${label}: ${reason}";
+    in
+    builtins.listToAttrs (
+      map (field: {
+        name = field;
+        value = error;
+      }) fields
+    )
+    // {
+      inherit reason;
+    };
+
+  # `{ config; claimSet; reason; }`: the configuration of the node a
+  # reference or service names, its claim set of the named kind and a null
+  # reason, or `{ reason; }`, why the node has no such claim set.
+  claimSetOf =
+    config:
+    { node, kind, ... }@named:
+    let
+      nodeConfig = nodeConfigOrNull config named;
+    in
+    if nodeConfig == null then
+      { reason = "node `${node}` is not in `contracts.nodes`"; }
+    else if !(nodeConfig ? contracts.claimSets) then
+      { reason = "node `${node}` imports no nixos-contracts module"; }
+    else if !(nodeConfig.contracts.claimSets ? ${kind}) then
+      { reason = "node `${node}` has no claim kind `${kind}`"; }
+    else
+      {
+        config = nodeConfig;
+        claimSet = nodeConfig.contracts.claimSets.${kind};
+        reason = null;
+      };
+
   /*
     `{ claim; config; reason; }`: the claim-set entry a reference names, the
     configuration of the node that holds it and a null reason, or why the
@@ -206,34 +290,58 @@ rec {
     let
       reference = checkReferenceFields unchecked;
       nameProblem = referenceNameProblemOf reference;
-      nodeConfig = nodeConfigOrNull config reference;
-      claimSets = nodeConfig.contracts.claimSets;
-      entry = claimSets.${reference.kind}.${reference.service}.${reference.id} or null;
-      fail =
-        reason:
-        let
-          error = throw "nixos-contracts: cannot resolve `${referenceLabelOf reference}`: ${reason}";
-        in
-        {
-          claim = error;
-          config = error;
-          inherit reason;
-        };
+      found = claimSetOf config reference;
+      entry = found.claimSet.${reference.service}.${reference.id} or null;
+      fail = unresolved "`${referenceLabelOf reference}`" [
+        "claim"
+        "config"
+      ];
     in
     if nameProblem != null then
       fail nameProblem
-    else if nodeConfig == null then
-      fail "node `${reference.node}` is not in `contracts.nodes`"
-    else if !(nodeConfig ? contracts.claimSets) then
-      fail "node `${reference.node}` imports no nixos-contracts module"
-    else if !(claimSets ? ${reference.kind}) then
-      fail "node `${reference.node}` has no claim kind `${reference.kind}`"
+    else if found.reason != null then
+      fail found.reason
     else if entry == null then
       fail "no enabled contract on `${reference.node}` holds it"
     else
       {
         claim = entry;
-        config = nodeConfig;
+        inherit (found) config;
+        reason = null;
+      };
+
+  /*
+    `{ claims; config; reason; }`: the claims of one kind that a service
+    holds on a node, as the selection `{ node; kind; service; }` names
+    them, by id as the node's claim set holds them, that node's
+    configuration and a null reason, or why no enabled contract on the node
+    describes the service. An enabled contract without claims of the kind
+    resolves to no claims. Reading `claims` or `config` then fails with the
+    reason; reading `reason` never does, but a selection missing a field
+    or holding an unknown one fails on resolving, since it cannot be named.
+  */
+  resolveService =
+    config: unchecked:
+    let
+      selection = checkServiceFields unchecked;
+      nameProblem = nameProblemOfFields serviceFields selection;
+      found = claimSetOf config selection;
+      enabled = found.config.contracts.services.${selection.service}.enable or false;
+      fail = unresolved "service `${serviceLabelOf selection}`" [
+        "claims"
+        "config"
+      ];
+    in
+    if nameProblem != null then
+      fail nameProblem
+    else if found.reason != null then
+      fail found.reason
+    else if !enabled then
+      fail "no enabled contract on `${selection.node}` describes service `${selection.service}`"
+    else
+      {
+        claims = found.claimSet.${selection.service} or { };
+        inherit (found) config;
         reason = null;
       };
 }

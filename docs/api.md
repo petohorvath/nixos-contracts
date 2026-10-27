@@ -41,6 +41,7 @@ contracts.claimSets.<kind>.<service>.<id>    read-only
 contracts.node                               this configuration's node identity, required
 contracts.nodes.<node>                       the node collection
 contracts.resolve                            read-only, function of a reference
+contracts.resolveService                     read-only, function of a node, kind and service
 contracts.kinds.<kind>.*                     kind settings
 contracts.adapters.<adapter>.*               adapter settings
 contracts.assertions                         checks over all contracts
@@ -76,7 +77,7 @@ This configuration's node identity, its name in the node collection (a [name](#n
 
 ### `contracts.nodes`
 
-The node collection: the nodes a [reference](#references) may name, keyed by node identity, each with its evaluated `config`, such as nixos-cross-config's node collection (default `{ }`). The core resolves references against it ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)), reading only each node's `contracts.claimSets`, and a backend adapter reads what else it needs of a node from the same entry. A reference that names `contracts.node` resolves in this configuration itself.
+The node collection: the nodes a [reference](#references) may name, keyed by node identity, each with its evaluated `config`, such as nixos-cross-config's node collection (default `{ }`). The core resolves references against it ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)), reading only each node's `contracts.claimSets`, and for [`contracts.resolveService`](#contractsresolveservice) whether the service's contract is enabled. A backend adapter reads what else it needs of a node from the same entry. A reference that names `contracts.node` resolves in this configuration itself.
 
 ### `contracts.resolve`
 
@@ -84,6 +85,18 @@ A read-only function of a [reference](#references) that finds the claim it names
 
 ```nix
 port = (config.contracts.resolve backend.bind).claim.port;
+```
+
+### `contracts.resolveService`
+
+A read-only function that finds every claim of one kind that one service holds on a node, such as a firewall reading all of a backend's binds ([ADR 0023](adr/0023-resolve-a-services-claims-beside-a-reference.md)). `contracts.resolveService { node; kind; service; }` returns `{ claims; config; reason; }`: the entries at `claimSets.<kind>.<service>` of the node, keyed by id, that node's evaluated configuration (this configuration for a service of `contracts.node`) and a null reason, or the reason the service has none. An enabled contract without claims of the kind gives `claims = { }`. The selection's names follow their [name rules](#names), and its node and kind give the reasons of [`contracts.resolve`](#contractsresolve), and a service whose contract is missing or disabled gives ``no enabled contract on `<node>` describes service `<service>` ``. Reading `claims` or `config` while `reason` is set fails with ``nixos-contracts: cannot resolve service `<node>:<kind>.<service>`: <reason>``; reading `reason` never fails. A value that is not an attribute set, or that misses one of `node`, `kind` and `service` or holds any other field, such as a reference's `id`, fails on resolving with a message naming it, such as ``nixos-contracts: service `backend:?.web` has no `kind` ``. It reads the node's contracts alone, so two nodes that each resolve a service of the other evaluate without cycles, as long as neither keys its own claims by what it resolved:
+
+```nix
+ports = lib.mapAttrsToList (_: bind: bind.port) (config.contracts.resolveService {
+  node = "backend";
+  kind = "binds";
+  service = "web";
+}).claims;
 ```
 
 ### `contracts.kinds.<kind>`
