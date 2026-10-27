@@ -152,7 +152,7 @@ in
     }:
     let
       inherit (settings) backend delivery;
-      generator = claim.value.generated or claim.value.derived.generator or null;
+      inherit (claim) generator;
       deliveryReason =
         if claim.delivered && delivery == null then
           "it is delivered to `${claim.unit}`, but no delivery adapter is imported; import one such as `nixosModules.systemd-credentials`, or set its `unit` to null"
@@ -306,6 +306,18 @@ in
             collection, or null when a check rejects the reference. Empty
             for a `provided` or `generated` value. A backend adapter reads
             the references from it rather than resolving them itself.
+          '';
+        };
+        generator = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          readOnly = true;
+          default = config.value.generated or config.value.derived.generator or null;
+          defaultText = lib.literalMD "the generator of a `generated` or `derived` value, or null";
+          description = ''
+            The generator that makes the secret's value: a `generated`
+            value's, or a `derived` value's `generator`. Null for a
+            `provided` or `copied` value. A backend adapter reads it rather
+            than the value's tags.
           '';
         };
         unit = lib.mkOption {
