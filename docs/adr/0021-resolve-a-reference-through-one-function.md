@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0022
 ---
 
 # Resolve a reference through one function
