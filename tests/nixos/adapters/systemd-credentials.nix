@@ -1,4 +1,5 @@
 {
+  contractsLib,
   lib,
   nixos,
   adapter,
@@ -57,8 +58,8 @@ in
     expected = [ "alloy_password:/run/agenix/alloy_password" ];
   };
 
-  # Alloy on the `edge` node copies chrony's key on the `time` node, its
-  # id joining the reference's node, kind, service and id with `_`.
+  # Alloy on the `edge` node copies chrony's key on the `time` node, keyed
+  # by its claim name.
   testDynamicIdentityCopyIsDeliveredIntoItsUnit =
     let
       key = nodes.time.config.contracts.services.chrony.secrets.key.ref;
@@ -66,10 +67,7 @@ in
         time = [ chrony ];
         edge = [
           alloy
-          {
-            contracts.services.alloy.secrets."${key.node}_${key.kind}_${key.service}_${key.id}".value.copied =
-              key;
-          }
+          { contracts.services.alloy.secrets = contractsLib.copiesOf [ key ]; }
         ];
       };
       inherit (nodes.edge) config;

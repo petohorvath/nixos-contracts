@@ -97,11 +97,10 @@ let
   };
 
   # The nodes `alpha` and `beta`, each running telegraf and an influxdb
-  # that holds one copy of every node's telegraf token, its id joining the
-  # reference's node, kind, service and id with `_`, and an htpasswd
-  # derived from all of them. A `let`-bound list carries the tokens' `ref`s,
-  # as a fleet's shared data does. The nodes `withoutAdapter` names lack the
-  # adapter.
+  # that holds one copy of every node's telegraf token, keyed by its claim
+  # name, and an htpasswd derived from all of them. A `let`-bound list
+  # carries the tokens' `ref`s, as a fleet's shared data does. The nodes
+  # `withoutAdapter` names lack the adapter.
   handingTokensWithout =
     withoutAdapter:
     let
@@ -112,14 +111,7 @@ let
       receiving = {
         imports = [
           (influxdb (
-            lib.listToAttrs (
-              map (
-                reference:
-                lib.nameValuePair "${reference.node}_${reference.kind}_${reference.service}_${reference.id}" {
-                  value.copied = reference;
-                }
-              ) tokens
-            )
+            contractsLib.copiesOf tokens
             // {
               htpasswd.value.derived = {
                 generator = "basic-auth";

@@ -76,7 +76,12 @@
   settings ? { },
 }:
 let
-  inherit (import ./references.nix) checkName claimLabelOf nameRules;
+  inherit (import ./references.nix)
+    checkName
+    claimLabelOf
+    claimNameOf
+    nameRules
+    ;
 
   # The kind's name, failing when it contains `_` or another character
   # its rule forbids. The reserved-name check below reads it, so a kind
@@ -243,12 +248,11 @@ else
                           name = lib.mkOption {
                             type = lib.types.str;
                             readOnly = true;
-                            default = lib.concatStringsSep "_" [
-                              topConfig.contracts.node
-                              kindName
-                              config.service
-                              config.id
-                            ];
+                            default = claimNameOf {
+                              inherit (topConfig.contracts) node;
+                              kind = kindName;
+                              inherit (config) service id;
+                            };
                             defaultText = lib.literalMD "`<node>_<kind>_<service>_<id>`";
                             description = ''
                               The claim name, `<node>_<kind>_<service>_<id>`,

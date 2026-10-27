@@ -45,6 +45,19 @@ rec {
     else
       config.contracts.nodes.${reference.node}.config or null;
 
+  # A claim's name, `<node>_<kind>_<service>_<id>`, such as
+  # `metrics_secrets_telegraf_token`, from its reference alone, so naming
+  # a claim of another node reads none of that node's claim sets.
+  claimNameOf =
+    {
+      node,
+      kind,
+      service,
+      id,
+      ...
+    }:
+    "${node}_${kind}_${service}_${id}";
+
   # A claim as messages name it, `<service>.<id>`, such as
   # `influxdb.admin-token`.
   claimLabelOf = { service, id, ... }: "${service}.${id}";
