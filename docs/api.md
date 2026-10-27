@@ -122,9 +122,9 @@ name = "beta-influxdb_secrets_influxdb_admin-token";
 
 Node identities, kind names and service names are non-empty, and made of lowercase letters, digits and hyphens only. Claim ids may also contain `_`, such as `ssh_host_ed25519_key`, so a receiver can give a copy the sent claim's `name` as its id ([ADR 0017](adr/0017-allow-an-underscore-in-a-claim-id-and-name-a-claim-without-a-location.md)). Any other name, such as the service name `web_proxy` or the claim id `Host-Key`, fails at evaluation with an error naming it and the allowed characters, such as ``nixos-contracts: secrets claim id `Host-Key` of service `openssh` may contain only lowercase letters, digits, hyphens and `_`.`` No node identity, kind name or service name contains `_`, so the first `_` of a backend name `<service>_<id>` ends the service, and the first three of a claim `name` end the node, the kind and the service. Both names therefore stay unique however many `_` an id holds:
 
-- A backend adapter names its entry for a claim `<service>_<id>`, such as `age.secrets.influxdb_admin-token`.
+- A backend adapter names its entry for a claim `<service>_<id>`, such as `age.secrets.influxdb_admin-token`, which [`lib.backendNameOf`](#libbackendnameof) builds.
 - A claim's `name` joins its node identity, kind, service and id with `_`, so a value built from several nodes' claims, such as an htpasswd user name, takes `name` and never collides, even with a claim of another kind.
-- Check messages name a claim `<service>.<id>`, such as ``nixos-contracts: secrets claim `influxdb.admin-token`: …``.
+- Check messages name a claim `<service>.<id>`, such as ``nixos-contracts: secrets claim `influxdb.admin-token`: …``, and a reference `<node>:<kind>.<service>.<id>`, such as `metrics:secrets.telegraf.token`, which [`lib.labels`](#liblabels) builds.
 
 ### References
 
@@ -311,6 +311,8 @@ A delivered secret's group is `root`, and an undelivered one's is the identity's
 
 An adapter maps one claim set onto one backend. Importing it turns it on, and it requires its backend's NixOS module, since it defines that backend's options. Adapter checks join `contracts.assertions`, and their failures `contracts.failures`.
 
+The shipped adapters list their claims with [`lib.claimsOf`](#libclaimsof), name their entries with [`lib.backendNameOf`](#libbackendnameof) and label their messages with [`lib.labels`](#liblabels), so an adapter written outside this library gives the same names and messages through the same functions.
+
 ### `nixosModules.preservation`
 
 Adds every mount to `preservation.preserveAt` under the root mapped to its class, as a directory or a file entry with the mount's `owner` as its `user`, and its `group` and `mode`. It requires the [preservation](https://github.com/nix-community/preservation) module.
@@ -333,6 +335,36 @@ For every delivered secret in `contracts.claimSets.secrets`, copies included, ad
 Without a backend adapter, its `LoadCredential=` fails to evaluate with an error naming the missing adapter. Its checks fail when a unit a secret is delivered to does not end in `.service` or is not defined by another module, and when a dynamic identity's unit does not set `DynamicUser`. The units of static identities need not set it. The adapter's own `LoadCredential=` definition creates the unit's `systemd.services` entry, so the unit counts as defined only if it has an `ExecStart`, set directly or through `script`.
 
 ## Library
+
+### `lib.backendNameOf`
+
+`backendNameOf claim` is the name a backend adapter gives its entry for a claim, `<service>_<id>` (see [Names](#names)). It takes anything with `service` and `id`, such as a claim or a reference. A service module names a secret's backend entry with it, such as to set a provided secret's encrypted file when it is not at the backend's default:
+
+```nix
+age.secrets.${contractsLib.backendNameOf config.contracts.services.influxdb.secrets.admin-token}.rekeyFile =
+  ./secrets/influxdb-admin-token.age;
+# sets age.secrets.influxdb_admin-token.rekeyFile
+```
+
+### `lib.claimsOf`
+
+`claimsOf claimSet` is the claims of one kind's [claim set](#contractsclaimsetskind) in a list, by service and then id. An adapter installs each claim of its kind from it:
+
+```nix
+map (secret: secret.name) (contractsLib.claimsOf config.contracts.claimSets.secrets)
+# => [ "beta_secrets_influxdb_admin-token" "beta_secrets_telegraf_token" ]
+```
+
+### `lib.labels`
+
+`labels.claim claim` and `labels.reference reference` are the labels check messages give a claim and a reference, `<service>.<id>` and `<node>:<kind>.<service>.<id>` (see [Names](#names)), so an adapter's messages read like the core's:
+
+```nix
+contractsLib.labels.claim { service = "influxdb"; id = "admin-token"; }
+# => "influxdb.admin-token"
+contractsLib.labels.reference { node = "metrics"; kind = "secrets"; service = "telegraf"; id = "token"; }
+# => "metrics:secrets.telegraf.token"
+```
 
 ### `lib.claimNameOf`
 

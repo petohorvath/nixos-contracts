@@ -4,7 +4,7 @@
 { config, lib, ... }:
 let
   cfg = config.contracts.adapters.preservation;
-  inherit (import ../../modules/references.nix) claimsOf;
+  inherit (import ../../lib { inherit lib; }) claimsOf;
   mounts = claimsOf config.contracts.claimSets.mounts;
 
   preserveEntry =

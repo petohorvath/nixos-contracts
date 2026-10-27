@@ -4,8 +4,14 @@
   lib,
 }:
 let
-  inherit (contracts) nodesOf;
-  inherit (contractsLib) claimNameOf copiesOf;
+  inherit (contracts) evaluate nodesOf;
+  inherit (contractsLib)
+    backendNameOf
+    claimNameOf
+    claimsOf
+    copiesOf
+    labels
+    ;
 
   telegraf.contracts.services.telegraf = {
     enable = true;
@@ -79,6 +85,81 @@ in
     };
     expected = "metrics_secrets_telegraf_api_token";
   };
+
+  testBackendNameOfJoinsTheClaimsServiceAndId = {
+    expr = backendNameOf {
+      service = "influxdb";
+      id = "admin_token";
+    };
+    expected = "influxdb_admin_token";
+  };
+
+  testClaimsOfListsAClaimSetsClaimsByServiceAndThenId = {
+    expr = map (claim: claim.name) (
+      claimsOf
+        (evaluate [
+          {
+            contracts.services = {
+              telegraf = {
+                enable = true;
+                identity.static.user = "telegraf";
+                secrets = {
+                  token = { };
+                  api-key = { };
+                };
+              };
+              influxdb = {
+                enable = true;
+                identity.static.user = "influxdb2";
+                secrets.admin-token = { };
+              };
+            };
+          }
+        ]).contracts.claimSets.secrets
+    );
+    expected = [
+      "local_secrets_influxdb_admin-token"
+      "local_secrets_telegraf_api-key"
+      "local_secrets_telegraf_token"
+    ];
+  };
+
+  # The copy references a node missing from the empty node collection, so
+  # its check fails, naming the copy and the reference.
+  testLabelsAreThoseAFailedChecksMessageNames =
+    let
+      reference = {
+        node = "metrics";
+        kind = "secrets";
+        service = "telegraf";
+        id = "token";
+      };
+      config = evaluate [
+        {
+          contracts.services.influxdb = {
+            enable = true;
+            identity.static.user = "influxdb2";
+            secrets.token.value.copied = reference;
+          };
+        }
+      ];
+      claim = labels.claim config.contracts.services.influxdb.secrets.token;
+      referenceLabel = labels.reference reference;
+    in
+    {
+      expr = {
+        inherit claim;
+        reference = referenceLabel;
+        named = map (
+          message: lib.hasInfix "`${claim}`" message && lib.hasInfix "`${referenceLabel}`" message
+        ) config.contracts.failures;
+      };
+      expected = {
+        claim = "influxdb.token";
+        reference = "metrics:secrets.telegraf.token";
+        named = [ true ];
+      };
+    };
 
   testCopiesOfHoldsOneCopyPerReferenceKeyedByItsClaimName = {
     expr = copiesOf [
