@@ -15,8 +15,11 @@ in
   testRootLibraryExportsItsFunctions = {
     expr = builtins.attrNames flake.lib;
     expected = [
+      "backendNameOf"
       "claimNameOf"
+      "claimsOf"
       "copiesOf"
+      "labels"
       "mkClaimKind"
       "mkDefaultContract"
       "types"

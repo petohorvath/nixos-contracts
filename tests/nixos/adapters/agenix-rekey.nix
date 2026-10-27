@@ -288,6 +288,34 @@ in
     expected = ./agenix-rekey.nix;
   };
 
+  testProvidedSecretsFileSetUnderItsBackendNameIsOnTheAdaptersEntry = {
+    expr =
+      let
+        config = configuration [
+          keaWithoutValues
+          (
+            { config, ... }:
+            {
+              age.secrets =
+                lib.genAttrs (map contractsLib.backendNameOf (lib.attrValues config.contracts.services.kea.secrets))
+                  (_: {
+                    rekeyFile = ./agenix-rekey.nix;
+                  });
+            }
+          )
+        ];
+      in
+      {
+        inherit (config.age.secrets.kea_token) group rekeyFile;
+        inherit (config.contracts) failures;
+      };
+    expected = {
+      group = "kea";
+      rekeyFile = ./agenix-rekey.nix;
+      failures = [ ];
+    };
+  };
+
   testSecretWithoutAFileFailsItsCheck = {
     expr = failures [
       keaWithoutValues

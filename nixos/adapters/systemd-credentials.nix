@@ -8,7 +8,8 @@
 { config, lib, ... }:
 let
   inherit (config.contracts.kinds.secrets) backend;
-  inherit (import ../../modules/references.nix) backendNameOf backendPathOf claimsOf;
+  inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf;
+  inherit (import ../../modules/references.nix) backendPathOf;
 
   toServiceName = unit: lib.removeSuffix ".service" unit;
 

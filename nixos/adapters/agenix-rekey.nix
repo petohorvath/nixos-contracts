@@ -13,13 +13,8 @@
 */
 { config, lib, ... }:
 let
-  inherit (import ../../modules/references.nix)
-    backendNameOf
-    claimsOf
-    claimLabelOf
-    nodeConfigOrNull
-    referenceLabelOf
-    ;
+  inherit (import ../../lib { inherit lib; }) backendNameOf claimsOf labels;
+  inherit (import ../../modules/references.nix) nodeConfigOrNull;
 
   secrets = claimsOf config.contracts.claimSets.secrets;
 
@@ -43,20 +38,20 @@ let
   # A reference the core resolved, on a node without this adapter.
   backendAssertion = secret: reference: {
     assertion = reference.claim == null || entryOrNull reference != null;
-    message = "secret `${claimLabelOf secret}` references `${referenceLabelOf reference}`, whose node has no `nixosModules.agenix-rekey`.";
+    message = "secret `${labels.claim secret}` references `${labels.reference reference}`, whose node has no `nixosModules.agenix-rekey`.";
   };
 
   fileAssertion =
     secret:
     let
       name = backendNameOf secret;
-      label = claimLabelOf secret;
+      label = labels.claim secret;
     in
     {
       assertion = config.age.secrets.${name}.rekeyFile != null;
       message =
         if isCopy secret then
-          "secret `${label}` copies `${referenceLabelOf secret.value.copied}`, which has no encrypted file: give it one on its node, or set `age.secrets.${name}.rekeyFile`."
+          "secret `${label}` copies `${labels.reference secret.value.copied}`, which has no encrypted file: give it one on its node, or set `age.secrets.${name}.rekeyFile`."
         else
           "secret `${label}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
     };
