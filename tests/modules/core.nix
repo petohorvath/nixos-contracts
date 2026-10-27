@@ -559,6 +559,26 @@ in
     expectedError.msg = "nixos-contracts: cannot resolve `backend:databases\\.web\\.http`: node `backend` has no claim kind `databases`";
   };
 
+  testResolveOfAReferenceWithoutAKindFails = {
+    expr = reasonOf (evaluate [ web ]) (removeAttrs (webHttp "local") [ "kind" ]);
+    expectedError.msg = "nixos-contracts: reference `local:\\?\\.web\\.http` has no `kind`";
+  };
+
+  testResolveOfAReferenceWithAnUnknownFieldFails = {
+    expr = reasonOf (evaluate [ web ]) (webHttp "local" // { port = 8080; });
+    expectedError.msg = "nixos-contracts: reference `local:binds\\.web\\.http` has an unknown field `port`";
+  };
+
+  testResolveOfAReferenceWithAnInvalidNameGivesTheNameRule = {
+    expr = reasonOf (evaluate [ web ]) (webHttp "local" // { service = "web_proxy"; });
+    expected = "service name `web_proxy` may contain only lowercase letters, digits and hyphens";
+  };
+
+  testReadingTheClaimOfAReferenceWithAnInvalidNameFails = {
+    expr = ((evaluate [ web ]).contracts.resolve (webHttp "local" // { kind = "Binds"; })).claim;
+    expectedError.msg = "nixos-contracts: cannot resolve `local:Binds\\.web\\.http`: claim kind name `Binds` may contain only";
+  };
+
   testLookupIsNotAnOption = {
     expr = (evaluate [ { contracts.lookup = _: { }; } ]).contracts.node;
     expectedError.msg = "contracts\\.lookup' does not exist";

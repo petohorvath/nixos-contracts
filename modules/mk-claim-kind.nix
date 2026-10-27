@@ -80,19 +80,19 @@ let
     checkName
     claimLabelOf
     claimNameOf
+    describeName
     nameRules
     ;
 
   # The kind's name, failing when it contains `_` or another character
   # its rule forbids. The reserved-name check below reads it, so a kind
   # fails as it is built.
-  kindName = checkName nameRules.kind (kind: "claim kind name `${kind}`") name;
+  kindName = checkName nameRules.kind describeName.kind name;
 
   # A service name or claim id, failing when it breaks its rule, so `_`
   # joins a service and an id into a name no other pair makes.
-  checkService = checkName nameRules.service (service: "service name `${service}`");
-  checkId =
-    service: checkName nameRules.id (id: "${kindName} claim id `${id}` of service `${service}`");
+  checkService = checkName nameRules.service describeName.service;
+  checkId = service: checkName nameRules.id (describeName.id kindName service);
 
   # A kind's claims sit beside the contract's own fields.
   reservedNames = [

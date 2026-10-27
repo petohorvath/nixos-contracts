@@ -12,7 +12,7 @@ let
     check = builtins.isString;
     merge =
       loc: defs:
-      references.checkName references.nameRules.node (node: "node identity `${node}`") (
+      references.checkName references.nameRules.node references.describeName.node (
         lib.mergeEqualOption loc defs
       );
   };

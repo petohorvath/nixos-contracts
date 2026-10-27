@@ -348,6 +348,16 @@ in
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.copied\\.kind' is not of type";
   };
 
+  testSecretReferenceWithAnInvalidNameIsATypeError = {
+    expr =
+      (secretOf [ ] { static.user = "svc"; } {
+        value.copied = remoteToken // {
+          service = "web_proxy";
+        };
+      }).value;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.copied\\.service' is not of type `string of lowercase letters, digits and hyphens'";
+  };
+
   testDerivedReferenceOfAnotherKindIsATypeError = {
     expr =
       (secretOf [ ] { static.user = "svc"; } {
