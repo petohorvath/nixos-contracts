@@ -12,11 +12,11 @@ in
     identity.static.user = "grafana";
     secrets = {
       admin-password = {
-        value.generated = "alnum";
+        value.generated.generator = "alnum";
         unit = "grafana.service";
       };
       secret-key = {
-        value.generated = "alnum";
+        value.generated.generator = "alnum";
         unit = "grafana.service";
       };
     };

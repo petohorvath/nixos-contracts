@@ -38,7 +38,7 @@ in
   config = {
     contracts.services.alloy = contractsLib.mkDefaultContract {
       secrets = lib.mapAttrs' (
-        instance: _: lib.nameValuePair (passwordId instance) { value.generated = "alnum"; }
+        instance: _: lib.nameValuePair (passwordId instance) { value.generated.generator = "alnum"; }
       ) cfg.instances;
     };
 

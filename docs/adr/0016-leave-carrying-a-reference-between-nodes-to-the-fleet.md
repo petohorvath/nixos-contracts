@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0026
 ---
 
 # Leave carrying a reference between nodes to the fleet

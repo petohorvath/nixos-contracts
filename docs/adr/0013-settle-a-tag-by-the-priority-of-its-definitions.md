@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded in part by ADR-0026
 ---
 
 # Settle a tag by the priority of its definitions

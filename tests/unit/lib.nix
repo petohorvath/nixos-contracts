@@ -18,7 +18,7 @@ let
   telegraf.contracts.services.telegraf = {
     enable = true;
     identity.static.user = "telegraf";
-    secrets.token.value.generated = "alnum";
+    secrets.token.value.generated.generator = "alnum";
     mounts.state.path = "/var/lib/telegraf";
   };
 

@@ -12,51 +12,55 @@ let
     referenceLabelOf
     ;
 
-  # The references of a `copied` or `derived` value, in order, or none.
-  referencesOf =
-    value:
-    if value ? copied then
-      [ value.copied ]
-    else if value ? derived then
-      value.derived.from
-    else
-      [ ];
+  # The references of a value, in order: a copy's one, or those its
+  # generator reads.
+  referencesOf = value: if value ? copied then [ value.copied ] else value.generated.from or [ ];
 
-  # Only a provided or generated secret resolves, so two copies referencing
-  # each other fail their checks instead of recursing.
-  isResolvable =
-    result: result.reason == null && (result.claim.value ? provided || result.claim.value ? generated);
+  /*
+    Resolve a reference of the value `value` as `contracts.resolve` does, to
+    `{ claim; reason; }`: the claim-set entry it names and a null reason, or
+    a null claim and why the secret cannot read it. A copy reads any secret
+    but a copy, so two copies referencing each other fail their checks
+    instead of recursing, and a generator reads only secrets that reference
+    none, so the core never follows a chain of references.
+  */
+  resolveReference =
+    config: value: reference:
+    let
+      result = config.contracts.resolve reference;
+      secret = result.claim;
+      references = "it references `${referenceLabelOf reference}`";
+      referencing =
+        if secret.value ? copied then
+          "which is a copy of `${referenceLabelOf secret.value.copied}`"
+        else
+          "which is generated from other secrets";
+      reason =
+        if result.reason != null then
+          "${references}: ${result.reason}"
+        else if value ? generated && referencesOf secret.value != [ ] then
+          "${references}, ${referencing}; a generator reads only secrets that reference none"
+        else if secret.value ? copied then
+          "${references}, ${referencing}; reference that secret instead"
+        else
+          null;
+    in
+    {
+      inherit reason;
+      claim = if reason == null then secret else null;
+    };
 
   # A `sources` entry: a reference with the claim it resolves to, or a null
   # claim when a check rejects it.
-  toSource =
-    config: reference:
-    let
-      result = config.contracts.resolve reference;
-    in
-    {
-      inherit (reference)
-        id
-        kind
-        node
-        service
-        ;
-      claim = if isResolvable result then result.claim else null;
-    };
-
-  # Why a reference does not resolve, or null when it does.
-  referenceReason =
-    config: reference:
-    let
-      result = config.contracts.resolve reference;
-      references = "it references `${referenceLabelOf reference}`";
-    in
-    if result.reason != null then
-      "${references}: ${result.reason}"
-    else if !isResolvable result then
-      "${references}, which is copied or derived itself; reference a provided or generated secret"
-    else
-      null;
+  toSource = config: value: reference: {
+    inherit (reference)
+      id
+      kind
+      node
+      service
+      ;
+    inherit (resolveReference config value reference) claim;
+  };
 
   # `types.unique` turns into `types.uniq`, losing its message, when the
   # module system substitutes the submodules of an option it wraps.
@@ -115,8 +119,8 @@ in
         generators = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           description = ''
-            The generators a secret's `generated` or `derived` value may
-            name, such as `alnum`.
+            The generators a secret's `generated` value may name, such
+            as `alnum`.
           '';
           example = [
             "alnum"
@@ -185,7 +189,9 @@ in
         readReason
         generatorReason
       ]
-      ++ map (referenceReason config) (referencesOf claim.value)
+      ++ map (reference: (resolveReference config claim.value reference).reason) (
+        referencesOf claim.value
+      )
     );
 
   claim =
@@ -233,13 +239,32 @@ in
               '';
             };
             generated = lib.mkOption {
-              type = lib.types.str;
+              type = lib.types.submodule {
+                options = {
+                  generator = lib.mkOption {
+                    type = lib.types.str;
+                    description = ''
+                      The generator that makes the value, such as `alnum`,
+                      or `basic-auth` from the secrets in `from`. A backend
+                      adapter turns it into the backend's generator.
+                    '';
+                    example = "alnum";
+                  };
+                  from = lib.mkOption {
+                    type = lib.types.listOf referenceType;
+                    default = [ ];
+                    description = ''
+                      The secrets the generator makes the value from, in
+                      order, each a reference `{ node; service; id; }`, such
+                      as another secret's `ref`. Empty for a generator that
+                      reads no other secret.
+                    '';
+                  };
+                };
+              };
               description = ''
-                The generator that makes the value, such as `alnum`, when
-                the service makes its own value. A backend adapter turns it
-                into the backend's generator.
+                A value a generator makes, alone or from other secrets.
               '';
-              example = "alnum";
             };
             copied = lib.mkOption {
               type = referenceType;
@@ -248,44 +273,19 @@ in
                 `{ node; service; id; }`, such as another secret's `ref`.
               '';
             };
-            derived = lib.mkOption {
-              type = lib.types.submodule {
-                options = {
-                  generator = lib.mkOption {
-                    type = lib.types.str;
-                    description = ''
-                      The generator that makes the value from the secrets
-                      in `from`, such as `basic-auth`.
-                    '';
-                    example = "basic-auth";
-                  };
-                  from = lib.mkOption {
-                    type = lib.types.listOf referenceType;
-                    default = [ ];
-                    description = ''
-                      The secrets the generator makes the value from, in
-                      order, each a reference `{ node; service; id; }`, such
-                      as another secret's `ref`.
-                    '';
-                  };
-                };
-              };
-              description = ''
-                A value a generator makes from the secrets it references.
-              '';
-            };
           };
           default.provided = { };
           description = ''
             Where the secret's value comes from: `provided = { }`, the
             default, when a person or another party provides it,
-            `generated = "<generator>"` when the service makes it,
-            `copied = <reference>` for a copy of one other secret, or
-            `derived = { generator; from; }` when a generator makes it from
-            the secrets `from` references. A reference names
-            `contracts.node` or a node in `contracts.nodes`, and the core
-            resolves it into `sources`. A node switches a module's
-            default-priority tag by writing another at normal priority.
+            `generated = { generator; from; }` when a generator makes it,
+            alone or from the secrets `from` references, or
+            `copied = <reference>` for a copy of one other secret. A
+            reference names `contracts.node` or a node in `contracts.nodes`,
+            and the core resolves it into `sources`. A copy reads any secret
+            but a copy, and a generator only secrets that reference none. A
+            node switches a module's default-priority tag by writing another
+            at normal priority.
           '';
           example.copied = {
             node = "metrics";
@@ -296,28 +296,27 @@ in
         sources = lib.mkOption {
           type = lib.types.listOf lib.types.raw;
           readOnly = true;
-          default = map (toSource topConfig) (referencesOf config.value);
-          defaultText = lib.literalMD "the references of a `copied` or `derived` value, each with the claim it resolves to";
+          default = map (toSource topConfig config.value) (referencesOf config.value);
+          defaultText = lib.literalMD "the references of a `copied` value or a `generated` value's `from`, each with the claim it resolves to";
           description = ''
-            The references of a `copied` value, or those of a `derived`
+            The reference of a `copied` value, or those of a `generated`
             value's `from` in order, each as
             `{ node; kind; service; id; claim; }`, where `claim` is the
             claim-set entry of the secret it names, read from the node
             collection, or null when a check rejects the reference. Empty
-            for a `provided` or `generated` value. A backend adapter reads
-            the references from it rather than resolving them itself.
+            for a `provided` value. A backend adapter reads the references
+            from it rather than resolving them itself.
           '';
         };
         generator = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           readOnly = true;
-          default = config.value.generated or config.value.derived.generator or null;
-          defaultText = lib.literalMD "the generator of a `generated` or `derived` value, or null";
+          default = config.value.generated.generator or null;
+          defaultText = lib.literalMD "the generator of a `generated` value, or null";
           description = ''
-            The generator that makes the secret's value: a `generated`
-            value's, or a `derived` value's `generator`. Null for a
-            `provided` or `copied` value. A backend adapter reads it rather
-            than the value's tags.
+            The generator that makes the secret's value, a `generated`
+            value's `generator`. Null for a `provided` or `copied` value. A
+            backend adapter reads it rather than the value's tags.
           '';
         };
         unit = lib.mkOption {

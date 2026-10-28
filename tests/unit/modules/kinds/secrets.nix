@@ -58,7 +58,9 @@ let
 
   # A telegraf service generating its token, and a store service copying
   # the secrets its references name.
-  telegraf = service "telegraf" { static.user = "telegraf"; } { token.value.generated = "alnum"; };
+  telegraf = service "telegraf" { static.user = "telegraf"; } {
+    token.value.generated.generator = "alnum";
+  };
   store = service "influxdb" { static.user = "influxdb2"; };
   remoteToken = {
     node = "metrics";
@@ -77,13 +79,13 @@ let
 
   # Influxdb receiving `references` as a receiver writes its claims from
   # shared data: one copy of each, keyed by its claim name, and an
-  # htpasswd derived from all.
+  # htpasswd generated from all.
   receiving =
     references:
     store (
       contractsLib.copiesOf references
       // {
-        htpasswd.value.derived = {
+        htpasswd.value.generated = {
           generator = "basic-auth";
           from = references;
         };
@@ -112,7 +114,7 @@ let
     nodes;
   sourceNamesOf = secret: map (source: source.claim.name) secret.sources;
   # What a receiving node holds: the sources of each copy, by id, and of
-  # its derived htpasswd.
+  # its htpasswd.
   receivedBy =
     node:
     let
@@ -120,7 +122,7 @@ let
     in
     {
       copies = lib.mapAttrs (_: sourceNamesOf) (removeAttrs secrets [ "htpasswd" ]);
-      derived = sourceNamesOf secrets.htpasswd;
+      htpasswd = sourceNamesOf secrets.htpasswd;
     };
 in
 {
@@ -220,15 +222,10 @@ in
     };
   };
 
-  testSecretNamesTheGeneratorOfItsValue = {
-    expr = (secretOf [ ] { static.user = "svc"; } { value.generated = "alnum"; }).value;
-    expected.generated = "alnum";
-  };
-
-  testDerivedValueReferencesNoSecretsByDefault = {
-    expr = (secretOf [ ] { static.user = "svc"; } { value.derived.generator = "basic-auth"; }).value;
-    expected.derived = {
-      generator = "basic-auth";
+  testGeneratedValueReferencesNoSecretsByDefault = {
+    expr = (secretOf [ ] { static.user = "svc"; } { value.generated.generator = "alnum"; }).value;
+    expected.generated = {
+      generator = "alnum";
       from = [ ];
     };
   };
@@ -239,19 +236,13 @@ in
   };
 
   testGeneratedSecretHasItsValuesGenerator = {
-    expr = (secretOf [ ] { static.user = "svc"; } { value.generated = "alnum"; }).generator;
+    expr = (secretOf [ ] { static.user = "svc"; } { value.generated.generator = "alnum"; }).generator;
     expected = "alnum";
   };
 
   testCopiedSecretHasNoGenerator = {
     expr = (secretOf [ ] { static.user = "svc"; } { value.copied = remoteToken; }).generator;
     expected = null;
-  };
-
-  testDerivedSecretHasItsValuesGenerator = {
-    expr =
-      (secretOf [ ] { static.user = "svc"; } { value.derived.generator = "basic-auth"; }).generator;
-    expected = "basic-auth";
   };
 
   testNodeWritesProvidedOverADefaultGenerated = {
@@ -261,7 +252,7 @@ in
           contracts.services.svc = contractsLib.mkDefaultContract {
             enable = true;
             identity.static.user = "svc";
-            secrets.key.value.generated = "alnum";
+            secrets.key.value.generated.generator = "alnum";
           };
         }
         { contracts.services.svc.secrets.key.value.provided = { }; }
@@ -276,13 +267,35 @@ in
           contracts.services.svc = contractsLib.mkDefaultContract {
             enable = true;
             identity.static.user = "svc";
-            secrets.key.value.generated = "alnum";
+            secrets.key.value.generated.generator = "alnum";
           };
         }
         { contracts.services.svc.secrets.key.value.copied = remoteToken; }
       ]).contracts.claimSets.secrets.svc.key.value;
     expected.copied = remoteToken // {
       kind = "secrets";
+    };
+  };
+
+  testNodeAddsReferencesToADefaultGeneratedSecret = {
+    expr =
+      (evaluate [
+        onStore
+        {
+          contracts.services.influxdb = contractsLib.mkDefaultContract {
+            enable = true;
+            identity.static.user = "influxdb2";
+            secrets.htpasswd.value.generated.generator = "basic-auth";
+          };
+        }
+        (store {
+          password = { };
+          htpasswd.value.generated.from = [ (storeSecret "password") ];
+        })
+      ]).contracts.claimSets.secrets.influxdb.htpasswd.value;
+    expected.generated = {
+      generator = "basic-auth";
+      from = [ (storeSecret "password" // { kind = "secrets"; }) ];
     };
   };
 
@@ -295,13 +308,13 @@ in
     expr =
       (secretOf [
         { contracts.services.svc.secrets.key.value.provided = { }; }
-      ] { static.user = "svc"; } { value.generated = "alnum"; }).value;
+      ] { static.user = "svc"; } { value.generated.generator = "alnum"; }).value;
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value` is defined both as `generated` and `provided`";
   };
 
   testMisspeltValueTagIsATypeError = {
     expr = (secretOf [ ] { static.user = "svc"; } { value.generate = "alnum"; }).value;
-    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value' is not of type `attribute-tagged union with choices: copied, derived, generated, provided'";
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value' is not of type `attribute-tagged union with choices: copied, generated, provided'";
   };
 
   testSecretNamingAGeneratorTheBackendLacksFailsItsCheck =
@@ -313,7 +326,8 @@ in
           "hex"
         ];
       };
-      generating = generator: service "svc" { static.user = "svc"; } { key.value.generated = generator; };
+      generating =
+        generator: service "svc" { static.user = "svc"; } { key.value.generated = { inherit generator; }; };
     in
     {
       expr = {
@@ -330,10 +344,6 @@ in
           (generating "alnum")
         ];
         withoutABackend = failures [ (generating "alnm") ];
-        derived = failures [
-          alnumAndHex
-          (service "svc" { static.user = "svc"; } { key.value.derived.generator = "basic-auth"; })
-        ];
       };
       expected = {
         unknown = [
@@ -344,9 +354,6 @@ in
           "nixos-contracts: secrets claim `svc.key`: the secret backend provides no generator `alnum`."
         ];
         withoutABackend = [ ];
-        derived = [
-          "nixos-contracts: secrets claim `svc.key`: the secret backend provides no generator `basic-auth`; name one of `alnum`, `hex`."
-        ];
       };
     };
 
@@ -380,15 +387,15 @@ in
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.copied\\.service' is not of type `string of lowercase letters, digits and hyphens'";
   };
 
-  testDerivedReferenceOfAnotherKindIsATypeError = {
+  testGeneratorReferenceOfAnotherKindIsATypeError = {
     expr =
       (secretOf [ ] { static.user = "svc"; } {
-        value.derived = {
+        value.generated = {
           generator = "basic-auth";
           from = [ (remoteToken // { kind = "binds"; }) ];
         };
       }).value;
-    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.derived\\.from[^\n]*\\.kind' is not of type";
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.generated\\.from[^\n]*\\.kind' is not of type";
   };
 
   testSecretReferenceByClaimNameIsATypeError = {
@@ -402,19 +409,6 @@ in
         value.copied = removeAttrs remoteToken [ "node" ];
       }).value;
     expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.value\\.copied\\.node' was accessed but has no value defined";
-  };
-
-  testDerivedValueWithoutReferencesPassesTheCheck = {
-    expr = failures [
-      {
-        contracts.kinds.secrets.backend = {
-          path = backendPath;
-          generators = [ "basic-auth" ];
-        };
-      }
-      (service "svc" { static.user = "svc"; } { key.value.derived.generator = "basic-auth"; })
-    ];
-    expected = [ ];
   };
 
   testSecretGeneratorIsReadOnly = {
@@ -676,10 +670,10 @@ in
         metrics = [ telegraf ];
         store = [
           (store {
-            origin.value.generated = "alnum";
+            origin.value.generated.generator = "alnum";
             remote.value.copied = remoteToken;
             local.value.copied = storeSecret "origin";
-            derived.value.derived = {
+            hashes.value.generated = {
               generator = "basic-auth";
               from = [
                 (storeSecret "origin")
@@ -696,13 +690,13 @@ in
       expr = {
         remote = namesOf secrets.influxdb.remote;
         local = namesOf secrets.influxdb.local;
-        derived = namesOf secrets.influxdb.derived;
+        hashes = namesOf secrets.influxdb.hashes;
         inherit (nodes.store.config.contracts) failures;
       };
       expected = {
         remote = [ "metrics_secrets_telegraf_token" ];
         local = [ "store_secrets_influxdb_origin" ];
-        derived = [
+        hashes = [
           "store_secrets_influxdb_origin"
           "metrics_secrets_telegraf_token"
         ];
@@ -710,10 +704,10 @@ in
       };
     };
 
-  testProvidedOrGeneratedSecretHasNoSources = {
+  testSecretReferencingNoSecretsHasNoSources = {
     expr = map (value: (secretOf [ ] { static.user = "svc"; } { inherit value; }).sources) [
       { provided = { }; }
-      { generated = "alnum"; }
+      { generated.generator = "alnum"; }
     ];
     expected = [
       [ ]
@@ -726,7 +720,7 @@ in
       map (reference: reference.claim.name)
         (evaluate [
           onStore
-          (store { origin.value.generated = "alnum"; })
+          (store { origin.value.generated.generator = "alnum"; })
           (
             { config, ... }:
             {
@@ -803,7 +797,7 @@ in
     expr = failures [
       onStore
       (store {
-        hashes.value.derived = {
+        hashes.value.generated = {
           generator = "basic-auth";
           from = [
             (storeSecret "a")
@@ -818,31 +812,105 @@ in
     ];
   };
 
-  testReferenceToACopiedOrDerivedSecretFailsItsCheck = {
+  testCopyReadsAnySecretButACopy =
+    let
+      config = evaluate [
+        onStore
+        (store {
+          key = { };
+          origin.value.generated.generator = "alnum";
+          hashes.value.generated = {
+            generator = "basic-auth";
+            from = [ (storeSecret "origin") ];
+          };
+          copy-of-key.value.copied = storeSecret "key";
+          copy-of-origin.value.copied = storeSecret "origin";
+          copy-of-hashes.value.copied = storeSecret "hashes";
+        })
+      ];
+      inherit (config.contracts.claimSets.secrets) influxdb;
+    in
+    {
+      expr = {
+        key = sourceNamesOf influxdb.copy-of-key;
+        origin = sourceNamesOf influxdb.copy-of-origin;
+        hashes = sourceNamesOf influxdb.copy-of-hashes;
+        inherit (config.contracts) failures;
+      };
+      expected = {
+        key = [ "store_secrets_influxdb_key" ];
+        origin = [ "store_secrets_influxdb_origin" ];
+        hashes = [ "store_secrets_influxdb_hashes" ];
+        failures = [ ];
+      };
+    };
+
+  testCopyOfACopyFailsItsCheck = {
     expr = failures [
       onStore
       (store {
-        origin.value.generated = "alnum";
+        origin = { };
         copy.value.copied = storeSecret "origin";
-        hashes.value.derived = {
+        chained.value.copied = storeSecret "copy";
+      })
+    ];
+    expected = [
+      "nixos-contracts: secrets claim `influxdb.chained`: it references `store:secrets.influxdb.copy`, which is a copy of `store:secrets.influxdb.origin`; reference that secret instead."
+    ];
+  };
+
+  testGeneratorReadsOnlySecretsThatReferenceNone = {
+    expr = failures [
+      onStore
+      (store {
+        key = { };
+        origin.value.generated.generator = "alnum";
+        hashes.value.generated = {
           generator = "basic-auth";
           from = [ (storeSecret "origin") ];
         };
-        chained.value.copied = storeSecret "copy";
-        rehashed.value.derived = {
+        copy.value.copied = storeSecret "origin";
+        rehashed.value.generated = {
           generator = "basic-auth";
           from = [
+            (storeSecret "key")
             (storeSecret "origin")
             (storeSecret "hashes")
+            (storeSecret "copy")
           ];
         };
       })
     ];
     expected = [
-      "nixos-contracts: secrets claim `influxdb.chained`: it references `store:secrets.influxdb.copy`, which is copied or derived itself; reference a provided or generated secret."
-      "nixos-contracts: secrets claim `influxdb.rehashed`: it references `store:secrets.influxdb.hashes`, which is copied or derived itself; reference a provided or generated secret."
+      "nixos-contracts: secrets claim `influxdb.rehashed`: it references `store:secrets.influxdb.hashes`, which is generated from other secrets; a generator reads only secrets that reference none."
+      "nixos-contracts: secrets claim `influxdb.rehashed`: it references `store:secrets.influxdb.copy`, which is a copy of `store:secrets.influxdb.origin`; a generator reads only secrets that reference none."
     ];
   };
+
+  testGeneratorsReadingEachOthersSecretsFailTheirChecks =
+    let
+      hashesOf = reference: {
+        hashes.value.generated = {
+          generator = "basic-auth";
+          from = [ reference ];
+        };
+      };
+      nodes = nodesOf {
+        metrics = [ (service "telegraf" { static.user = "telegraf"; } (hashesOf (storeSecret "hashes"))) ];
+        store = [ (store (hashesOf (remoteToken // { id = "hashes"; }))) ];
+      };
+    in
+    {
+      expr = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
+      expected = {
+        metrics = [
+          "nixos-contracts: secrets claim `telegraf.hashes`: it references `store:secrets.influxdb.hashes`, which is generated from other secrets; a generator reads only secrets that reference none."
+        ];
+        store = [
+          "nixos-contracts: secrets claim `influxdb.hashes`: it references `metrics:secrets.telegraf.hashes`, which is generated from other secrets; a generator reads only secrets that reference none."
+        ];
+      };
+    };
 
   testCopiesReferencingEachOtherFailTheirChecks =
     let
@@ -859,10 +927,10 @@ in
       expr = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
       expected = {
         metrics = [
-          "nixos-contracts: secrets claim `telegraf.token`: it references `store:secrets.influxdb.token`, which is copied or derived itself; reference a provided or generated secret."
+          "nixos-contracts: secrets claim `telegraf.token`: it references `store:secrets.influxdb.token`, which is a copy of `metrics:secrets.telegraf.token`; reference that secret instead."
         ];
         store = [
-          "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`, which is copied or derived itself; reference a provided or generated secret."
+          "nixos-contracts: secrets claim `influxdb.token`: it references `metrics:secrets.telegraf.token`, which is a copy of `store:secrets.influxdb.token`; reference that secret instead."
         ];
       };
     };
@@ -887,7 +955,7 @@ in
         alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
         beta_secrets_telegraf_token = [ "beta_secrets_telegraf_token" ];
       };
-      derived = [
+      htpasswd = [
         "alpha_secrets_telegraf_token"
         "beta_secrets_telegraf_token"
       ];
@@ -916,14 +984,14 @@ in
     expected = [
       {
         copies.alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
-        derived = [ "alpha_secrets_telegraf_token" ];
+        htpasswd = [ "alpha_secrets_telegraf_token" ];
       }
       {
         copies = {
           alpha_secrets_telegraf_token = [ "alpha_secrets_telegraf_token" ];
           beta_secrets_telegraf_token = [ "beta_secrets_telegraf_token" ];
         };
-        derived = [
+        htpasswd = [
           "alpha_secrets_telegraf_token"
           "beta_secrets_telegraf_token"
         ];
