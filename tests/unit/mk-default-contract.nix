@@ -1,10 +1,11 @@
 {
-  contracts,
   contractsLib,
+  helpers,
   lib,
+  ...
 }:
 let
-  inherit (contracts) evaluate;
+  inherit (helpers.contracts) evaluate;
   inherit (contractsLib) mkDefaultContract;
 
   chrony = mkDefaultContract {

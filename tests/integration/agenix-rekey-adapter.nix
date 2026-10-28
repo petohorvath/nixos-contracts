@@ -1,14 +1,15 @@
 {
   contractsLib,
+  helpers,
   lib,
-  nixos,
-  nodesWith,
-  contractsModule,
-  adapter,
-  backends,
+  ...
 }:
 let
+  inherit (helpers) nixos nodesWith;
   inherit (nixos) evaluate;
+  contractsModule = nixos.nixosModules.default;
+  adapter = nixos.nixosModules.agenix-rekey;
+  backends = nixos.agenixRekeyBackends;
 
   services = {
     contracts.services = {
@@ -38,7 +39,7 @@ let
         secretsDir = ./.;
         generatedSecretsDir = ./generated;
       };
-      secrets.alloy_password.rekeyFile = ./agenix-rekey.nix;
+      secrets.alloy_password.rekeyFile = ./agenix-rekey-adapter.nix;
     };
   };
   evaluateWithAdapter = modules: evaluate (backends ++ [ adapter ] ++ modules);
@@ -288,7 +289,7 @@ in
         services
         values
       ]).age.secrets.alloy_password.rekeyFile;
-    expected = ./agenix-rekey.nix;
+    expected = ./agenix-rekey-adapter.nix;
   };
 
   testProvidedSecretsFileSetUnderItsBackendNameIsOnTheAdaptersEntry = {
@@ -302,7 +303,7 @@ in
               age.secrets =
                 lib.genAttrs (map contractsLib.backendNameOf (lib.attrValues config.contracts.services.kea.secrets))
                   (_: {
-                    rekeyFile = ./agenix-rekey.nix;
+                    rekeyFile = ./agenix-rekey-adapter.nix;
                   });
             }
           )
@@ -314,7 +315,7 @@ in
       };
     expected = {
       group = "kea";
-      rekeyFile = ./agenix-rekey.nix;
+      rekeyFile = ./agenix-rekey-adapter.nix;
       failures = [ ];
     };
   };
@@ -565,7 +566,7 @@ in
               })
               {
                 age.secrets = {
-                  influxdb_copy.rekeyFile = ./agenix-rekey.nix;
+                  influxdb_copy.rekeyFile = ./agenix-rekey-adapter.nix;
                   influxdb_hashes.generator.script = "hex";
                 };
               }
@@ -580,7 +581,7 @@ in
         inherit (config.age.secrets.influxdb_hashes.generator) script;
       };
     expected = {
-      rekeyFile = ./agenix-rekey.nix;
+      rekeyFile = ./agenix-rekey-adapter.nix;
       script = "hex";
     };
   };

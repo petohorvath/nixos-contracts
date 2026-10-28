@@ -1,5 +1,5 @@
 # Typed service contracts for one NixOS configuration. The `dev` partition
-# supplies development tools and checks.
+# supplies development tools, checks, and the `tests` output.
 {
   description = "Typed service contracts for one NixOS configuration";
 
@@ -8,6 +8,16 @@
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+    # The flake-parts module that runs the tests; nix-unit itself comes
+    # from nixpkgs.
+    nix-unit = {
+      url = "github:nix-community/nix-unit";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        treefmt-nix.follows = "";
+        nix-github-actions.follows = "";
+      };
     };
     # Backends of the adapters. Only the adapter tests evaluate them.
     agenix = {

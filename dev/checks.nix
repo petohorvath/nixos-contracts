@@ -1,49 +1,43 @@
-{
-  formatter,
-  inputs,
-  pkgs,
-  system,
-}:
+# The checks that run source tools over the repository; nix-unit's module
+# adds the `nix-unit` check.
+{ formatter, pkgs }:
 let
-  rekey = inputs.agenix-rekey.inputs;
-  hooks = rekey.pre-commit-hooks.inputs;
-  # The sandbox cannot fetch, so every locked input comes from the store.
-  overrides = {
-    inherit (inputs)
-      agenix
-      agenix-rekey
-      flake-parts
-      nix-libnet
-      nixpkgs
-      preservation
-      ;
-    "agenix-rekey/devshell" = rekey.devshell;
-    "agenix-rekey/flake-compat" = rekey.flake-compat;
-    "agenix-rekey/pre-commit-hooks" = rekey.pre-commit-hooks;
-    "agenix-rekey/pre-commit-hooks/flake-compat" = hooks.flake-compat;
-    "agenix-rekey/pre-commit-hooks/gitignore" = hooks.gitignore;
-    "agenix-rekey/treefmt-nix" = rekey.treefmt-nix;
-  };
-  overrideFlags = pkgs.lib.concatStringsSep " " (
-    pkgs.lib.mapAttrsToList (name: input: "--override-input ${name} ${input}") overrides
-  );
+  sourceDir = pkgs.lib.cleanSource ../.;
+  runSourceCheck =
+    name: packages: script:
+    pkgs.runCommand "contracts-${name}" { nativeBuildInputs = packages; } ''
+      cp -R ${sourceDir} source
+      chmod -R u+w source
+      cd source
+      ${script}
+      touch "$out"
+    '';
 in
-import ../tests {
-  inherit formatter pkgs;
-}
-// {
-  # Run the nix-unit suite from the `tests` output with the selected inputs.
-  evaluation =
-    pkgs.runCommand "contracts-evaluation"
-      {
-        nativeBuildInputs = [ pkgs.nix-unit ];
-      }
+{
+  formatting = runSourceCheck "formatting" [ formatter ] "contracts-fmt --ci";
+  lint =
+    runSourceCheck "lint"
+      [
+        pkgs.statix
+        pkgs.deadnix
+        pkgs.actionlint
+      ]
       ''
-        export HOME=$(realpath .)
-        # NixOS evaluation writes to the store, so use a writable chroot store.
-        export NIX_REMOTE=$HOME/storedata
-        nix-unit --extra-experimental-features flakes \
-          --flake ${inputs.self}#tests.${system} ${overrideFlags}
-        touch "$out"
+        statix check .
+        deadnix --fail .
+        # A shipped adapter receives the public library, so a parent path,
+        # which leads out of its directory, reaches an internal helper. `...`
+        # is fine.
+        parentPath='(^|[^.])\.\.([^.]|$)'
+        if grep -rHnE --include='*.nix' "$parentPath" nixos/adapters; then
+          echo "lint: a shipped adapter names a parent path;" \
+            "use the contractsLib it receives." >&2
+          exit 1
+        fi
+        shopt -s nullglob
+        workflows=(.github/workflows/*.yml .github/workflows/*.yaml)
+        if (( ''${#workflows[@]} )); then
+          actionlint "''${workflows[@]}"
+        fi
       '';
 }

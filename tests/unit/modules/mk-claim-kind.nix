@@ -1,10 +1,11 @@
 {
-  contracts,
   contractsLib,
+  helpers,
   lib,
+  ...
 }:
 let
-  inherit (contracts) evaluate failures;
+  inherit (helpers.contracts) evaluate failures;
   inherit (contractsLib) mkClaimKind;
 
   databases = mkClaimKind {

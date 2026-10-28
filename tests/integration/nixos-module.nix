@@ -1,6 +1,7 @@
-{ nixos, module }:
+{ helpers, ... }:
 let
-  inherit (nixos) evaluate evaluateWithoutNode;
+  inherit (helpers.nixos) evaluate evaluateWithoutNode;
+  module = helpers.nixos.nixosModules.default;
 
   web = name: {
     contracts.services.${name} = {

@@ -1,11 +1,8 @@
-{
-  lib,
-  nixos,
-  adapter,
-  backend,
-}:
+{ helpers, lib, ... }:
 let
-  inherit (nixos) evaluate failures;
+  inherit (helpers.nixos) evaluate failures;
+  adapter = helpers.nixos.nixosModules.preservation;
+  backend = helpers.nixos.backends.preservation;
 
   influxdb = {
     contracts.kinds.mounts.classes = [
