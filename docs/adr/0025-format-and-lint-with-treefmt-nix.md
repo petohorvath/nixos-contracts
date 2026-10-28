@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Format and lint with treefmt-nix
