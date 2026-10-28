@@ -28,11 +28,24 @@ Add the flake as an input:
 ```nix
 inputs.nixos-contracts = {
   url = "github:petohorvath/nixos-contracts";
-  inputs.nixpkgs.follows = "nixpkgs";
+  inputs = {
+    nixpkgs.follows = "nixpkgs";
+    # Only where this flake has the input.
+    flake-parts.follows = "flake-parts";
+    nix-libnet.follows = "nix-libnet";
+    # Development only.
+    nix-unit.follows = "";
+    treefmt-nix.follows = "";
+    agenix.follows = "";
+    agenix-rekey.follows = "";
+    preservation.follows = "";
+  };
 };
 ```
 
-The `nix-unit` input serves only the project's tests and locks no second Nixpkgs. Leave it out with `inputs.nixos-contracts.inputs.nix-unit.follows = "";`.
+The flake builds its outputs with `flake-parts`, and its modules use `nix-libnet`. Follow each from a flake that already has it as an input, and drop the line otherwise. The flake pins `nix-libnet` to the revision its tests run against, so following it uses the consumer's revision instead.
+
+The other inputs serve only the library's tests and formatter, and the adapters never read them, so the block leaves them out.
 
 The flake exports:
 
