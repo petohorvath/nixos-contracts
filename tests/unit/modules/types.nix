@@ -1,4 +1,4 @@
-{ contractsLib, lib }:
+{ contractsLib, lib, ... }:
 let
   valueOf =
     type: value:

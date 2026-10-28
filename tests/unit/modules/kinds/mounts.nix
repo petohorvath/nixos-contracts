@@ -1,6 +1,6 @@
-{ contracts }:
+{ helpers, ... }:
 let
-  inherit (contracts) evaluate failures;
+  inherit (helpers.contracts) evaluate failures;
 
   classes = {
     contracts.kinds.mounts.classes = [

@@ -1,10 +1,11 @@
 {
-  contracts,
   contractsLib,
+  helpers,
   lib,
+  ...
 }:
 let
-  inherit (contracts) evaluate nodesOf;
+  inherit (helpers.contracts) evaluate nodesOf;
   inherit (contractsLib)
     backendNameOf
     claimNameOf

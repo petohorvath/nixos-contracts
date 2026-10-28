@@ -1,14 +1,15 @@
 {
   contractsLib,
+  helpers,
   lib,
-  nixos,
-  nodesWith,
-  adapter,
-  backends,
-  backendAdapter,
+  ...
 }:
 let
-  inherit (nixos) evaluate failures;
+  inherit (helpers) nodesWith;
+  inherit (helpers.nixos) evaluate failures;
+  adapter = helpers.nixos.nixosModules.systemd-credentials;
+  backends = helpers.nixos.agenixRekeyBackends;
+  backendAdapter = helpers.nixos.nixosModules.agenix-rekey;
 
   alloy = {
     contracts.services.alloy = {

@@ -1,10 +1,11 @@
 {
-  contracts,
   contractsLib,
+  helpers,
   lib,
+  ...
 }:
 let
-  inherit (contracts) evaluate failures nodesOf;
+  inherit (helpers.contracts) evaluate failures nodesOf;
 
   service = name: identity: secrets: {
     contracts.services.${name} = {

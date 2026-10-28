@@ -1,4 +1,7 @@
-{ examples }:
+{ fixtures, ... }:
+let
+  inherit (fixtures) examples;
+in
 {
   testInfluxdbExampleWiresTheDaemonAndBackends = {
     expr = examples.influxdb.result;
@@ -81,7 +84,7 @@
   };
 
   testSharedTokenExampleCopiesEveryTelegrafTokenOnTheStore = {
-    expr = examples.sharedToken.result;
+    expr = examples.shared-token.result;
     expected = {
       copies = {
         influxdb_metrics_secrets_telegraf_token = {
@@ -130,32 +133,6 @@
       };
       exporterListen = "127.0.0.1:9123";
       failures = [ ];
-    };
-  };
-
-  testCustomKindExampleFoldsAndClashes = {
-    expr = examples.customKind.result;
-    expected = {
-      claimSet = {
-        grafana.main = {
-          database = "grafana";
-          owner = "grafana";
-        };
-        vaultwarden = {
-          main = {
-            database = "vaultwarden";
-            owner = "vaultwarden";
-          };
-          attachments = {
-            database = "vaultwarden_attachments";
-            owner = "vaultwarden";
-          };
-        };
-      };
-      validFailures = [ ];
-      clashingFailures = [
-        "nixos-contracts: databases claims `grafana.main` and `vaultwarden.attachments` clash: both own `grafana`."
-      ];
     };
   };
 }

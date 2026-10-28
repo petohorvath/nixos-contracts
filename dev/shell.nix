@@ -6,6 +6,7 @@
   mkShellNoCC,
   nil,
   nix,
+  nix-unit,
   nixfmt,
   prettier,
   shfmt,
@@ -14,6 +15,7 @@
 mkShellNoCC {
   packages = [
     nix
+    nix-unit
     nil
     nixfmt
     statix

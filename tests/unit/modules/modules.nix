@@ -1,6 +1,6 @@
-{ lib, module }:
+{ helpers, lib, ... }:
 let
-  inherit ((lib.evalModules { modules = [ module ]; }).options.contracts) claimSets;
+  inherit ((helpers.contracts.optionsOf [ ]).contracts) claimSets;
 in
 {
   testShippedKindsDeclareTheirOptionsInTheirFiles = {

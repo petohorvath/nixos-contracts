@@ -1,6 +1,6 @@
-{ contracts }:
+{ helpers, ... }:
 let
-  inherit (contracts) evaluate failures;
+  inherit (helpers.contracts) evaluate failures;
 
   service = name: binds: {
     contracts.services.${name} = {

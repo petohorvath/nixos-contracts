@@ -1,6 +1,6 @@
-{ contracts, lib }:
+{ helpers, lib, ... }:
 let
-  inherit (contracts)
+  inherit (helpers.contracts)
     evaluate
     evaluateWithoutNode
     failures

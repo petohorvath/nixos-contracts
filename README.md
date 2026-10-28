@@ -32,6 +32,8 @@ inputs.nixos-contracts = {
 };
 ```
 
+The `nix-unit` input serves only the project's tests and locks no second Nixpkgs. Leave it out with `inputs.nixos-contracts.inputs.nix-unit.follows = "";`.
+
 The flake exports:
 
 - `nixosModules.default`: the contracts for a NixOS configuration, with their failed checks forwarded to `assertions`.
