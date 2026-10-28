@@ -1,6 +1,9 @@
 { inputs, ... }:
 {
-  imports = [ inputs.nix-unit.modules.flake.default ];
+  imports = [
+    inputs.nix-unit.modules.flake.default
+    inputs.treefmt-nix.flakeModule
+  ];
 
   perSystem =
     {
@@ -10,14 +13,11 @@
       ...
     }:
     {
-      formatter = pkgs.callPackage ./formatter.nix { };
+      treefmt.imports = [ ./treefmt.nix ];
       devShells.default = pkgs.callPackage ./shell.nix {
-        inherit (config) formatter;
+        treefmtShell = config.treefmt.build.devShell;
       };
-      checks = import ./checks.nix {
-        inherit pkgs;
-        inherit (config) formatter;
-      };
+      checks = import ./checks.nix { inherit pkgs; };
       nix-unit =
         let
           rekey = inputs.agenix-rekey.inputs;
@@ -36,6 +36,7 @@
               nix-unit
               nixpkgs
               preservation
+              treefmt-nix
               ;
             "agenix-rekey/devshell" = rekey.devshell;
             "agenix-rekey/flake-compat" = rekey.flake-compat;

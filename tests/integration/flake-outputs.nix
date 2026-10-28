@@ -67,9 +67,9 @@ in
   testRootChecksKeepTheirNames = {
     expr = lib.genAttrs systems (system: builtins.attrNames self.checks.${system});
     expected = lib.genAttrs systems (_: [
-      "formatting"
       "lint"
       "nix-unit"
+      "treefmt"
     ]);
   };
 

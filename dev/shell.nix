@@ -1,29 +1,19 @@
 {
-  actionlint,
-  deadnix,
-  formatter,
   git,
   mkShellNoCC,
   nil,
   nix,
   nix-unit,
-  nixfmt,
-  prettier,
-  shfmt,
   statix,
+  treefmtShell,
 }:
 mkShellNoCC {
+  inputsFrom = [ treefmtShell ];
   packages = [
     nix
     nix-unit
-    nil
-    nixfmt
-    statix
-    deadnix
     git
-    shfmt
-    prettier
-    actionlint
-    formatter
+    nil
+    statix
   ];
 }
