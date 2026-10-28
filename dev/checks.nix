@@ -1,30 +1,17 @@
-# The checks that run source tools over the repository; nix-unit's module
-# adds the `nix-unit` check.
-{ formatter, pkgs }:
-let
-  sourceDir = pkgs.lib.cleanSource ../.;
-  runSourceCheck =
-    name: packages: script:
-    pkgs.runCommand "contracts-${name}" { nativeBuildInputs = packages; } ''
-      cp -R ${sourceDir} source
-      chmod -R u+w source
-      cd source
-      ${script}
-      touch "$out"
-    '';
-in
+# statix, which treefmt cannot run correctly, and the repository's static
+# guards; nix-unit's module adds the `nix-unit` check and treefmt-nix's
+# module the `treefmt` check.
+{ pkgs }:
 {
-  formatting = runSourceCheck "formatting" [ formatter ] "contracts-fmt --ci";
   lint =
-    runSourceCheck "lint"
-      [
-        pkgs.statix
-        pkgs.deadnix
-        pkgs.actionlint
-      ]
+    pkgs.runCommand "contracts-lint"
+      {
+        src = ../.;
+        nativeBuildInputs = [ pkgs.statix ];
+      }
       ''
+        cd "$src"
         statix check .
-        deadnix --fail .
         # A shipped adapter receives the public library, so a parent path,
         # which leads out of its directory, reaches an internal helper. `...`
         # is fine.
@@ -34,10 +21,6 @@ in
             "use the contractsLib it receives." >&2
           exit 1
         fi
-        shopt -s nullglob
-        workflows=(.github/workflows/*.yml .github/workflows/*.yaml)
-        if (( ''${#workflows[@]} )); then
-          actionlint "''${workflows[@]}"
-        fi
+        touch "$out"
       '';
 }

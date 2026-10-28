@@ -10,7 +10,7 @@ Run `direnv allow` at the repository root after reviewing `.envrc`, or enter the
 nix develop --no-update-lock-file
 ```
 
-The shell supplies Nix, nix-unit, nil, nixfmt, statix, deadnix, Git, shfmt, Prettier, actionlint, and the root formatter.
+The shell supplies Nix, nix-unit, Git, nil, statix, and the root formatter as `treefmt`, with each program it runs, so `deadnix <file>` works on its own.
 
 ## Run checks
 
@@ -21,7 +21,7 @@ nix fmt --no-update-lock-file
 nix flake check --no-update-lock-file
 ```
 
-The checks are `nix-unit`, which runs every nix-unit suite, `formatting`, and `lint` (statix, deadnix, actionlint, and a rule that a shipped adapter names no parent path, since it receives the public library). To run the suites of one kind, or one suite, and report each case, run the shell's nix-unit on its attribute path under `tests.systems.<system>`:
+The checks are `nix-unit`, which runs every nix-unit suite, `treefmt`, and `lint` (statix and a rule that a shipped adapter names no parent path, since it receives the public library). To run the suites of one kind, or one suite, and report each case, run the shell's nix-unit on its attribute path under `tests.systems.<system>`:
 
 ```sh
 nix-unit --flake .#tests.systems.x86_64-linux.unit
@@ -35,6 +35,14 @@ nix-unit --flake .#tests.systems.x86_64-linux.unit.modules.kinds.binds --attr te
 ```
 
 Add `--override-input nixpkgs <flake-ref>` to run the suites against another nixpkgs.
+
+## Formatting and lint
+
+`nix fmt` runs treefmt as [treefmt-nix](https://github.com/numtide/treefmt-nix) configures it from [dev/treefmt.nix](../dev/treefmt.nix): nixfmt and deadnix for Nix, actionlint for the workflows, and Prettier with its default settings for Markdown, YAML and JSON, so an editor that formats on save gives the same result. `nix fmt -- <path>...` formats only the given files.
+
+deadnix runs with `--edit`, so `nix fmt` also removes dead code; review the diff before committing.
+
+The `treefmt` check runs the same programs on a copy of the source and fails when one changes a file or reports a finding it cannot fix; its build log shows the diff that `nix fmt` would make. statix runs in `lint` instead, since `statix fix` leaves the lints it cannot fix unreported; run `statix fix` in the shell for the ones it can.
 
 ## Test layout
 
@@ -51,4 +59,4 @@ Failure cases use nix-unit's `expectedError` and match the option path or librar
 
 ## CI and policy
 
-The [workflow](../.github/workflows/check.yml) calls the shared [nixos-project-policy](https://github.com/petohorvath/nixos-project-policy) check.
+The [workflow](../.github/workflows/check.yml) calls the shared [nixos-project-policy](https://github.com/petohorvath/nixos-project-policy) check. The policy also builds the checks with its stable and unstable nixpkgs pins, and treefmt-nix takes the tools from the nixpkgs in use, so a new tool release can fail those runs without a change in this repository.

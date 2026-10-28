@@ -19,6 +19,12 @@
         nix-github-actions.follows = "";
       };
     };
+    # Development only: the flake-parts module that formats and lints the
+    # repository; the tools come from nixpkgs.
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # Backends of the adapters. Only the adapter tests evaluate them.
     agenix = {
       url = "github:ryantm/agenix";
@@ -29,6 +35,7 @@
       inputs = {
         nixpkgs.follows = "nixpkgs";
         flake-parts.follows = "flake-parts";
+        treefmt-nix.follows = "treefmt-nix";
       };
     };
     preservation.url = "github:nix-community/preservation";
