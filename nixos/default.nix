@@ -29,7 +29,7 @@ let
         in
         {
           _file = file;
-          key = toString file;
+          key = file;
           imports = [ (import file contractsLib) ];
         }
       )
