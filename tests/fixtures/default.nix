@@ -18,9 +18,10 @@ let
   };
 in
 {
-  # Source files by name, for the suites that check where an option comes
-  # from.
+  # Source files by name, for the suites that check where an option or a
+  # module comes from.
   sourceFiles = {
+    generic = ../../modules/default.nix;
     core = ../../modules/core.nix;
     assertions = ../../nixos/assertions.nix;
     agenix-rekey = ../../nixos/adapters/agenix-rekey.nix;

@@ -16,9 +16,12 @@ let
   ];
 in
 {
-  # Identifies the module by its file, so it declares its options once
-  # however often it is imported.
-  key = toString ./default.nix;
+  # A caller applies this file to `{ libnet }`, so the module system gets
+  # no path to name or identify the module by. `_file` names it in
+  # diagnostics, and `key` keeps one copy, with its claim kinds, when
+  # several modules import it.
+  _file = ./default.nix;
+  key = ./default.nix;
 
   imports = [ ./core.nix ] ++ kinds;
 }
