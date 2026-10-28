@@ -11,7 +11,7 @@ The repository formats and lints its code as the devnix-labs code quality standa
 - **One configuration.** `dev/treefmt.nix` enables nixfmt, deadnix, actionlint and Prettier. Prettier runs with its defaults and no `.prettierrc.json`, so editors that format on save agree with `nix fmt`. treefmt-nix generates the formatter, the check and the shell's tools from it, replacing the `contracts-fmt` wrapper, `dev/treefmt.toml` and the hand-written `formatting` check.
 - **A `treefmt` check.** It replaces the `formatting` check. It runs every enabled program on the flake source and fails when one would change a file or reports a finding it cannot fix.
 - **statix and the adapter guard in `lint`.** treefmt-nix would run `statix fix`, which passes lints that it cannot fix, so `lint` runs `statix check` instead. The rule that a shipped adapter names no parent path stays in `lint`, since it guards the repository's own files. deadnix and actionlint move from `lint` to treefmt.
-- **A `treefmt-nix` root input.** Its `nixpkgs` follows the root one, so every program comes from the selected `nixpkgs`. nix-unit's own `treefmt-nix` input still follows nothing.
+- **A `treefmt-nix` root input.** Its `nixpkgs` follows the root one, so every program comes from the selected `nixpkgs`. agenix-rekey's own `treefmt-nix` input follows it, so the lock holds one copy, and nix-unit's still follows nothing.
 - **No shfmt.** It formatted only `.envrc`.
 
 ## Consequences

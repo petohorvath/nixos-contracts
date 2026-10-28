@@ -43,7 +43,6 @@
             "agenix-rekey/pre-commit-hooks" = rekey.pre-commit-hooks;
             "agenix-rekey/pre-commit-hooks/flake-compat" = hooks.flake-compat;
             "agenix-rekey/pre-commit-hooks/gitignore" = hooks.gitignore;
-            "agenix-rekey/treefmt-nix" = rekey.treefmt-nix;
           };
           enableSystemAgnostic = false;
           tests = {
