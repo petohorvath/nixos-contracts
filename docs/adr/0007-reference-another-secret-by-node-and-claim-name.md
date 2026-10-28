@@ -1,5 +1,5 @@
 ---
-status: superseded in part by ADR-0011, ADR-0012 and ADR-0013
+status: superseded in part by ADR-0011, ADR-0012, ADR-0013 and ADR-0026
 ---
 
 # Reference another secret by node and claim name

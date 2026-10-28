@@ -6,6 +6,6 @@
   contracts.services.telegraf = contractsLib.mkDefaultContract {
     enable = true;
     identity.static.user = "telegraf";
-    secrets.token.value.generated = "alnum";
+    secrets.token.value.generated.generator = "alnum";
   };
 }

@@ -144,7 +144,7 @@ Node identities, kind names and service names are non-empty, and made of lowerca
 A reference names one claim by its node, kind, service and id, `{ node; kind; service; id; }`, and always names its node, so it means the same claim on every node that reads it ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)). A claim's `ref` is its reference, built from `contracts.node` alone, so a module that names its own claim in another of its settings passes the `ref` rather than writing it out:
 
 ```nix
-secrets.htpasswd.value.derived.from = [ config.contracts.services.alloy.secrets.loki-password.ref ];
+secrets.htpasswd.value.generated.from = [ config.contracts.services.alloy.secrets.loki-password.ref ];
 ```
 
 nixos-contracts carries no reference between nodes. A node relates to another through references carried in shared data the fleet chooses, as [Relating nodes](#relating-nodes) shows, so no node writes into another node's options.
@@ -193,36 +193,35 @@ Two mounts clash when their paths are equal, ignoring a trailing slash. Nested p
 
 `contracts.services.<service>.secrets.<id>`: a runtime credential the service needs.
 
-| Field         | Type                                                                  | Default  |
-| ------------- | --------------------------------------------------------------------- | -------- |
-| `mode`        | a mode string                                                         | `"0440"` |
-| `owner`       | an account name                                                       | `"root"` |
-| `group`       | a group name                                                          | derived  |
-| `value`       | a [tag](#libtypestag): `provided`, `generated`, `copied` or `derived` | provided |
-| `sources`     | read-only, each reference of the value with its resolved claim        | derived  |
-| `generator`   | read-only, the generator of a `generated` or `derived` value, or null | derived  |
-| `unit`        | the unit the secret is delivered to, or null                          | derived  |
-| `delivered`   | read-only, whether the secret names a `unit`                          | derived  |
-| `backendPath` | read-only, where the backend installs the secret                      | derived  |
-| `path`        | read-only, where the daemon reads the secret                          | derived  |
+| Field         | Type                                                           | Default  |
+| ------------- | -------------------------------------------------------------- | -------- |
+| `mode`        | a mode string                                                  | `"0440"` |
+| `owner`       | an account name                                                | `"root"` |
+| `group`       | a group name                                                   | derived  |
+| `value`       | a [tag](#libtypestag): `provided`, `generated` or `copied`     | provided |
+| `sources`     | read-only, each reference of the value with its resolved claim | derived  |
+| `generator`   | read-only, the generator of a `generated` value, or null       | derived  |
+| `unit`        | the unit the secret is delivered to, or null                   | derived  |
+| `delivered`   | read-only, whether the secret names a `unit`                   | derived  |
+| `backendPath` | read-only, where the backend installs the secret               | derived  |
+| `path`        | read-only, where the daemon reads the secret                   | derived  |
 
-A secret holds no value. Its `value` says where the value comes from, as one of four tags ([ADR 0013](adr/0013-settle-a-tag-by-the-priority-of-its-definitions.md)):
+A secret holds no value. Its `value` says where the value comes from, as one of three tags ([ADR 0013](adr/0013-settle-a-tag-by-the-priority-of-its-definitions.md), [ADR 0026](adr/0026-make-a-secrets-value-by-one-generated-tag.md)):
 
 - `provided = { }`, the default: a person or another party provides it. `provided` takes no options.
-- `generated = "<generator>"`: the service makes its own value with the named generator, such as `alnum`. A backend adapter turns the generator into the backend's own.
+- `generated = { generator; from; }`: the named generator, such as `alnum`, makes the value from the secrets `from` references, in order. `from` defaults to `[ ]`, for a generator that reads no other secret. A backend adapter turns the generator into the backend's own.
 - `copied = <reference>`: the secret is a copy of the one secret the reference names. It reads the same value, owned, installed and delivered as its own claim says.
-- `derived = { generator; from; }`: the generator makes the value from the secrets `from` references, in order. `from` defaults to `[ ]`, for a generator that needs no other secret.
 
-A secret's `generator` is the generator its value names, whichever of `generated` and `derived` names it, or null for a `provided` or `copied` value, so a backend adapter reads it rather than the tags.
+A secret's `generator` is the generator a `generated` value names, or null for a `provided` or `copied` value, so a backend adapter reads it rather than the tags.
 
 ```nix
-secrets.admin-password.value.generated = "alnum";
+secrets.admin-password.value.generated.generator = "alnum";
 
 # A copy of a token the `metrics` node generates
 secrets.writer-token.value.copied = { node = "metrics"; service = "telegraf"; id = "token"; };
 
 # An htpasswd file the generator makes from two clients' passwords
-secrets.htpasswd.value.derived = {
+secrets.htpasswd.value.generated = {
   generator = "basic-auth";
   from = [
     { node = "grafana"; service = "grafana"; id = "loki-password"; }
@@ -233,9 +232,9 @@ secrets.htpasswd.value.derived = {
 
 Anything else about the value, such as a provided secret's encrypted file, is set on the backend under the claim's [backend name](#names) `<service>_<id>` ([ADR 0006](adr/0006-mark-a-secret-the-service-generates.md)). `value` settles by priority, so a node switches a module's tag by writing another at normal priority, which wins when the service module wrote the claim at default priority, such as through `lib.mkDefaultContract`: `value.provided = { };` makes a module's generated secret provided, and `value.copied = <reference>;` makes it a copy. Two tags written at one priority fail, naming the option, and a misspelt tag, such as `value.generate`, fails as a type error that lists the accepted tags.
 
-The references of `copied` and `derived.from` are [references](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }` ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)), so a reference of another kind fails as a type error at its definition. Each names `contracts.node` or a node in `contracts.nodes`. A value takes either one reference or a generator, so a copy of several secrets cannot be written.
+The references of `copied` and `generated.from` are [references](#references) of the type `lib.types.referenceTo "secrets"`, `{ node; service; id; }` ([ADR 0012](adr/0012-address-a-claim-by-an-absolute-reference.md)), so a reference of another kind fails as a type error at its definition. Each names `contracts.node` or a node in `contracts.nodes`. A value takes either one reference or a generator, so a copy of several secrets cannot be written.
 
-The core resolves the references into `sources`, the one of `copied` or those of `derived.from` in order, each as `{ node; kind; service; id; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). `sources` is empty for a `provided` or `generated` value. A backend adapter reads `sources` rather than resolving references itself, and finds a resolved claim's backend entry by the claim's `service` and `id`. A check fails, once per reference, for each reason [`contracts.resolve`](#contractsresolve) returns, and for a reference to a secret that is copied or derived itself, which also catches two copies referencing each other. The core reads a referenced node's claim set alone and does not follow a referenced secret's own references, so references across nodes, in either direction, evaluate without cycles. `derived.from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others.
+The core resolves the references into `sources`, the one of `copied` or those of `generated.from` in order, each as `{ node; kind; service; id; claim; }`: the reference with the claim-set entry of the secret it names, or a null `claim` when a check rejects the reference ([ADR 0011](adr/0011-resolve-a-reference-in-the-core-from-the-node-collection.md)). `sources` is empty for a `provided` value, and for a `generated` value without references. A backend adapter reads `sources` rather than resolving references itself, and finds a resolved claim's backend entry by the claim's `service` and `id`. A check fails, once per reference, for each reason [`contracts.resolve`](#contractsresolve) returns, for a reference to a copy, which also catches two copies referencing each other, and for a `from` reference to a secret generated from others itself. A copy may reference a secret generated from others, such as an htpasswd, and reads its value; a generator reads only secrets that reference none. The core reads a referenced node's claim set alone and does not follow a referenced secret's own references, so references across nodes, in either direction, evaluate without cycles. `generated.from` is a list, so a node that sets it replaces the service module's at default priority, and a module that adds references merges its list with the others. A node that adds references to a module's generated secret writes `value.generated.from` alone, which keeps the module's generator.
 
 `path` is computed from two adapter slots under `contracts.kinds.secrets`. A slot holds the data of one adapter, not a setting a node writes, and is null while no such adapter is imported ([ADR 0010](adr/0010-hold-adapter-data-in-slots-not-kind-settings.md)):
 
@@ -253,7 +252,7 @@ contracts.kinds.secrets.delivery = {
 ```
 
 - `backend.path` (function of `{ service, id }`): where the secret backend installs a secret. It must answer for any service and id, including those of claims of disabled contracts, which the backend does not install, since a service module may read a claim's `path` or `backendPath` regardless.
-- `backend.generators` (list of strings): the generators a `generated` or `derived` value may name. A check fails for a claim whose generator is not in it, and lists the ones the backend provides. While `backend` is null, the generator is not checked.
+- `backend.generators` (list of strings): the generators a `generated` value may name. A check fails for a claim whose generator is not in it, and lists the ones the backend provides. While `backend` is null, the generator is not checked.
 - `delivery.path` (function of `{ unit, service, id }`): where a unit reads a delivered secret, given the secret's `unit`, service and id.
 
 A configuration imports at most one backend adapter and one delivery adapter: a second definition of `backend` or `delivery` fails once the slot is read, naming both, unless the definitions differ in priority. A slot takes its adapter's data as one definition, so a module that replaces part of it, such as the backend's `path`, replaces the whole slot with `lib.mkForce`, generators included.
@@ -283,7 +282,7 @@ Secrets have no clash rule.
 nixos-contracts carries nothing between nodes ([ADR 0016](adr/0016-leave-carrying-a-reference-between-nodes-to-the-fleet.md)). A sending node makes its claim's `ref` available in shared data the fleet already has, and the receiving node writes its own claims from the references it reads there:
 
 - a copy of each, as one [secret](#secrets) per reference with `value.copied`;
-- one secret derived from all of them, with `value.derived.from`, such as an htpasswd;
+- one secret generated from all of them, with `value.generated.from`, such as an htpasswd;
 - for a claim of another kind, such as a backend's bind, a value read through [`contracts.resolve`](#contractsresolve).
 
 ```nix
@@ -301,7 +300,7 @@ contracts.services.influxdb.secrets = lib.mkMerge [
 ];
 
 # On the proxy: an htpasswd with one line per client, in a stable order
-contracts.services.nginx.secrets.htpasswd.value.derived = {
+contracts.services.nginx.secrets.htpasswd.value.generated = {
   generator = "basic-auth";
   from = lib.sortOn contractsLib.claimNameOf clients;
 };
@@ -313,7 +312,7 @@ A copy's id is the sent claim's `name`, which [`lib.claimNameOf`](#libclaimnameo
 
 A receiver gets the references in the order its shared data gives them. Where the order shows in what it builds, such as the lines of an htpasswd, it sorts them, for example by their claim names through `claimNameOf`.
 
-The receiver's checks report a reference that does not resolve, naming the reference and the reason, such as ``nixos-contracts: secrets claim `influxdb.alhpa_secrets_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`.`` A copy of a secret that is copied or derived itself fails as any copy does. A reference of another kind fails as a type error where it is written, in a field typed [`lib.types.referenceTo`](#libtypesreferenceto). Nothing reports a missing or disabled receiver, since the core does not know who reads a reference.
+The receiver's checks report a reference that does not resolve, naming the reference and the reason, such as ``nixos-contracts: secrets claim `influxdb.alhpa_secrets_telegraf_token`: it references `alhpa:secrets.telegraf.token`: node `alhpa` is not in `contracts.nodes`.`` A copy of a copy fails as any copy does, as does a generator that reads a copy or a secret generated from others. A reference of another kind fails as a type error where it is written, in a field typed [`lib.types.referenceTo`](#libtypesreferenceto). Nothing reports a missing or disabled receiver, since the core does not know who reads a reference.
 
 Across a fleet, [nixos-registry](https://github.com/petohorvath/nixos-registry) carries the references. Each sender contributes its claim's `ref` to a registry field of `lib.types.referenceTo` values, keyed by the claim's `name`, and each receiver reads the combined data. nixos-registry reads each node's contributions and never its claim sets, so two nodes that hand each other references evaluate without a cycle. A node whose contribution reads what it received still recurses. Where the nodes are evaluated together, a `let`-bound list of their `ref`s does the same, as the [shared-token example](examples.md#shared-token-one-value-on-two-nodes) shows.
 
@@ -356,11 +355,11 @@ Adds every mount to `preservation.preserveAt` under the root mapped to its class
 
 ### `nixosModules.agenix-rekey`
 
-Defines one `age.secrets` entry per claim of `contracts.claimSets.secrets`, named `<service>_<id>`, such as `age.secrets.influxdb_admin-token` or, for a [copy](#relating-nodes) whose id joins a reference's fields, `age.secrets.influxdb_metrics_secrets_telegraf_token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated` or `derived`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a derived secret, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<service>_<id>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
+Defines one `age.secrets` entry per claim of `contracts.claimSets.secrets`, named `<service>_<id>`, such as `age.secrets.influxdb_admin-token` or, for a [copy](#relating-nodes) whose id joins a reference's fields, `age.secrets.influxdb_metrics_secrets_telegraf_token`, with the claim's `owner`, `group` and `mode`, and, when the claim's value is `generated`, `generator.script` set to its generator at default priority. For a copy, the adapter sets the entry's `rekeyFile` at default priority to the `rekeyFile` of the entry the copy references. For a secret generated from others, it sets `generator.dependencies` to the entries of its `sources`. A module sets anything else about the value on that entry, such as a provided secret's `rekeyFile`; a `rekeyFile` it sets wins over a copy's, and a `generator.script` over the claim's, while `generator.dependencies` alone keeps it. The entry cannot remove the claim's generator with `generator = null`; write the claim's `value.provided = { };` instead. Without a `rekeyFile`, agenix-rekey takes its default from `age.rekey.generatedSecretsDir` when the entry has a generator and from `age.rekey.secretsDir` when it has none. A check fails for a secret that ends up with no `rekeyFile`. The adapter also sets the `contracts.kinds.secrets.backend` slot: `path` to the installed `age.secrets.<service>_<id>.path`, and `generators` to the names of `age.generators`, agenix-rekey's built-in generators and any a configuration adds. It requires the [agenix](https://github.com/ryantm/agenix) and [agenix-rekey](https://github.com/oddlama/agenix-rekey) modules.
 
-The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from the `config` that [`contracts.resolve`](#contractsresolve) returns for it. It takes the names of its own entries from its own claim set alone, never from another node's entries, so entries across nodes, in either direction, evaluate without cycles. A copy's `rekeyFile` is the referenced secret's, read from its entry on its own node, or from this configuration for a secret of its own node, so one encrypted file serves both nodes. A derived secret's dependencies are its sources' entries on their own nodes, so an htpasswd is built from clients on several nodes. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node, such as ``nixos-contracts: secret `influxdb.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: …``.
+The adapter has no settings. It reads the claims a secret's references resolve to from its `sources`, and the `age.secrets` entry of each resolved one from the `config` that [`contracts.resolve`](#contractsresolve) returns for it. It takes the names of its own entries from its own claim set alone, never from another node's entries, so entries across nodes, in either direction, evaluate without cycles. A copy's `rekeyFile` is the referenced secret's, read from its entry on its own node, or from this configuration for a secret of its own node, so one encrypted file serves both nodes. A generated secret's dependencies are its sources' entries on their own nodes, so an htpasswd is built from clients on several nodes. Its check fails for a reference to a secret on a node without this adapter. A copy whose reference the core rejects gets no `rekeyFile` and no second failure for it. A copy of a secret without an encrypted file fails a check that names the referenced secret, since the file is missing on that node, such as ``nixos-contracts: secret `influxdb.token` copies `metrics:secrets.telegraf.token`, which has no encrypted file: …``.
 
-A derived secret with references defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `value.derived.from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
+A generated secret with references defines its entry's `generator.dependencies` as a list, so a module adding dependencies to that entry adds a list too, or adds the references to `value.generated.from`; agenix-rekey's attribute-set form of `generator.dependencies` does not merge with a list.
 
 ### `nixosModules.systemd-credentials`
 
@@ -516,7 +515,7 @@ The option type of a [reference](#references) of any kind, `{ node; kind; servic
 
 ### `lib.types.referenceTo`
 
-`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. Its other names follow their [name rules](#names) as in `lib.types.reference`, and a `kind` that breaks the kind name rule fails as the type is built. A secret's `value.copied` and `value.derived.from` take `referenceTo "secrets"`. A service module whose own settings carry references, such as the writer tokens a fleet's shared data provides, types the setting with it, so the value it receives is already a reference of the kind it uses, and one of another kind fails where it is written:
+`referenceTo kind` is the option type of a [reference](#references) of one kind, `{ node; service; id; }`, whose `kind` defaults to `kind` and accepts no other. Its other names follow their [name rules](#names) as in `lib.types.reference`, and a `kind` that breaks the kind name rule fails as the type is built. A secret's `value.copied` and `value.generated.from` take `referenceTo "secrets"`. A service module whose own settings carry references, such as the writer tokens a fleet's shared data provides, types the setting with it, so the value it receives is already a reference of the kind it uses, and one of another kind fails where it is written:
 
 ```nix
 options.example.influxdb.writers = lib.mkOption {

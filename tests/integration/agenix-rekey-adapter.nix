@@ -20,7 +20,7 @@ let
           group = "dhcp";
         };
         secrets = {
-          ddns.value.generated = "base64";
+          ddns.value.generated.generator = "base64";
           token = { };
         };
       };
@@ -88,7 +88,7 @@ let
   telegraf.contracts.services.telegraf = {
     enable = true;
     identity.static.user = "telegraf";
-    secrets.token.value.generated = "alnum";
+    secrets.token.value.generated.generator = "alnum";
   };
   influxdb = secrets: {
     contracts.services.influxdb = {
@@ -101,7 +101,7 @@ let
   /*
     The nodes `alpha` and `beta`, each running telegraf and an influxdb
     that holds one copy of every node's telegraf token, keyed by its claim
-    name, and an htpasswd derived from all of them. A `let`-bound list
+    name, and an htpasswd generated from all of them. A `let`-bound list
     carries the tokens' `ref`s, as a fleet's shared data does. The nodes
     `withoutAdapter` names lack the adapter.
   */
@@ -117,7 +117,7 @@ let
           (influxdb (
             contractsLib.copiesOf tokens
             // {
-              htpasswd.value.derived = {
+              htpasswd.value.generated = {
                 generator = "basic-auth";
                 from = tokens;
               };
@@ -206,7 +206,7 @@ in
           contracts.services.kea = contractsLib.mkDefaultContract {
             enable = true;
             identity.static.user = "kea";
-            secrets.ddns.value.generated = "alnum";
+            secrets.ddns.value.generated.generator = "alnum";
           };
         }
         { contracts.services.kea.secrets.ddns.value.provided = { }; }
@@ -221,7 +221,7 @@ in
         (failures [
           keaWithoutValues
           values
-          { contracts.services.kea.secrets.ddns.value.generated = "alnm"; }
+          { contracts.services.kea.secrets.ddns.value.generated.generator = "alnm"; }
         ]);
     expected = [ true ];
   };
@@ -323,7 +323,7 @@ in
   testSecretWithoutAFileFailsItsCheck = {
     expr = failures [
       keaWithoutValues
-      { contracts.services.kea.secrets.ddns.value.generated = "base64"; }
+      { contracts.services.kea.secrets.ddns.value.generated.generator = "base64"; }
     ];
     expected = [
       "nixos-contracts: secret `kea.ddns` has no encrypted file: set its `age.secrets.kea_ddns.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none."
@@ -393,13 +393,64 @@ in
     };
   };
 
+  # The metrics node generates an htpasswd from the store's password, and
+  # the store copies that htpasswd, so each node references the other.
+  testCopyOfASecretGeneratedFromOthersTakesItsEncryptedFile =
+    let
+      nodes = nodesOf {
+        metrics = [
+          telegraf
+          {
+            contracts.services.telegraf.secrets.htpasswd.value.generated = {
+              generator = "basic-auth";
+              from = [
+                {
+                  node = "store";
+                  service = "influxdb";
+                  id = "password";
+                }
+              ];
+            };
+            age.generators.basic-auth = _: "true";
+          }
+        ];
+        store = [
+          (influxdb {
+            password.value.generated.generator = "alnum";
+            htpasswd.value.copied = metricsToken // {
+              id = "htpasswd";
+            };
+          })
+        ];
+      };
+    in
+    {
+      expr = {
+        copy = secretOf "influxdb_htpasswd" nodes.store.config;
+        failures = builtins.mapAttrs (_: node: node.config.contracts.failures) nodes;
+      };
+      expected = {
+        copy = {
+          owner = "root";
+          group = "influxdb2";
+          mode = "0440";
+          rekeyFile = ./generated/metrics/telegraf_htpasswd.age;
+          generator = null;
+        };
+        failures = {
+          metrics = [ ];
+          store = [ ];
+        };
+      };
+    };
+
   testCopyReferencingItsOwnNodeReadsThisConfiguration =
     let
       inherit
         ((nodesOf {
           store = [
             (influxdb {
-              origin.value.generated = "alnum";
+              origin.value.generated.generator = "alnum";
               copy.value.copied = {
                 node = "store";
                 service = "influxdb";
@@ -459,8 +510,8 @@ in
           store = [
             { age.generators.basic-auth = _: "true"; }
             (influxdb {
-              local.value.generated = "alnum";
-              hashes.value.derived = {
+              local.value.generated.generator = "alnum";
+              hashes.value.generated = {
                 generator = "basic-auth";
                 from = [
                   metricsToken
@@ -498,7 +549,7 @@ in
   };
 
   # Each dependency is the sender's entry, read from its own node.
-  testDerivedValueOfReferencesTakesTheSendersEntriesOnTheirNodes = {
+  testGeneratedValueOfReferencesTakesTheSendersEntriesOnTheirNodes = {
     expr =
       let
         inherit (handingTokens.alpha) config;
@@ -524,14 +575,14 @@ in
     };
   };
 
-  testDerivedValueWithoutSourcesTakesItsGeneratorAlone = {
+  testGeneratedValueWithoutSourcesHasNoDependencies = {
     expr =
       let
         inherit
           ((nodesOf {
             store = [
               { age.generators.basic-auth = _: "true"; }
-              (influxdb { hashes.value.derived.generator = "basic-auth"; })
+              (influxdb { hashes.value.generated.generator = "basic-auth"; })
             ];
           }).store
           )
@@ -549,7 +600,7 @@ in
     };
   };
 
-  testFileAndGeneratorSetOnTheBackendWinOverACopyOrDerivedValue = {
+  testFileAndGeneratorSetOnTheBackendWinOverACopyOrGeneratedValue = {
     expr =
       let
         inherit
@@ -559,7 +610,7 @@ in
               { age.generators.basic-auth = _: "true"; }
               (influxdb {
                 copy.value.copied = metricsToken;
-                hashes.value.derived = {
+                hashes.value.generated = {
                   generator = "basic-auth";
                   from = [ metricsToken ];
                 };

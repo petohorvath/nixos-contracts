@@ -32,8 +32,8 @@ in
       identity.static.user = "influxdb2";
       secrets = lib.mkMerge [
         {
-          admin-password.value.generated = "alnum";
-          admin-token.value.generated = "alnum";
+          admin-password.value.generated.generator = "alnum";
+          admin-token.value.generated.generator = "alnum";
         }
         # A copy of each writer's token, keyed by the token's claim name,
         # which influxdb alone reads. The keys come from the references
