@@ -22,4 +22,4 @@ The nix-unit suites run on nix-unit's flake-parts module, as the devnix-labs tes
 
 - `dev/default.nix` names each input in `nix-unit.inputs` instead of passing `removeAttrs inputs [ "self" ]`, so the inputs the check overrides are visible in one place. A new root input therefore needs an entry there, as agenix-rekey's own inputs already do.
 - The suites reach the library's NixOS modules and the backend modules as `helpers.nixos.nixosModules` and `helpers.nixos.backends`, rather than only through evaluators that import them. The adapter suites test how module lists compose, such as an adapter imported twice or a node without one, which an evaluator with fixed modules cannot express.
-- The `formatting` check keeps the repository's own treefmt wrapper. Moving it to treefmt-nix, as the devnix-labs code quality standard asks, is a separate change.
+- The `formatting` check keeps the repository's own treefmt wrapper. Moving it to treefmt-nix, as the devnix-labs code quality standard asks, is a separate change, made in [ADR-0025](0025-format-and-lint-with-treefmt-nix.md).
