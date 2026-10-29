@@ -112,7 +112,15 @@ let
       );
     in
     nodes;
-  sourceNamesOf = secret: map (source: source.claim.name) secret.sources;
+  # The sources of a secret: its copy's one, or those its generator reads.
+  sourcesOf =
+    secret: if secret.copyOf != null then [ secret.copyOf ] else secret.generator.sources or [ ];
+  # The claim name of each source of a secret, or null for a rejected one.
+  sourceNamesOf =
+    secret:
+    map (source: if source.reason == null then contractsLib.claimNameOf source.reference else null) (
+      sourcesOf secret
+    );
   # What a receiving node holds: the sources of each copy, by id, and of
   # its htpasswd.
   receivedBy =
@@ -146,8 +154,8 @@ in
         service = "chrony";
         id = "key";
       };
-      sources = [ ];
       generator = null;
+      copyOf = null;
       unit = null;
       delivered = false;
       backendPath = "/run/agenix/chrony_key";
@@ -237,12 +245,40 @@ in
 
   testGeneratedSecretHasItsValuesGenerator = {
     expr = (secretOf [ ] { static.user = "svc"; } { value.generated.generator = "alnum"; }).generator;
-    expected = "alnum";
+    expected = {
+      name = "alnum";
+      sources = [ ];
+    };
   };
 
   testCopiedSecretHasNoGenerator = {
     expr = (secretOf [ ] { static.user = "svc"; } { value.copied = remoteToken; }).generator;
     expected = null;
+  };
+
+  testOnlyACopiedSecretIsACopy = {
+    expr = map (value: (secretOf [ ] { static.user = "svc"; } { inherit value; }).copyOf) [
+      { provided = { }; }
+      { generated.generator = "alnum"; }
+    ];
+    expected = [
+      null
+      null
+    ];
+  };
+
+  testCopiedSecretIsACopyOfItsReference = {
+    expr =
+      (nodesOf {
+        metrics = [ telegraf ];
+        store = [ (store { token.value.copied = remoteToken; }) ];
+      }).store.config.contracts.claimSets.secrets.influxdb.token.copyOf;
+    expected = {
+      reference = remoteToken // {
+        kind = "secrets";
+      };
+      reason = null;
+    };
   };
 
   testNodeWritesProvidedOverADefaultGenerated = {
@@ -684,13 +720,12 @@ in
         ];
       };
       inherit (nodes.store.config.contracts.claimSets) secrets;
-      namesOf = secret: map (source: source.claim.name) secret.sources;
     in
     {
       expr = {
-        remote = namesOf secrets.influxdb.remote;
-        local = namesOf secrets.influxdb.local;
-        hashes = namesOf secrets.influxdb.hashes;
+        remote = sourceNamesOf secrets.influxdb.remote;
+        local = sourceNamesOf secrets.influxdb.local;
+        hashes = sourceNamesOf secrets.influxdb.hashes;
         inherit (nodes.store.config.contracts) failures;
       };
       expected = {
@@ -705,7 +740,7 @@ in
     };
 
   testSecretReferencingNoSecretsHasNoSources = {
-    expr = map (value: (secretOf [ ] { static.user = "svc"; } { inherit value; }).sources) [
+    expr = map (value: sourcesOf (secretOf [ ] { static.user = "svc"; } { inherit value; })) [
       { provided = { }; }
       { generated.generator = "alnum"; }
     ];
@@ -717,7 +752,7 @@ in
 
   testReferenceToItsOwnNodeReadsThisConfiguration = {
     expr =
-      map (reference: reference.claim.name)
+      sourceNamesOf
         (evaluate [
           onStore
           (store { origin.value.generated.generator = "alnum"; })
@@ -728,7 +763,7 @@ in
                 config.contracts.services.influxdb.secrets.origin.ref;
             }
           )
-        ]).contracts.claimSets.secrets.influxdb.copy.sources;
+        ]).contracts.claimSets.secrets.influxdb.copy;
     expected = [ "store_secrets_influxdb_origin" ];
   };
 
@@ -778,20 +813,50 @@ in
     ];
   };
 
-  testRejectedReferenceResolvesToANullClaim = {
+  testRejectedReferenceIsASourceWithItsReason = {
     expr =
       (nodesOf { store = [ (store { token.value.copied = remoteToken; }) ]; })
-      .store.config.contracts.claimSets.secrets.influxdb.token.sources;
-    expected = [
-      {
-        node = "metrics";
+      .store.config.contracts.claimSets.secrets.influxdb.token.copyOf;
+    expected = {
+      reference = remoteToken // {
         kind = "secrets";
-        service = "telegraf";
-        id = "token";
-        claim = null;
-      }
-    ];
+      };
+      reason = "it references `metrics:secrets.telegraf.token`: node `metrics` is not in `contracts.nodes`";
+    };
   };
+
+  testReferenceARuleOfTheValueRejectsIsASourceWithItsReason =
+    let
+      secrets =
+        (evaluate [
+          onStore
+          (store {
+            origin.value.generated.generator = "alnum";
+            copy.value.copied = storeSecret "origin";
+            copy-of-copy.value.copied = storeSecret "copy";
+            hashes.value.generated = {
+              generator = "basic-auth";
+              from = [
+                (storeSecret "origin")
+                (storeSecret "copy")
+              ];
+            };
+          })
+        ]).contracts.claimSets.secrets.influxdb;
+    in
+    {
+      expr = {
+        copy-of-copy = secrets.copy-of-copy.copyOf.reason;
+        hashes = map (source: source.reason) secrets.hashes.generator.sources;
+      };
+      expected = {
+        copy-of-copy = "it references `store:secrets.influxdb.copy`, which is a copy of `store:secrets.influxdb.origin`; reference that secret instead";
+        hashes = [
+          null
+          "it references `store:secrets.influxdb.copy`, which is a copy of `store:secrets.influxdb.origin`; a generator reads only secrets that reference none"
+        ];
+      };
+    };
 
   testEachRejectedReferenceFailsItsOwnCheck = {
     expr = failures [
@@ -1019,13 +1084,13 @@ in
     ];
   };
 
-  testSecretSourcesIsReadOnly = {
+  testSecretCopyOfIsReadOnly = {
     expr =
       (evaluate [
         (service "svc" { static.user = "svc"; } oneSecret)
-        { contracts.services.svc.secrets.key.sources = [ ]; }
-      ]).contracts.services.svc.secrets.key.sources;
-    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.sources' is read-only";
+        { contracts.services.svc.secrets.key.copyOf = null; }
+      ]).contracts.services.svc.secrets.key.copyOf;
+    expectedError.msg = "contracts\\.services\\.svc\\.secrets\\.key\\.copyOf' is read-only";
   };
 
   testSecretRejectsATopLevelFrom = {
