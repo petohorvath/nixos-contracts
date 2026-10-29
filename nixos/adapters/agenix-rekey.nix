@@ -7,9 +7,10 @@
   Anything else about its value, such as a provided secret's encrypted
   file, is set on that entry itself, where an encrypted file or generator
   script overrides the claim's. The core resolves and checks a secret's
-  references into its `sources`; the adapter reads each resolved claim's
-  entry on its node. Requires the agenix and agenix-rekey NixOS modules;
-  `nixosModules.agenix-rekey` also imports `nixosModules.default`.
+  references into the sources of its `copyOf` and `generator`; the
+  adapter reads the entry each source names on its node. Requires the
+  agenix and agenix-rekey NixOS modules; `nixosModules.agenix-rekey` also
+  imports `nixosModules.default`.
 */
 contractsLib:
 { config, lib, ... }:
@@ -18,25 +19,24 @@ let
 
   secrets = claimsOf config.contracts.claimSets.secrets;
 
-  isCopy = secret: secret.value ? copied;
+  # The sources of a secret: its copy's one, or those its generator reads.
+  sourcesOf =
+    secret: if secret.copyOf != null then [ secret.copyOf ] else secret.generator.sources or [ ];
 
   # The backend entry a source names, or null when the core rejected its
   # reference or its node has no entry for it.
   entryOrNull =
     source:
-    if source.claim == null then
+    if source.reason != null then
       null
     else
-      (config.contracts.resolve (removeAttrs source [ "claim" ]))
-      .config.age.secrets.${backendNameOf source.claim} or null;
+      (config.contracts.resolve source.reference).config.age.secrets.${backendNameOf source.reference}
+      or null;
 
-  # The entry of the one secret a copy references, or null.
-  copiedEntryOrNull = secret: entryOrNull (lib.head secret.sources);
-
-  # A reference the core resolved, on a node without this adapter.
-  mkBackendAssertion = secret: reference: {
-    assertion = reference.claim == null || entryOrNull reference != null;
-    message = "secret `${labels.claim secret}` references `${labels.reference reference}`, whose node has no `nixosModules.agenix-rekey`.";
+  # A source the core accepted, on a node without this adapter.
+  mkBackendAssertion = secret: source: {
+    assertion = source.reason != null || entryOrNull source != null;
+    message = "secret `${labels.claim secret}` references `${labels.reference source.reference}`, whose node has no `nixosModules.agenix-rekey`.";
   };
 
   mkFileAssertion =
@@ -48,8 +48,8 @@ let
     {
       assertion = config.age.secrets.${name}.rekeyFile != null;
       message =
-        if isCopy secret then
-          "secret `${label}` copies `${labels.reference secret.value.copied}`, which has no encrypted file: give it one on its node, or set `age.secrets.${name}.rekeyFile`."
+        if secret.copyOf != null then
+          "secret `${label}` copies `${labels.reference secret.copyOf.reference}`, which has no encrypted file: give it one on its node, or set `age.secrets.${name}.rekeyFile`."
         else
           "secret `${label}` has no encrypted file: set its `age.secrets.${name}.rekeyFile`, or agenix-rekey's `age.rekey.generatedSecretsDir` when it has a generator and `age.rekey.secretsDir` when it has none.";
     };
@@ -68,13 +68,15 @@ in
         lib.nameValuePair (backendNameOf secret) {
           inherit (secret) group mode owner;
           generator = lib.mkIf (secret.generator != null) {
-            script = lib.mkDefault secret.generator;
-            dependencies = lib.mkIf (secret.sources != [ ]) (
-              lib.filter (entry: entry != null) (map entryOrNull secret.sources)
+            script = lib.mkDefault secret.generator.name;
+            dependencies = lib.mkIf (secret.generator.sources != [ ]) (
+              lib.filter (entry: entry != null) (map entryOrNull secret.generator.sources)
             );
           };
           # A copy reads the encrypted file of the one secret it references.
-          rekeyFile = lib.mkIf (isCopy secret) (lib.mkDefault (copiedEntryOrNull secret).rekeyFile or null);
+          rekeyFile = lib.mkIf (secret.copyOf != null) (
+            lib.mkDefault (entryOrNull secret.copyOf).rekeyFile or null
+          );
         }
       ) secrets
     );
@@ -103,9 +105,9 @@ in
       */
       assertions =
         map mkFileAssertion (
-          lib.filter (secret: !(isCopy secret) || copiedEntryOrNull secret != null) secrets
+          lib.filter (secret: secret.copyOf == null || entryOrNull secret.copyOf != null) secrets
         )
-        ++ lib.concatMap (secret: map (mkBackendAssertion secret) secret.sources) secrets;
+        ++ lib.concatMap (secret: map (mkBackendAssertion secret) (sourcesOf secret)) secrets;
     };
   };
 }

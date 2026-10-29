@@ -59,7 +59,7 @@ let
   relative = path: lib.removePrefix "${toString ./secrets}/" (toString path);
   # The store's copies, by the name of their `age.secrets` entry.
   copies = lib.pipe config.contracts.claimSets.secrets.influxdb [
-    (lib.filterAttrs (_: secret: secret.value ? copied))
+    (lib.filterAttrs (_: secret: secret.copyOf != null))
     (lib.mapAttrs' (id: _: lib.nameValuePair "influxdb_${id}" config.age.secrets."influxdb_${id}"))
   ];
 in

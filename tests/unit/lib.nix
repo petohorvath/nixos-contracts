@@ -216,18 +216,18 @@ in
     {
       expr = lib.mapAttrs (_: secret: {
         inherit (secret) mode owner;
-        source = map (source: source.claim.name) secret.sources;
+        copyOf = claimNameOf secret.copyOf.reference;
       }) nodes.store.config.contracts.claimSets.secrets.influxdb;
       expected = {
         alpha_secrets_telegraf_token = {
           owner = "influxdb2";
           mode = "0400";
-          source = [ "alpha_secrets_telegraf_token" ];
+          copyOf = "alpha_secrets_telegraf_token";
         };
         beta_secrets_telegraf_token = {
           owner = "influxdb2";
           mode = "0400";
-          source = [ "beta_secrets_telegraf_token" ];
+          copyOf = "beta_secrets_telegraf_token";
         };
       };
     };

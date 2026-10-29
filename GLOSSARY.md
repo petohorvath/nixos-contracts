@@ -47,15 +47,19 @@ _Avoid_: Credential, age secret, key
 
 **Secret value**:
 Where a secret's value comes from: provided by a person or another party, made by a generator, alone or from the secrets it references, or copied from one other secret.
-_Avoid_: Provenance, source
+_Avoid_: Provenance
 
 **Copy**:
 A secret whose value is that of one other secret it references, on its own node or another. The secret it references may not be a copy itself.
 _Avoid_: Duplicate, replica
 
 **Reference**:
-A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it. A secret's `sources` are the references its value comes from: a copy's one, or those its generator reads.
+A pointer to one claim by its node, kind, service and id. It always names its node, so it means the same claim on every node that reads it.
 _Avoid_: Handle, link, dependency
+
+**Source**:
+A reference a secret's value comes from: the one a copy references, or each one its generator reads, with the reason the secret cannot read it when it cannot.
+_Avoid_: Dependency, input
 
 **Node**:
 One NixOS configuration among those evaluated together, whether it describes a host, a guest or an external device. A node writes its own contracts and overrides the service modules' defaults; a reference names a node by its node identity.
@@ -71,7 +75,7 @@ _Avoid_: Hostname, node name
 
 **Generator**:
 A named way to make a secret's value, such as `alnum` or `basic-auth`, alone or from the secrets it references, none of which references a secret itself. A backend adapter provides the generators a secret may name.
-_Avoid_: Generator script, provenance, source
+_Avoid_: Generator script, provenance
 
 **Delivery**:
 Handing a secret to the unit that reads it, so its daemon reads it from where the unit receives it rather than where the backend installs it. The secret names the unit, by default a dynamic identity's own. A delivery adapter provides it.
