@@ -43,9 +43,9 @@ let
     the core never follows a chain of references.
   */
   mkSource =
-    config: value: reference:
+    resolve: value: reference:
     let
-      result = config.contracts.resolve reference;
+      result = resolve reference;
       secret = result.claim;
       references = "it references `${referenceLabelOf reference}`";
       referencing =
@@ -202,15 +202,16 @@ in
       ++ map (source: source.reason) (sourcesOf claim)
     );
 
-  claim =
-    { identity, config, ... }:
-    let
-      # Bound before the claim's own `config` shadows the top-level one.
-      topConfig = config;
-    in
+  claimType =
+    {
+      identity,
+      settings,
+      resolve,
+      ...
+    }:
     { config, ... }:
     let
-      inherit (topConfig.contracts.kinds.secrets) backend delivery;
+      inherit (settings) backend delivery;
     in
     {
       options = {
@@ -308,7 +309,7 @@ in
             if config.value ? generated then
               {
                 name = config.value.generated.generator;
-                sources = map (mkSource topConfig config.value) config.value.generated.from;
+                sources = map (mkSource resolve config.value) config.value.generated.from;
               }
             else
               null;
@@ -328,8 +329,7 @@ in
         copyOf = lib.mkOption {
           type = lib.types.nullOr lib.types.raw;
           readOnly = true;
-          default =
-            if config.value ? copied then mkSource topConfig config.value config.value.copied else null;
+          default = if config.value ? copied then mkSource resolve config.value config.value.copied else null;
           defaultText = lib.literalMD "the source of a `copied` value, or null";
           description = ''
             The source of the one secret a `copied` value references, as

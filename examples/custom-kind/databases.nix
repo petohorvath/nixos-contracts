@@ -6,9 +6,10 @@ mkClaimKind {
   description = "Databases the service owns, by database id.";
 
   clash =
-    first: second: if first.database == second.database then "both own `${first.database}`" else null;
+    { first, second, ... }:
+    if first.database == second.database then "both own `${first.database}`" else null;
 
-  claim =
+  claimType =
     { service, identity, ... }:
     { lib, name, ... }:
     {

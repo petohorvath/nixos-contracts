@@ -19,34 +19,41 @@
   `description`
   : Description of the contract field holding this kind's claims.
 
-  `claim`
-  : A function of `{ service, identity, config }` returning the submodule of
-    one claim. `service` is the contract's name, `identity` the contract's
-    identity resolved to `{ user, group, unit }` (`user` null for a dynamic
-    identity, `group` null for a dynamic identity without a shared group,
-    `unit` null for a static identity) and `config` the configuration's
-    top-level `config`. Inside the submodule, the module argument `name` is
-    the claim's id. A value that follows from the identity, such as a file
-    owner, is an option defaulting to it. The constructor declares four
-    read-only options on every claim, `service`, `id`, its claim name
-    `name` and its reference `ref`, so a claim type cannot declare options
-    with these names. A claim id may contain only lowercase letters, digits,
-    hyphens and `_`.
+  `claimType`
+  : The kind's claim type: a function of
+    `{ service, identity, settings, resolve, ... }` returning the submodule
+    of one claim. `service` is the contract's name and `identity` the
+    contract's identity resolved to `{ user, group, unit }` (`user` null
+    for a dynamic identity, `group` null for a dynamic identity without a
+    shared group, `unit` null for a static identity). Inside the submodule,
+    the module argument `name` is the claim's id. A value that follows from
+    the identity, such as a file owner, is an option defaulting to it. The
+    constructor declares four read-only options on every claim, `service`,
+    `id`, its claim name `name` and its reference `ref`, so a claim type
+    cannot declare options with these names. A claim id may contain only
+    lowercase letters, digits, hyphens and `_`.
 
   `clash`
-  : Optional. The kind's clash rule: a function of two claim-set entries
-    returning null when they can coexist, or a string saying why they clash.
+  : Optional. The kind's clash rule: a function of
+    `{ first, second, settings, resolve, ... }`, two claim-set entries,
+    returning null when they can coexist, or a string saying why they
+    clash.
 
   `check`
   : Optional. The kind's check rule: a function of
-    `{ identity, claim, settings, config }`, where `identity` is the same
-    resolved identity, `claim` a claim-set entry, `settings` the kind's
-    settings at `contracts.kinds.<name>` and `config` the configuration's
-    top-level `config`, returning null when the claim is valid, or a string
-    or a list of strings saying why it is not. Only claims of enabled
-    contracts are checked, and each reason reads
-    "nixos-contracts: <kind> claim `<service>.<id>`: <reason>." in
+    `{ identity, claim, settings, resolve, ... }`, where `identity` is the
+    same resolved identity and `claim` a claim-set entry, returning null
+    when the claim is valid, or a string or a list of strings saying why it
+    is not. Only claims of enabled contracts are checked, and each reason
+    reads "nixos-contracts: <kind> claim `<service>.<id>`: <reason>." in
     `contracts.failures`.
+
+  Every rule receives `settings`, the kind's settings at
+  `contracts.kinds.<name>`, and `resolve`, the configuration's
+  `contracts.resolve`, beside the fields of its role. No rule receives the
+  configuration, so a kind reads nothing outside `contracts`. Write each
+  rule with `...`, so it keeps working when the rules receive further
+  fields.
 
   `settings`
   : Optional. Option declarations placed under `contracts.kinds.<name>`.
@@ -61,7 +68,7 @@
   mkClaimKind {
     name = "databases";
     description = "Databases the service owns.";
-    claim = { ... }: { lib, ... }: {
+    claimType = { ... }: { lib, ... }: {
       options.engine = lib.mkOption { type = lib.types.str; };
     };
   }
@@ -70,7 +77,7 @@
 {
   name,
   description,
-  claim,
+  claimType,
   clash ? null,
   check ? null,
   settings ? { },
@@ -129,6 +136,14 @@ else
   let
     topConfig = config;
 
+    # What every rule receives, beside the fields of its role: the kind's
+    # settings and the resolution of a reference. No rule receives the
+    # whole configuration, so a kind reads nothing outside `contracts`.
+    ruleArguments = {
+      settings = config.contracts.kinds.${kindName};
+      inherit (config.contracts) resolve;
+    };
+
     # The claims of enabled contracts, by service and id. Its keys come from
     # this configuration's contracts alone, and are checked as they are
     # listed, so reading it fails on a service name or id that is not a name.
@@ -169,7 +184,7 @@ else
       map (
         pair:
         let
-          reason = clash pair.first pair.second;
+          reason = clash (ruleArguments // pair);
         in
         {
           assertion = reason == null;
@@ -187,22 +202,14 @@ else
     mkCheckAssertions =
       arguments:
       lib.optionals (check != null) (
-        lib.pipe
-          (
-            arguments
-            // {
-              settings = config.contracts.kinds.${kindName};
-              inherit config;
-            }
-          )
-          [
-            check
-            toReasons
-            (map (reason: {
-              assertion = false;
-              message = "${kindName} claim `${claimLabelOf arguments.claim}`: ${reason}.";
-            }))
-          ]
+        lib.pipe (ruleArguments // arguments) [
+          check
+          toReasons
+          (map (reason: {
+            assertion = false;
+            message = "${kindName} claim `${claimLabelOf arguments.claim}`: ${reason}.";
+          }))
+        ]
       );
 
     checkAssertions = lib.concatMap mkCheckAssertions claims;
@@ -220,11 +227,13 @@ else
               options.${kindName} = lib.mkOption {
                 type = lib.types.attrsOf (
                   lib.types.submodule [
-                    (claim {
-                      inherit service;
-                      identity = resolveIdentity config.identity;
-                      config = topConfig;
-                    })
+                    (claimType (
+                      ruleArguments
+                      // {
+                        inherit service;
+                        identity = resolveIdentity config.identity;
+                      }
+                    ))
                     # Located here, so a claim type declaring one of these
                     # options fails with an error naming this file.
                     (lib.setDefaultModuleLocation ./mk-claim-kind.nix (
