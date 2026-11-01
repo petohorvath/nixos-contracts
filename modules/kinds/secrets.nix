@@ -1,16 +1,33 @@
 # The arguments of `mkClaimKind` for secrets: what a service needs to read at
-# runtime and must keep private.
-{ lib }:
+# runtime and must keep private. It receives the labels and types it uses,
+# each one the public library exports too, and imports nothing.
+{
+  claimLabelOf,
+  lib,
+  referenceLabelOf,
+  referenceTo,
+  tag,
+}:
 let
-  contractTypes = import ../types.nix { inherit lib; };
-  referenceType = contractTypes.referenceTo "secrets";
-  # References resolve through `contracts.resolve`, as for every kind; a
-  # secret's value adds only its own rules.
-  inherit (import ../references.nix)
-    backendPathOf
-    deliveryPathOf
-    referenceLabelOf
-    ;
+  referenceType = referenceTo "secrets";
+
+  # Where the secret backend `backend` installs the secret `secret`, failing,
+  # naming the secret, while no backend adapter sets it.
+  backendPathOf =
+    backend: secret:
+    if backend == null then
+      throw "nixos-contracts: secret `${claimLabelOf secret}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
+    else
+      backend.path { inherit (secret) id service; };
+
+  # Where the delivery `delivery` hands the secret `secret` to its unit,
+  # failing, naming the secret, while no delivery adapter sets it.
+  deliveryPathOf =
+    delivery: secret:
+    if delivery == null then
+      throw "nixos-contracts: secret `${claimLabelOf secret}` is delivered to `${secret.unit}` but has no path: import a delivery adapter such as `nixosModules.systemd-credentials`, which sets `contracts.kinds.secrets.delivery`, or set its `unit` to null"
+    else
+      delivery.path { inherit (secret) id service unit; };
 
   # The references of a value, in order: a copy's one, or those its
   # generator reads.
@@ -221,7 +238,7 @@ in
           '';
         };
         value = lib.mkOption {
-          type = contractTypes.tag {
+          type = tag {
             provided = lib.mkOption {
               type = lib.types.submodule { };
               description = ''

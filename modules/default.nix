@@ -4,6 +4,8 @@
 { lib, ... }:
 let
   mkClaimKind = import ./mk-claim-kind.nix;
+  contractTypes = import ./types.nix { inherit lib; };
+  inherit (import ./references.nix) claimLabelOf referenceLabelOf;
 
   # Builds the kind a file defines, declaring its options at that file.
   mkKindModule =
@@ -12,7 +14,11 @@ let
   kinds = [
     (mkKindModule ./kinds/binds.nix { inherit lib libnet; })
     (mkKindModule ./kinds/mounts.nix { inherit lib; })
-    (mkKindModule ./kinds/secrets.nix { inherit lib; })
+    (mkKindModule ./kinds/secrets.nix {
+      inherit lib;
+      inherit claimLabelOf referenceLabelOf;
+      inherit (contractTypes) referenceTo tag;
+    })
   ];
 in
 {

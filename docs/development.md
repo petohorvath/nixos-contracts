@@ -21,7 +21,7 @@ nix fmt --no-update-lock-file
 nix flake check --no-update-lock-file
 ```
 
-The checks are `nix-unit`, which runs every nix-unit suite, `treefmt`, and `lint` (statix and a rule that a shipped adapter names no parent path, since it receives the public library). To run the suites of one kind, or one suite, and report each case, run the shell's nix-unit on its attribute path under `tests.systems.<system>`:
+The checks are `nix-unit`, which runs every nix-unit suite, `treefmt`, and `lint` (statix and a rule that a shipped adapter or claim kind names no parent path, since each receives what it uses as arguments). To run the suites of one kind, or one suite, and report each case, run the shell's nix-unit on its attribute path under `tests.systems.<system>`:
 
 ```sh
 nix-unit --flake .#tests.systems.x86_64-linux.unit

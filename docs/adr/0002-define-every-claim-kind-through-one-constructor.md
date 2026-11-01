@@ -15,6 +15,6 @@ The set of claim kinds is open: binds, mounts and secrets are built with the sam
 ## Consequences
 
 - A claim already holds its final values, and a claim-set entry is the claim as its contract holds it.
-- The shipped kinds have no privileged access to the core: if a shipped kind needs something the constructor cannot express, the constructor has to grow.
+- The shipped kinds have no privileged access to the core: if a shipped kind needs something the constructor cannot express, the constructor has to grow. A shipped kind imports nothing; the generic module passes it what it uses, each a value the public library exports too, and the `lint` check fails when a kind names a parent path, as it does for an adapter.
 - Kinds carry no direction flag. Whether a claim offers something or requires something follows from what the kind means, and a kind that links one service to another states that relation itself.
 - A check rule receives the resolved identity, the claim-set entry, the kind's settings at `contracts.kinds.<kind>` and the top-level `config`, and may return a list of reasons, so each rejected reference of one secret fails its own check.
