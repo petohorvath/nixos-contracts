@@ -27,7 +27,7 @@ let
     || covers secondAddress firstAddress;
 
   clash =
-    first: second:
+    { first, second, ... }:
     let
       sharedProtocols = lib.intersectLists first.protocols second.protocols;
       addressPairs = lib.filter (pair: addressesOverlap pair.first pair.second) (
@@ -61,7 +61,7 @@ in
     service listens, never who may reach it.
   '';
   inherit clash;
-  claim =
+  claimType =
     _:
     { config, ... }:
     {

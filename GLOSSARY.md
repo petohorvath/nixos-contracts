@@ -22,6 +22,10 @@ _Avoid_: Resource, requirement, building block
 **Claim kind**:
 One kind of claim, such as binds, mounts or secrets. The set of kinds is open: a new kind is defined the same way as the shipped ones.
 
+**Claim type**:
+The shape of one claim of a kind: its fields, and how their defaults follow from the service's identity.
+_Avoid_: Claim schema, claim submodule
+
 **Claim name**:
 The name a claim goes by across the node collection, made of its node identity, kind, service and id, such as `beta-influxdb_mounts_influxdb_data`. No two claims share one; a reference does not name a claim by it.
 _Avoid_: Key, full name

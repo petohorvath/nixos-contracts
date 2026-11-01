@@ -25,18 +25,14 @@ in
   };
 
   clash =
-    first: second:
+    { first, second, ... }:
     if normalizePath first.path == normalizePath second.path then
       "both persist `${first.path}`"
     else
       null;
 
-  claim =
-    { identity, config, ... }:
-    let
-      # Bound before the claim's own `config` shadows the top-level one.
-      topConfig = config;
-    in
+  claimType =
+    { identity, settings, ... }:
     { config, ... }:
     {
       options = {
@@ -49,7 +45,7 @@ in
           example = "/var/lib/influxdb2";
         };
         class = lib.mkOption {
-          type = lib.types.enum topConfig.contracts.kinds.mounts.classes;
+          type = lib.types.enum settings.classes;
           description = ''
             The class of storage the path belongs to, one of
             `contracts.kinds.mounts.classes`.

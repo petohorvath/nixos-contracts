@@ -11,22 +11,36 @@ let
   databases = mkClaimKind {
     name = "databases";
     description = "Databases the service owns.";
-    settings.engines = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "postgresql" ];
-      description = "Engines a database may use.";
+    settings = {
+      engines = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ "postgresql" ];
+        description = "Engines a database may use.";
+      };
+      shared = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Databases several services may own.";
+      };
     };
     clash =
-      first: second: if first.database == second.database then "both own `${first.database}`" else null;
-    claim =
+      {
+        first,
+        second,
+        settings,
+        ...
+      }:
+      if first.database == second.database && !builtins.elem first.database settings.shared then
+        "both own `${first.database}`"
+      else
+        null;
+    claimType =
       {
         service,
         identity,
-        config,
+        settings,
+        ...
       }:
-      let
-        topConfig = config;
-      in
       {
         config,
         lib,
@@ -36,8 +50,8 @@ let
       {
         options = {
           engine = lib.mkOption {
-            type = lib.types.enum topConfig.contracts.kinds.databases.engines;
-            default = builtins.head topConfig.contracts.kinds.databases.engines;
+            type = lib.types.enum settings.engines;
+            default = builtins.head settings.engines;
             description = "The database engine.";
           };
           database = lib.mkOption {
@@ -76,6 +90,106 @@ let
       unused = {
         identity.static.user = "unused";
         databases.main = { };
+      };
+    };
+  };
+
+  # A kind of words, given its claim type or one rule at a time, so a test
+  # sees what each receives.
+  wordKind =
+    rules:
+    mkClaimKind (
+      {
+        name = "words";
+        description = "Words.";
+        claimType = _: { };
+      }
+      // rules
+    );
+
+  wordClaims.contracts.services.a = {
+    enable = true;
+    identity.static.user = "a";
+    words = {
+      first = { };
+      second = { };
+    };
+  };
+
+  # The name of the database `reference` names, or null when it names
+  # none, read through the `resolve` a kind receives.
+  aliasedDatabase =
+    resolve: reference:
+    let
+      result = resolve reference;
+    in
+    if result.reason == null then result.claim.database else null;
+
+  # A kind whose claims alias a database, resolving the reference in its
+  # claim type and each of its rules.
+  aliases = mkClaimKind {
+    name = "aliases";
+    description = "Aliases of databases.";
+    claimType =
+      { resolve, ... }:
+      { config, lib, ... }:
+      {
+        options = {
+          of = lib.mkOption {
+            type = contractsLib.types.referenceTo "databases";
+            description = "The database the alias names.";
+          };
+          database = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            readOnly = true;
+            default = aliasedDatabase resolve config.of;
+            description = "The name of the aliased database, or null.";
+          };
+        };
+      };
+    check =
+      { claim, resolve, ... }:
+      let
+        inherit (resolve claim.of) reason;
+      in
+      if reason == null then
+        null
+      else
+        "it aliases `${contractsLib.labels.reference claim.of}`: ${reason}";
+    clash =
+      {
+        first,
+        second,
+        resolve,
+        ...
+      }:
+      let
+        databaseOf = alias: aliasedDatabase resolve alias.of;
+      in
+      if databaseOf first != null && databaseOf first == databaseOf second then
+        "both alias `${databaseOf first}`"
+      else
+        null;
+  };
+
+  aliasClaims.contracts.services.app = {
+    enable = true;
+    identity.static.user = "app";
+    aliases = {
+      grafana.of = {
+        node = "local";
+        service = "grafana";
+        id = "main";
+      };
+      vault.of = {
+        node = "local";
+        service = "vaultwarden";
+        id = "main";
+      };
+      missing.of = {
+        node = "local";
+        service = "unused";
+        id = "main";
       };
     };
   };
@@ -139,7 +253,7 @@ in
           (mkClaimKind {
             name = "tokens";
             description = "Tokens.";
-            claim = _: { };
+            claimType = _: { };
           })
           {
             contracts.node = "beta";
@@ -224,8 +338,11 @@ in
   };
 
   testCustomKindDeclaresItsSettings = {
-    expr = (evaluate [ databases ]).contracts.kinds.databases.engines;
-    expected = [ "postgresql" ];
+    expr = (evaluate [ databases ]).contracts.kinds.databases;
+    expected = {
+      engines = [ "postgresql" ];
+      shared = [ ];
+    };
   };
 
   testCustomKindClaimTypeReadsTheSettings = {
@@ -236,6 +353,16 @@ in
         { contracts.services.grafana.databases.main.engine = "mysql"; }
       ]).contracts.services.grafana.databases.main.engine;
     expectedError.msg = "contracts\\.services\\.grafana\\.databases\\.main\\.engine' is not of type";
+  };
+
+  testCustomKindClaimTypeReadsTheSettingsANodeWrites = {
+    expr =
+      (evaluate [
+        databases
+        services
+        { contracts.kinds.databases.engines = [ "mysql" ]; }
+      ]).contracts.claimSets.databases.grafana.main.engine;
+    expected = "mysql";
   };
 
   testCustomKindClaimTypeReadsIdentityServiceAndId = {
@@ -270,7 +397,7 @@ in
         (mkClaimKind {
           name = "tokens";
           description = "Tokens.";
-          claim =
+          claimType =
             _:
             { lib, claimName, ... }:
             {
@@ -303,6 +430,18 @@ in
     ];
   };
 
+  testClashRuleReadsTheKindSettings = {
+    expr = failures [
+      databases
+      services
+      {
+        contracts.kinds.databases.shared = [ "vault" ];
+        contracts.services.grafana.databases.main.database = "vault";
+      }
+    ];
+    expected = [ ];
+  };
+
   testDisabledContractsDoNotClash = {
     expr = failures [
       databases
@@ -319,7 +458,7 @@ in
           (mkClaimKind {
             name = "tokens";
             description = "Tokens.";
-            claim = _: { };
+            claimType = _: { };
           })
           {
             contracts.node = "n";
@@ -367,7 +506,7 @@ in
         check =
           { claim, settings, ... }:
           if claim.length < settings.minimum then "it is too short" else null;
-        claim =
+        claimType =
           _:
           { lib, ... }:
           {
@@ -405,7 +544,7 @@ in
               "root"
             ] claim.words
           );
-        claim =
+        claimType =
           _:
           { lib, ... }:
           {
@@ -433,46 +572,103 @@ in
     ];
   };
 
-  testCheckRuleReadsTheConfiguration = {
-    expr = failures [
-      (mkClaimKind {
-        name = "tokens";
-        description = "Tokens.";
-        check =
-          { claim, config, ... }:
-          if builtins.elem claim.word config.reserved then "it uses a reserved word" else null;
-        claim =
-          _:
-          { lib, ... }:
-          {
-            options.word = lib.mkOption {
-              type = lib.types.str;
-              description = "The word of the token.";
+  testClaimTypeReceivesServiceIdentitySettingsAndResolve = {
+    expr =
+      (evaluate [
+        (wordKind {
+          claimType =
+            arguments:
+            { lib, ... }:
+            {
+              options.arguments = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                readOnly = true;
+                default = builtins.attrNames arguments;
+                description = "The names of the claim type's arguments.";
+              };
             };
-          };
+        })
+        wordClaims
+      ]).contracts.claimSets.words.a.first.arguments;
+    expected = [
+      "identity"
+      "resolve"
+      "service"
+      "settings"
+    ];
+  };
+
+  testCheckRuleReceivesIdentityClaimSettingsAndResolve = {
+    expr = failures [
+      (wordKind {
+        check = arguments: "it received ${lib.concatStringsSep ", " (builtins.attrNames arguments)}";
       })
-      (
-        { lib, ... }:
-        {
-          options.reserved = lib.mkOption {
-            type = lib.types.listOf lib.types.str;
-            description = "Words no token may use.";
-          };
-        }
-      )
+      wordClaims
+    ];
+    expected = [
+      "nixos-contracts: words claim `a.first`: it received claim, identity, resolve, settings."
+      "nixos-contracts: words claim `a.second`: it received claim, identity, resolve, settings."
+    ];
+  };
+
+  testClashRuleReceivesFirstSecondSettingsAndResolve = {
+    expr = failures [
+      (wordKind {
+        clash = arguments: "they received ${lib.concatStringsSep ", " (builtins.attrNames arguments)}";
+      })
+      wordClaims
+    ];
+    expected = [
+      "nixos-contracts: words claims `a.first` and `a.second` clash: they received first, resolve, second, settings."
+    ];
+  };
+
+  testClaimTypeResolvesAReference = {
+    expr =
+      lib.mapAttrs (_: alias: alias.database)
+        (evaluate [
+          databases
+          aliases
+          services
+          aliasClaims
+        ]).contracts.claimSets.aliases.app;
+    expected = {
+      grafana = "grafana_main";
+      missing = null;
+      vault = "vault";
+    };
+  };
+
+  testCheckRuleResolvesAReference = {
+    expr = failures [
+      databases
+      aliases
+      services
+      aliasClaims
+    ];
+    expected = [
+      "nixos-contracts: aliases claim `app.missing`: it aliases `local:databases.unused.main`: no enabled contract on `local` holds it."
+    ];
+  };
+
+  testClashRuleResolvesAReference = {
+    expr = failures [
+      databases
+      aliases
+      services
+      aliasClaims
       {
-        reserved = [ "admin" ];
-        contracts.services.a = {
-          enable = true;
-          identity.static.user = "a";
-          tokens = {
-            admin.word = "admin";
-            plain.word = "plain";
-          };
+        contracts.services.app.aliases.again.of = {
+          node = "local";
+          service = "grafana";
+          id = "main";
         };
       }
     ];
-    expected = [ "nixos-contracts: tokens claim `a.admin`: it uses a reserved word." ];
+    expected = [
+      "nixos-contracts: aliases claims `app.again` and `app.grafana` clash: both alias `grafana_main`."
+      "nixos-contracts: aliases claim `app.missing`: it aliases `local:databases.unused.main`: no enabled contract on `local` holds it."
+    ];
   };
 
   testCheckRuleReportsFailingClaimsOfEnabledContracts = {
@@ -486,7 +682,7 @@ in
             "a dynamic identity needs at least 32 characters"
           else
             null;
-        claim =
+        claimType =
           _:
           { lib, ... }:
           {
@@ -530,7 +726,7 @@ in
         (mkClaimKind {
           name = "tokens";
           description = "Tokens.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -558,7 +754,7 @@ in
         (mkClaimKind {
           name = "tokens";
           description = "Tokens.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -586,7 +782,7 @@ in
         (mkClaimKind {
           name = "tokens";
           description = "Tokens.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -614,7 +810,7 @@ in
         (mkClaimKind {
           name = "tokens";
           description = "Tokens.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -752,7 +948,7 @@ in
               default = 3;
               description = "A setting of the kind's own.";
             };
-            claim = _: { };
+            claimType = _: { };
           })
           {
             contracts.services.a = {
@@ -779,7 +975,7 @@ in
         (mkClaimKind {
           name = "inboxes";
           description = "Mailboxes the service delivers to.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -806,7 +1002,7 @@ in
         (mkClaimKind {
           name = "backups";
           description = "Backups of the service's state.";
-          claim =
+          claimType =
             _:
             { lib, ... }:
             {
@@ -851,7 +1047,7 @@ in
     expr = mkClaimKind {
       name = "enable";
       description = "Clashes with the contract's enable.";
-      claim = _: { };
+      claimType = _: { };
     };
     expectedError.msg = "claim kind name `enable` is reserved for the contract's own `enable` field; choose another name";
   };
@@ -862,7 +1058,7 @@ in
         (mkClaimKind {
           name = "tokens-2";
           description = "Tokens.";
-          claim = _: { };
+          claimType = _: { };
         })
         {
           contracts.node = "beta";
@@ -880,7 +1076,7 @@ in
     expr = mkClaimKind {
       name = "api_tokens";
       description = "Tokens.";
-      claim = _: { };
+      claimType = _: { };
     };
     expectedError.msg = "claim kind name `api_tokens` may contain only lowercase letters, digits and hyphens";
   };
@@ -889,7 +1085,7 @@ in
     expr = mkClaimKind {
       name = "Tokens";
       description = "Tokens.";
-      claim = _: { };
+      claimType = _: { };
     };
     expectedError.msg = "claim kind name `Tokens` may contain only lowercase letters, digits and hyphens";
   };
@@ -898,7 +1094,7 @@ in
     expr = mkClaimKind {
       name = "identity";
       description = "Clashes with the contract's identity.";
-      claim = _: { };
+      claimType = _: { };
     };
     expectedError.msg = "claim kind name `identity` is reserved for the contract's own `identity` field; choose another name";
   };

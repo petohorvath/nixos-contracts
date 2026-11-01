@@ -460,7 +460,7 @@ To use it without the flake, import the library directory with a caller-owned li
 
 ### `lib.mkClaimKind`
 
-`mkClaimKind { name; description; claim; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
+`mkClaimKind { name; description; claimType; clash ? null; check ? null; settings ? { }; }` returns a module that adds one claim kind. Import it beside `nixosModules.default` or `modules.generic.default`.
 
 `name`
 : The kind's name: the contract field, the claim set, the settings root and part of every claim's `name`. It may contain only lowercase letters, digits and hyphens, so a name such as `api_tokens` fails as the kind is built, and the contract's own fields `enable` and `identity` are reserved.
@@ -468,24 +468,33 @@ To use it without the flake, import the library directory with a caller-owned li
 `description`
 : The description of the contract field.
 
-`claim`
-: A function of `{ service, identity, config }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity) and `config` the top-level configuration. Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `name` and `ref` on every claim, so a claim type cannot declare options with these names, and reads a claim's own service and id from `config.service` and `config.id`.
+`claimType`
+: The kind's [claim type](../GLOSSARY.md): a function of `{ service, identity, settings, resolve, ... }` returning the submodule of one claim, where `identity` is the contract's identity resolved to `{ user, group, unit }` (`user` null for a dynamic identity, `group` null for a dynamic identity without a shared group, `unit` null for a static identity). Inside the submodule, the module argument `name` is the claim's id. A value that follows from the identity, such as a file owner, is an option defaulting to it. The constructor declares `service`, `id`, `name` and `ref` on every claim, so a claim type cannot declare options with these names, and reads a claim's own service and id from `config.service` and `config.id`.
 
 `clash`
-: The kind's clash rule: a function of two claim-set entries returning null or a reason string. Omit it when no two claims of the kind can clash.
+: The kind's clash rule: a function of `{ first, second, settings, resolve, ... }`, two claim-set entries, returning null or a reason string. Omit it when no two claims of the kind can clash.
 
 `check`
-: The kind's check rule: a function of `{ identity, claim, settings, config }`, with the same resolved `identity`, a claim-set entry, the kind's settings at `contracts.kinds.<name>` and the top-level configuration, returning null, a reason string or a list of them. Only claims of enabled contracts are checked, and each reason reads ``nixos-contracts: <kind> claim `<service>.<id>`: <reason>.`` in `contracts.failures`.
+: The kind's check rule: a function of `{ identity, claim, settings, resolve, ... }`, with the same resolved `identity` and a claim-set entry, returning null, a reason string or a list of them. Only claims of enabled contracts are checked, and each reason reads ``nixos-contracts: <kind> claim `<service>.<id>`: <reason>.`` in `contracts.failures`.
 
 `settings`
 : Option declarations placed under `contracts.kinds.<name>`.
+
+The claim type and both rules receive the same two fields beside their own:
+
+- `settings`, the kind's settings at `contracts.kinds.<name>`;
+- `resolve`, the configuration's [`contracts.resolve`](#contractsresolve), to read the claim a reference names.
+
+None receives the configuration, so a kind reads nothing outside `contracts` and evaluates with the generic module. Write each with `...`, so it keeps working when they receive further fields.
 
 ```nix
 mkClaimKind {
   name = "databases";
   description = "Databases the service owns.";
-  clash = a: b: if a.database == b.database then "both own `${a.database}`" else null;
-  claim =
+  clash =
+    { first, second, ... }:
+    if first.database == second.database then "both own `${first.database}`" else null;
+  claimType =
     { service, ... }:
     { lib, name, ... }:
     {

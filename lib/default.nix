@@ -122,8 +122,8 @@ in
   };
 
   /**
-    Build a claim kind from its name, description and claim submodule,
-    with an optional clash rule, check rule and settings. Returns a module
+    Build a claim kind from its name, description and claim type, with an
+    optional clash rule, check rule and settings. Returns a module
     for any module class, imported beside the generic or NixOS module.
     `modules/mk-claim-kind.nix` documents each input.
   */
