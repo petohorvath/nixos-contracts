@@ -480,12 +480,12 @@ To use it without the flake, import the library directory with a caller-owned li
 `settings`
 : Option declarations placed under `contracts.kinds.<name>`.
 
-Every rule receives the same two fields beside those of its role:
+The claim type and both rules receive the same two fields beside their own:
 
 - `settings`, the kind's settings at `contracts.kinds.<name>`;
-- `resolve`, the configuration's [`contracts.resolve`](#contractsresolve), so a rule reads the claim a reference names.
+- `resolve`, the configuration's [`contracts.resolve`](#contractsresolve), to read the claim a reference names.
 
-No rule receives the configuration, so a kind reads nothing outside `contracts` and evaluates with the generic module. Write each rule with `...`, so it keeps working when the rules receive further fields.
+None receives the configuration, so a kind reads nothing outside `contracts` and evaluates with the generic module. Write each with `...`, so it keeps working when they receive further fields.
 
 ```nix
 mkClaimKind {

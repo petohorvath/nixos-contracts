@@ -48,15 +48,14 @@
     reads "nixos-contracts: <kind> claim `<service>.<id>`: <reason>." in
     `contracts.failures`.
 
-  Every rule receives `settings`, the kind's settings at
-  `contracts.kinds.<name>`, and `resolve`, the configuration's
-  `contracts.resolve`, beside the fields of its role. No rule receives the
-  configuration, so a kind reads nothing outside `contracts`. Write each
-  rule with `...`, so it keeps working when the rules receive further
-  fields.
-
   `settings`
   : Optional. Option declarations placed under `contracts.kinds.<name>`.
+
+  The claim type and both rules receive `settings`, the kind's settings at
+  `contracts.kinds.<name>`, and `resolve`, the configuration's
+  `contracts.resolve`, beside their own fields. None receives the
+  configuration, so a kind reads nothing outside `contracts`. Write each
+  with `...`, so it keeps working when they receive further fields.
 
   # Output
 
@@ -136,10 +135,8 @@ else
   let
     topConfig = config;
 
-    # What every rule receives, beside the fields of its role: the kind's
-    # settings and the resolution of a reference. No rule receives the
-    # whole configuration, so a kind reads nothing outside `contracts`.
-    ruleArguments = {
+    # What the claim type and both rules receive beside their own fields.
+    sharedArguments = {
       settings = config.contracts.kinds.${kindName};
       inherit (config.contracts) resolve;
     };
@@ -184,7 +181,7 @@ else
       map (
         pair:
         let
-          reason = clash (ruleArguments // pair);
+          reason = clash (sharedArguments // pair);
         in
         {
           assertion = reason == null;
@@ -202,7 +199,7 @@ else
     mkCheckAssertions =
       arguments:
       lib.optionals (check != null) (
-        lib.pipe (ruleArguments // arguments) [
+        lib.pipe (sharedArguments // arguments) [
           check
           toReasons
           (map (reason: {
@@ -228,7 +225,7 @@ else
                 type = lib.types.attrsOf (
                   lib.types.submodule [
                     (claimType (
-                      ruleArguments
+                      sharedArguments
                       // {
                         inherit service;
                         identity = resolveIdentity config.identity;

@@ -94,8 +94,8 @@ let
     };
   };
 
-  # A kind of words, given one rule at a time, so a test sees what that
-  # rule receives.
+  # A kind of words, given its claim type or one rule at a time, so a test
+  # sees what each receives.
   wordKind =
     rules:
     mkClaimKind (
@@ -116,8 +116,17 @@ let
     };
   };
 
-  # A kind whose claims alias a database, resolving the reference in each
-  # of its rules.
+  # The name of the database `reference` names, or null when it names
+  # none, read through the `resolve` a kind receives.
+  aliasedDatabase =
+    resolve: reference:
+    let
+      result = resolve reference;
+    in
+    if result.reason == null then result.claim.database else null;
+
+  # A kind whose claims alias a database, resolving the reference in its
+  # claim type and each of its rules.
   aliases = mkClaimKind {
     name = "aliases";
     description = "Aliases of databases.";
@@ -133,11 +142,7 @@ let
           database = lib.mkOption {
             type = lib.types.nullOr lib.types.str;
             readOnly = true;
-            default =
-              let
-                result = resolve config.of;
-              in
-              if result.reason == null then result.claim.database else null;
+            default = aliasedDatabase resolve config.of;
             description = "The name of the aliased database, or null.";
           };
         };
@@ -159,12 +164,7 @@ let
         ...
       }:
       let
-        databaseOf =
-          alias:
-          let
-            result = resolve alias.of;
-          in
-          if result.reason == null then result.claim.database else null;
+        databaseOf = alias: aliasedDatabase resolve alias.of;
       in
       if databaseOf first != null && databaseOf first == databaseOf second then
         "both alias `${databaseOf first}`"
@@ -572,29 +572,55 @@ in
     ];
   };
 
-  testClaimTypeReceivesNoConfiguration = {
+  testClaimTypeReceivesServiceIdentitySettingsAndResolve = {
     expr =
       (evaluate [
-        (wordKind { claimType = { config, ... }: builtins.seq config (_: { }); })
+        (wordKind {
+          claimType =
+            arguments:
+            { lib, ... }:
+            {
+              options.arguments = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                readOnly = true;
+                default = builtins.attrNames arguments;
+                description = "The names of the claim type's arguments.";
+              };
+            };
+        })
         wordClaims
-      ]).contracts.claimSets.words;
-    expectedError.msg = "called without required argument 'config'";
+      ]).contracts.claimSets.words.a.first.arguments;
+    expected = [
+      "identity"
+      "resolve"
+      "service"
+      "settings"
+    ];
   };
 
-  testCheckRuleReceivesNoConfiguration = {
+  testCheckRuleReceivesIdentityClaimSettingsAndResolve = {
     expr = failures [
-      (wordKind { check = { config, ... }: builtins.seq config null; })
+      (wordKind {
+        check = arguments: "it received ${lib.concatStringsSep ", " (builtins.attrNames arguments)}";
+      })
       wordClaims
     ];
-    expectedError.msg = "called without required argument 'config'";
+    expected = [
+      "nixos-contracts: words claim `a.first`: it received claim, identity, resolve, settings."
+      "nixos-contracts: words claim `a.second`: it received claim, identity, resolve, settings."
+    ];
   };
 
-  testClashRuleReceivesNoConfiguration = {
+  testClashRuleReceivesFirstSecondSettingsAndResolve = {
     expr = failures [
-      (wordKind { clash = { config, ... }: builtins.seq config null; })
+      (wordKind {
+        clash = arguments: "they received ${lib.concatStringsSep ", " (builtins.attrNames arguments)}";
+      })
       wordClaims
     ];
-    expectedError.msg = "called without required argument 'config'";
+    expected = [
+      "nixos-contracts: words claims `a.first` and `a.second` clash: they received first, resolve, second, settings."
+    ];
   };
 
   testClaimTypeResolvesAReference = {
