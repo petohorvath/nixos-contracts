@@ -1,10 +1,12 @@
 /*
   How a claim is named, how a claim set's claims are listed, and how a
   reference `{ node; kind; service; id; }` reads its node and claim, shared
-  by the core's `contracts.resolve` and `contracts.resolveService`, the claim
-  kinds and the adapters.
+  by the core's `contracts.resolve` and `contracts.resolveService`, the
+  types, the claim constructor, the generic module, which passes the kinds
+  what they use, and the public library. Only the names after `in` are
+  exported; the rest serve them.
 */
-rec {
+let
   /*
     What a name may contain, by what it names. A claim id may also contain
     `_`, a node identity, kind name or service name may not, so the first
@@ -88,24 +90,6 @@ rec {
   # such as `influxdb_admin-token`. No service name contains `_`, so the
   # first `_` ends the service, and no two claims of a node make one name.
   backendNameOf = { service, id, ... }: "${service}_${id}";
-
-  # Where the secret backend `backend` installs the secret `secret`, failing,
-  # naming the secret, while no backend adapter sets it.
-  backendPathOf =
-    backend: secret:
-    if backend == null then
-      throw "nixos-contracts: secret `${claimLabelOf secret}` has no path: import a secret backend adapter such as `nixosModules.agenix-rekey`, which sets `contracts.kinds.secrets.backend`"
-    else
-      backend.path { inherit (secret) id service; };
-
-  # Where the delivery `delivery` hands the secret `secret` to its unit,
-  # failing, naming the secret, while no delivery adapter sets it.
-  deliveryPathOf =
-    delivery: secret:
-    if delivery == null then
-      throw "nixos-contracts: secret `${claimLabelOf secret}` is delivered to `${secret.unit}` but has no path: import a delivery adapter such as `nixosModules.systemd-credentials`, which sets `contracts.kinds.secrets.delivery`, or set its `unit` to null"
-    else
-      delivery.path { inherit (secret) id service unit; };
 
   # The claims of a claim set, by service and then id, in a list.
   claimsOf = claimSet: builtins.concatMap builtins.attrValues (builtins.attrValues claimSet);
@@ -346,4 +330,19 @@ rec {
         inherit (found) config;
         reason = null;
       };
+in
+{
+  inherit
+    backendNameOf
+    checkName
+    claimLabelOf
+    claimNameOf
+    claimsOf
+    describeName
+    mkReference
+    nameRules
+    referenceLabelOf
+    resolve
+    resolveService
+    ;
 }
