@@ -4,7 +4,7 @@ Follow the local [development guide](docs/development.md).
 
 ## Changes and review
 
-Work on a branch and open a PR with a Conventional Commit title, such as `feat: Add the preservation adapter`. Describe the resulting behavior, compatibility effects, and validation. Mark breaking changes with `!` and add migration notes to the [changelog](CHANGELOG.md).
+Work on a branch and open a PR with a Conventional Commit title, such as `feat: Add the preservation adapter`. Describe the resulting behavior, compatibility effects, and validation. Mark breaking changes with `!`. Once a version is released, also add migration notes for them to the [changelog](CHANGELOG.md); until then nothing has consumers to migrate, so the changelog lists only what the first release adds.
 
 Run `nix fmt --no-update-lock-file` and `nix flake check --no-update-lock-file`. Add tests at public interfaces for behavior changes. Use the terms of [GLOSSARY.md](GLOSSARY.md) in code, tests and documentation, and record decisions that are hard to reverse in `docs/adr/`.
 
